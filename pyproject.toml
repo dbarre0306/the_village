@@ -1,0 +1,23 @@
+[project]
+name = "the_village"
+version = "0.1.0"
+description = "the_village using crewAI"
+authors = [{ name = "Donald Barre", email = "you@example.com" }]
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "crewai[tools]>=1.15.14,<2.0.0"
+]
+
+[project.scripts]
+kickoff = "the_village.main:kickoff"
+run_crew = "the_village.main:kickoff"
+plot = "the_village.main:plot"
+run_with_trigger = "the_village.main:run_with_trigger"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.crewai]
+type = "flow"
+project_id = "981d9c72-8027-4962-b017-a879533e5883"
