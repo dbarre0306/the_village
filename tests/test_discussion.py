@@ -1,14 +1,20 @@
 import random
+from types import SimpleNamespace
 
 from the_village.discussion import (
     DiscussionRunner,
+    TurnOutput,
     _active_participants,
+    _build_prompt,
     _build_round,
+    _format_deaths,
+    _format_history,
+    _generate_bonus_reply,
     _last_speaker_today,
     _resolve_target,
     start_discussion,
 )
-from the_village.state import DiscussionMessage, GameState, Villager
+from the_village.state import Death, DiscussionMessage, GameState, Villager
 
 
 def make_state(day_number: int = 2) -> GameState:
@@ -157,3 +163,106 @@ def test_resolve_target_returns_none_for_passed_participant():
 def test_resolve_target_returns_valid_target():
     runner = make_runner()
     assert _resolve_target("B", runner, exclude="A") == "B"
+
+
+class ScriptedAgent:
+    def __init__(self, outputs):
+        self._outputs = list(outputs)
+
+    def kickoff(self, messages, response_format=None):
+        return SimpleNamespace(pydantic=self._outputs.pop(0))
+
+
+def test_format_deaths_with_no_deaths():
+    state = GameState(player_name="Dana")
+    assert _format_deaths(state) == "(No one has died yet.)"
+
+
+def test_format_deaths_lists_each_death():
+    state = GameState(player_name="Dana", deaths=[Death(name="D", day_number=2)])
+    assert _format_deaths(state) == "D was found dead on day 2."
+
+
+def test_format_history_with_no_messages():
+    state = GameState(player_name="Dana")
+    assert _format_history(state) == "(No discussion has happened yet.)"
+
+
+def test_format_history_includes_prior_days_in_order():
+    state = GameState(
+        player_name="Dana",
+        discussion=[
+            DiscussionMessage(day_number=1, speaker="A", message="yesterday's message"),
+            DiscussionMessage(day_number=2, speaker="B", message="today's message"),
+        ],
+    )
+    assert (
+        _format_history(state)
+        == "A: yesterday's message\nB: today's message"
+    )
+
+
+def test_build_prompt_without_addressed_by_prompts_free_turn():
+    state = GameState(player_name="Dana")
+    prompt = _build_prompt(state, addressed_by=None)
+    assert "It's your turn" in prompt
+
+
+def test_build_prompt_with_addressed_by_includes_the_question():
+    state = GameState(player_name="Dana")
+    msg = DiscussionMessage(day_number=1, speaker="A", message="Where were you?")
+    prompt = _build_prompt(state, addressed_by=msg)
+    assert "A just said to you" in prompt
+    assert "Where were you?" in prompt
+
+
+def test_generate_bonus_reply_records_message_and_costs_no_budget():
+    runner = make_runner()
+    runner.agents["B"] = ScriptedAgent(
+        [TurnOutput(has_something_to_say=True, message="I was home.")]
+    )
+    original_budget = runner.budgets["B"]
+    asking = DiscussionMessage(
+        day_number=1, speaker="A", message="Where were you?", addressed_to="B"
+    )
+
+    reply = _generate_bonus_reply(runner, asking)
+
+    assert reply.speaker == "B"
+    assert reply.message == "I was home."
+    assert runner.budgets["B"] == original_budget
+    assert runner.state.discussion[-1] == reply
+
+
+def test_generate_bonus_reply_returns_none_when_agent_declines():
+    runner = make_runner()
+    runner.agents["B"] = ScriptedAgent([TurnOutput(has_something_to_say=False)])
+    asking = DiscussionMessage(
+        day_number=1, speaker="A", message="Where were you?", addressed_to="B"
+    )
+
+    reply = _generate_bonus_reply(runner, asking)
+
+    assert reply is None
+    assert runner.state.discussion == []
+
+
+def test_generate_bonus_reply_does_not_chain_further_bonus_replies():
+    runner = make_runner()
+    runner.agents["B"] = ScriptedAgent(
+        [
+            TurnOutput(
+                has_something_to_say=True,
+                message="What about you, A?",
+                addressed_to="A",
+            )
+        ]
+    )
+    asking = DiscussionMessage(
+        day_number=1, speaker="A", message="Where were you?", addressed_to="B"
+    )
+
+    reply = _generate_bonus_reply(runner, asking)
+
+    assert reply.addressed_to == "A"
+    assert len(runner.state.discussion) == 1

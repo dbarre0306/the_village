@@ -4,8 +4,9 @@ import random
 from dataclasses import dataclass, field
 
 from crewai import Agent
+from pydantic import BaseModel
 
-from the_village.state import GameState, Villager
+from the_village.state import DiscussionMessage, GameState, Villager
 
 INITIAL_BUDGET = 3
 
@@ -106,3 +107,73 @@ def _resolve_target(
     if candidate in runner.passed:
         return None
     return candidate
+
+
+class TurnOutput(BaseModel):
+    has_something_to_say: bool
+    message: str | None = None
+    addressed_to: str | None = None
+
+
+def _format_deaths(state: GameState) -> str:
+    if not state.deaths:
+        return "(No one has died yet.)"
+    return "\n".join(
+        f"{death.name} was found dead on day {death.day_number}."
+        for death in state.deaths
+    )
+
+
+def _format_history(state: GameState) -> str:
+    if not state.discussion:
+        return "(No discussion has happened yet.)"
+    return "\n".join(f"{m.speaker}: {m.message}" for m in state.discussion)
+
+
+def _build_prompt(state: GameState, addressed_by: DiscussionMessage | None) -> str:
+    parts = [
+        "Known facts:",
+        _format_deaths(state),
+        "",
+        "Discussion so far:",
+        _format_history(state),
+        "",
+    ]
+    if addressed_by is not None:
+        parts.append(
+            f'{addressed_by.speaker} just said to you: "{addressed_by.message}" '
+            "Respond directly to this."
+        )
+    else:
+        parts.append(
+            "It's your turn. Decide whether you have something to say — a "
+            "statement, question, or accusation — or nothing more to add right now."
+        )
+    return "\n".join(parts)
+
+
+def _ask_agent(
+    agent: Agent, state: GameState, addressed_by: DiscussionMessage | None
+) -> TurnOutput:
+    prompt = _build_prompt(state, addressed_by)
+    output = agent.kickoff(prompt, response_format=TurnOutput)
+    return output.pydantic
+
+
+def _generate_bonus_reply(
+    runner: DiscussionRunner, msg: DiscussionMessage
+) -> DiscussionMessage | None:
+    agent = runner.agents[msg.addressed_to]
+    output = _ask_agent(agent, runner.state, addressed_by=msg)
+    if not output.has_something_to_say or not output.message:
+        return None
+    reply = DiscussionMessage(
+        day_number=runner.state.day_number,
+        speaker=msg.addressed_to,
+        message=output.message,
+        addressed_to=_resolve_target(
+            output.addressed_to, runner, exclude=msg.addressed_to
+        ),
+    )
+    runner.state.discussion.append(reply)
+    return reply
