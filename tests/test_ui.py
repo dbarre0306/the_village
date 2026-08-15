@@ -83,9 +83,15 @@ def test_format_discussion_transcript_with_no_messages():
 def test_format_discussion_transcript_lists_messages():
     state = GameState(
         player_name="Dana",
+        villagers=[
+            Villager(name="Dana", player_type="user"),
+            Villager(name="A", player_type="villager"),
+        ],
         discussion=[DiscussionMessage(day_number=1, speaker="A", message="hello")],
     )
-    assert format_discussion_transcript(state) == "**A:** hello"
+    transcript = format_discussion_transcript(state)
+    assert "A:</span> hello" in transcript
+    assert "hello" in transcript
 
 
 def test_living_ai_names_excludes_player_and_dead_villagers():
@@ -110,7 +116,15 @@ def test_begin_discussion_yields_waiting_status_when_only_player_active():
 
     events = list(begin_discussion(state))
 
-    runner, transcript, dropdown_update, input_visibility, status_update = events[-1]
+    (
+        runner,
+        transcript,
+        textbox_update,
+        dropdown_update,
+        input_visibility,
+        status_update,
+        begin_button_update,
+    ) = events[-1]
     assert isinstance(runner, DiscussionRunner)
     assert input_visibility["visible"] is True
     assert dropdown_update["choices"] == []
@@ -126,7 +140,7 @@ def test_send_discussion_turn_records_message_and_shows_waiting_status():
 
     events = list(send_discussion_turn(runner, "I'm scared.", ""))
 
-    _, transcript, _, input_visibility, _ = events[-1]
+    _, transcript, _, _, input_visibility, _, _ = events[-1]
     assert "I'm scared." in transcript
     assert input_visibility["visible"] is True
 
@@ -141,7 +155,7 @@ def test_pass_discussion_turn_marks_player_passed_and_shows_ended_status():
 
     events = list(pass_discussion_turn(runner))
 
-    _, _, _, input_visibility, status_update = events[-1]
+    _, _, _, _, input_visibility, status_update, _ = events[-1]
     assert "Dana" in runner.passed
     assert input_visibility["visible"] is False
     assert status_update["visible"] is True

@@ -45,7 +45,7 @@ def test_start_discussion_excludes_dead_villager():
 
 def test_start_discussion_budgets_include_player_and_all_living_ai():
     runner = start_discussion(make_state(), random.Random(1))
-    assert runner.budgets == {"Dana": 3, "A": 3, "B": 3, "C": 3, "E": 3, "F": 3}
+    assert runner.budgets == {"Dana": 2, "A": 2, "B": 2, "C": 2, "E": 2, "F": 2}
 
 
 def test_start_discussion_starts_with_empty_queue_and_no_pending_reply():
@@ -394,6 +394,58 @@ def test_advance_ai_addressing_another_ai_does_not_pause_for_player():
     messages = [e for e in events if isinstance(e, DiscussionMessage)]
     assert [m.speaker for m in messages] == ["A", "B"]
     assert events[-1] == AdvanceStatus.WAITING_FOR_TURN
+
+
+def test_advance_bonus_reply_addressing_player_pauses_for_answer():
+    runner = make_runner()
+    runner.agents["A"] = ScriptedAgent(
+        [
+            TurnOutput(
+                has_something_to_say=True,
+                message="B, where were you?",
+                addressed_to="B",
+            )
+        ]
+    )
+    runner.agents["B"] = ScriptedAgent(
+        [
+            TurnOutput(
+                has_something_to_say=True,
+                message="Why don't you ask Dana instead?",
+                addressed_to="Dana",
+            )
+        ]
+    )
+    runner.queue = ["A", "Dana"]
+
+    events = list(advance(runner))
+
+    messages = [e for e in events if isinstance(e, DiscussionMessage)]
+    assert [m.speaker for m in messages] == ["A", "B"]
+    assert events[-1] == AdvanceStatus.WAITING_FOR_ANSWER
+    assert runner.awaiting_reply_from == "Dana"
+    assert runner.queue == ["Dana"]
+
+
+def test_advance_player_bonus_reply_addressing_player_pauses_for_answer():
+    runner = make_runner()
+    runner.agents["A"] = ScriptedAgent(
+        [
+            TurnOutput(
+                has_something_to_say=True,
+                message="You're the only one who'd know.",
+                addressed_to="Dana",
+            )
+        ]
+    )
+    runner.queue = ["Dana"]
+
+    events = list(advance(runner, player_input="A, where were you?", player_addressed_to="A"))
+
+    messages = [e for e in events if isinstance(e, DiscussionMessage)]
+    assert [m.speaker for m in messages] == ["Dana", "A"]
+    assert events[-1] == AdvanceStatus.WAITING_FOR_ANSWER
+    assert runner.awaiting_reply_from == "Dana"
 
 
 def test_advance_ai_pass_marks_participant_permanently_passed():

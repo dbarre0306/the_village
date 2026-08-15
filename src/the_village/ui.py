@@ -8,6 +8,46 @@ from the_village.state import WEEKDAYS, GameState
 
 logger = logging.getLogger(__name__)
 
+# Categorical palette (light, dark) — fixed hue order, validated for CVD-safe
+# adjacent contrast. Speakers are assigned a slot by their fixed position in
+# the roster, not by speaking order, so a name's color never changes.
+SPEAKER_COLORS = [
+    ("#2a78d6", "#3987e5"),  # blue
+    ("#eb6834", "#d95926"),  # orange
+    ("#1baf7a", "#199e70"),  # aqua
+    ("#eda100", "#c98500"),  # yellow
+    ("#e87ba4", "#d55181"),  # magenta
+    ("#008300", "#008300"),  # green
+    ("#4a3aa7", "#9085e9"),  # violet
+    ("#e34948", "#e66767"),  # red
+]
+
+DISCUSSION_TRANSCRIPT_CLASS = "discussion-transcript"
+
+
+def _speaker_color_css() -> str:
+    light_vars = "; ".join(
+        f"--speaker-{i}: {light}" for i, (light, _dark) in enumerate(SPEAKER_COLORS)
+    )
+    dark_vars = "; ".join(
+        f"--speaker-{i}: {dark}" for i, (_light, dark) in enumerate(SPEAKER_COLORS)
+    )
+    return f"""
+    .{DISCUSSION_TRANSCRIPT_CLASS} {{ {light_vars}; }}
+    @media (prefers-color-scheme: dark) {{
+        .{DISCUSSION_TRANSCRIPT_CLASS} {{ {dark_vars}; }}
+    }}
+    .dark .{DISCUSSION_TRANSCRIPT_CLASS} {{ {dark_vars}; }}
+    .{DISCUSSION_TRANSCRIPT_CLASS} .speaker-name {{ font-weight: 600; }}
+    """
+
+
+def _speaker_color_index(name: str, state: GameState) -> int:
+    roster_names = [villager.name for villager in state.villagers]
+    if name not in roster_names:
+        return 0
+    return roster_names.index(name) % len(SPEAKER_COLORS)
+
 
 def format_event_log(state: GameState) -> str:
     if not state.deaths:
@@ -43,7 +83,12 @@ def format_alive_panel(state: GameState) -> str:
 def format_discussion_transcript(state: GameState) -> str:
     if not state.discussion:
         return "The discussion hasn't started yet."
-    lines = [f"**{m.speaker}:** {m.message}" for m in state.discussion]
+    lines = [
+        f'<span class="speaker-name" '
+        f'style="color: var(--speaker-{_speaker_color_index(m.speaker, state)})">'
+        f"{m.speaker}:</span> {m.message}"
+        for m in state.discussion
+    ]
     return "\n\n".join(lines)
 
 
@@ -55,26 +100,47 @@ def _living_ai_names(state: GameState) -> list[str]:
     ]
 
 
-def _drive_discussion(runner, events, dropdown_update=None):
-    dropdown_update = dropdown_update if dropdown_update is not None else gr.update()
+def _drive_discussion(runner, events, dropdown_choices=None, begin_button_update=None):
+    pending_choices = dropdown_choices
+    pending_begin_button_update = (
+        begin_button_update if begin_button_update is not None else gr.update()
+    )
     try:
         for event in events:
             transcript = format_discussion_transcript(runner.state)
             if isinstance(event, AdvanceStatus):
                 complete = event == AdvanceStatus.COMPLETE
+                # Reset the textbox and "address to" dropdown once per driven
+                # sequence (on the status yield), not on every message yield.
+                dropdown_reset = (
+                    gr.update(choices=pending_choices, value=None)
+                    if pending_choices is not None
+                    else gr.update(value=None)
+                )
                 yield (
                     runner,
                     transcript,
-                    dropdown_update,
+                    gr.update(value=""),
+                    dropdown_reset,
                     gr.update(visible=not complete),
                     gr.update(
                         visible=complete,
                         value="The discussion has ended." if complete else "",
                     ),
+                    pending_begin_button_update,
                 )
+                pending_choices = None
+                pending_begin_button_update = gr.update()
             else:
-                yield (runner, transcript, dropdown_update, gr.update(), gr.update())
-            dropdown_update = gr.update()
+                yield (
+                    runner,
+                    transcript,
+                    gr.update(),
+                    gr.update(),
+                    gr.update(visible=False),
+                    gr.update(),
+                    pending_begin_button_update,
+                )
     except gr.Error:
         raise
     except Exception as exc:
@@ -87,14 +153,17 @@ def begin_discussion(state: GameState):
     yield from _drive_discussion(
         runner,
         advance(runner),
-        dropdown_update=gr.update(choices=_living_ai_names(state)),
+        dropdown_choices=_living_ai_names(state),
+        begin_button_update=gr.update(visible=False),
     )
 
 
 def send_discussion_turn(runner: DiscussionRunner, message: str, addressed_to: str):
+    if not message.strip():
+        raise gr.Error('Type something, or click "I have nothing to say."')
     events = advance(
         runner,
-        player_input=message.strip() or None,
+        player_input=message.strip(),
         player_addressed_to=addressed_to or None,
     )
     yield from _drive_discussion(runner, events)
@@ -142,14 +211,16 @@ def build_app() -> gr.Blocks:
                 gr.Markdown("### Events")
                 event_log = gr.Markdown()
                 begin_discussion_button = gr.Button("Begin Discussion")
-                discussion_transcript = gr.Markdown()
+                discussion_transcript = gr.Markdown(
+                    elem_classes=[DISCUSSION_TRANSCRIPT_CLASS]
+                )
                 with gr.Row(visible=False) as discussion_input_row:
                     discussion_textbox = gr.Textbox(label="Say something", scale=3)
                     discussion_addressed_to = gr.Dropdown(
                         label="Address to (optional)", choices=[], scale=1
                     )
                     send_button = gr.Button("Send")
-                    pass_button = gr.Button("Pass")
+                    pass_button = gr.Button("I have nothing to say")
                 discussion_status = gr.Markdown(visible=False)
             with gr.Column():
                 gr.Markdown("### Alive Villagers")
@@ -174,9 +245,11 @@ def build_app() -> gr.Blocks:
         discussion_outputs = [
             discussion_runner_state,
             discussion_transcript,
+            discussion_textbox,
             discussion_addressed_to,
             discussion_input_row,
             discussion_status,
+            begin_discussion_button,
         ]
 
         begin_discussion_button.click(
@@ -204,7 +277,7 @@ def build_app() -> gr.Blocks:
 
 
 def main():
-    build_app().launch()
+    build_app().launch(css=_speaker_color_css())
 
 
 if __name__ == "__main__":

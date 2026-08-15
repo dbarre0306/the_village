@@ -6,11 +6,11 @@ from enum import Enum
 from typing import Iterator
 
 from crewai import Agent
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from the_village.state import DiscussionMessage, GameState, Villager
 
-INITIAL_BUDGET = 3
+INITIAL_BUDGET = 2
 
 
 @dataclass
@@ -33,12 +33,29 @@ def _build_agent(villager: Villager, all_villagers: list[Villager]) -> Agent:
         )
         role_knowledge = (
             f"You are secretly a werewolf. Your fellow werewolf is {packmate} — "
-            "you know this, no one else does. You want to deflect suspicion "
-            "without revealing yourself."
+            "you know this, no one else does. You want someone else blamed for "
+            "the killing, so you actively steer suspicion toward other "
+            "villagers — voicing doubts about their behavior, questioning "
+            "their alibi, or agreeing with and amplifying accusations others "
+            "raise — all without revealing yourself or your packmate."
+        )
+        goal = (
+            "Blend in as an innocent villager while steering the group's "
+            "suspicion toward someone else, without revealing that you're a "
+            "werewolf."
         )
     else:
         role_knowledge = (
-            "You are an ordinary villager. You do not know who the werewolves are."
+            "You are an ordinary villager. You do not know who the werewolves "
+            "are, and you genuinely want to find out. You pay attention to "
+            "who seems evasive, inconsistent, or too eager to point fingers, "
+            "and you're willing to voice suspicion, ask pointed questions, and "
+            "press others for answers."
+        )
+        goal = (
+            "Work out who is responsible for the killing by questioning and "
+            "scrutinizing the other villagers, while reacting honestly from "
+            "your own perspective."
         )
     backstory = (
         f"You are {villager.name}, a resident of a small village playing a game "
@@ -46,14 +63,12 @@ def _build_agent(villager: Villager, all_villagers: list[Villager]) -> Agent:
         "You react like a real person would — with shock, grief, anger, or "
         "suspicion as the moment calls for. You never invent facts, alibis, or "
         "claims that aren't grounded in what you actually know or what has "
-        "already been said."
+        "already been said. You speak the way people actually do in a tense "
+        "group conversation: briefly. One or two sentences, never a speech."
     )
     return Agent(
         role=f"Villager {villager.name}",
-        goal=(
-            "Discuss the recent death honestly from your own perspective, "
-            "without revealing secrets you wouldn't reveal."
-        ),
+        goal=goal,
         backstory=backstory,
     )
 
@@ -112,9 +127,27 @@ def _resolve_target(
 
 
 class TurnOutput(BaseModel):
-    has_something_to_say: bool
-    message: str | None = None
-    addressed_to: str | None = None
+    has_something_to_say: bool = Field(
+        description=(
+            "Whether you have something to say right now. False means you are "
+            "permanently done for the day — you will not be asked again."
+        )
+    )
+    message: str | None = Field(
+        default=None,
+        description=(
+            "What you say, if you have something to say. Keep it to one or "
+            "two sentences — brief, like real spoken dialogue."
+        ),
+    )
+    addressed_to: str | None = Field(
+        default=None,
+        description=(
+            "The name of the living villager you are speaking directly to, if "
+            "any — e.g. asking them a question or accusing them. Leave unset if "
+            "you are not addressing anyone in particular."
+        ),
+    )
 
 
 def _format_deaths(state: GameState) -> str:
@@ -132,10 +165,18 @@ def _format_history(state: GameState) -> str:
     return "\n".join(f"{m.speaker}: {m.message}" for m in state.discussion)
 
 
+def _living_participant_names(state: GameState) -> list[str]:
+    return [v.name for v in state.villagers if v.is_alive]
+
+
 def _build_prompt(state: GameState, addressed_by: DiscussionMessage | None) -> str:
+    living_names = _living_participant_names(state)
     parts = [
         "Known facts:",
         _format_deaths(state),
+        "",
+        f"Living villagers: {', '.join(living_names)}, including "
+        f"{state.player_name} (the human player).",
         "",
         "Discussion so far:",
         _format_history(state),
@@ -149,7 +190,9 @@ def _build_prompt(state: GameState, addressed_by: DiscussionMessage | None) -> s
     else:
         parts.append(
             "It's your turn. Decide whether you have something to say — a "
-            "statement, question, or accusation — or nothing more to add right now."
+            "statement, question, or accusation. If you have nothing to add, "
+            "say so — but note that declining means you are done for the day "
+            "and will not be asked again."
         )
     return "\n".join(parts)
 
@@ -159,7 +202,7 @@ def _ask_agent(
 ) -> TurnOutput:
     prompt = _build_prompt(state, addressed_by)
     output = agent.kickoff(prompt, response_format=TurnOutput)
-    return output.pydantic
+    return output.pydantic or TurnOutput(has_something_to_say=False)
 
 
 def _generate_bonus_reply(
@@ -179,6 +222,25 @@ def _generate_bonus_reply(
     )
     runner.state.discussion.append(reply)
     return reply
+
+
+def _run_bonus_reply(
+    runner: DiscussionRunner, msg: DiscussionMessage
+) -> Iterator[DiscussionMessage | AdvanceStatus]:
+    """Yield a bonus reply to `msg`, pausing for player input if it addresses them.
+
+    Returns True (via the generator's return value) if the discussion paused
+    waiting on the player, so callers know to stop advancing.
+    """
+    bonus = _generate_bonus_reply(runner, msg)
+    if bonus is None:
+        return False
+    yield bonus
+    if bonus.addressed_to == runner.state.player_name:
+        runner.awaiting_reply_from = runner.state.player_name
+        yield AdvanceStatus.WAITING_FOR_ANSWER
+        return True
+    return False
 
 
 class AdvanceStatus(str, Enum):
@@ -228,9 +290,9 @@ def advance(
             state.discussion.append(msg)
             yield msg
             if addressed_to is not None:
-                bonus = _generate_bonus_reply(runner, msg)
-                if bonus is not None:
-                    yield bonus
+                paused = yield from _run_bonus_reply(runner, msg)
+                if paused:
+                    return
 
     yield from _run_ai_turns(runner)
 
@@ -275,6 +337,6 @@ def _run_ai_turns(
             yield AdvanceStatus.WAITING_FOR_ANSWER
             return
         elif addressed_to is not None:
-            bonus = _generate_bonus_reply(runner, msg)
-            if bonus is not None:
-                yield bonus
+            paused = yield from _run_bonus_reply(runner, msg)
+            if paused:
+                return
