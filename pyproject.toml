@@ -5,7 +5,8 @@ description = "the_village using crewAI"
 authors = [{ name = "Donald Barre", email = "you@example.com" }]
 requires-python = ">=3.10,<3.14"
 dependencies = [
-    "crewai[tools]>=1.15.14,<2.0.0"
+    "crewai[tools]>=1.15.14,<2.0.0",
+    "gradio>=6.24.0",
 ]
 
 [project.scripts]
@@ -13,6 +14,7 @@ kickoff = "the_village.main:kickoff"
 run_crew = "the_village.main:kickoff"
 plot = "the_village.main:plot"
 run_with_trigger = "the_village.main:run_with_trigger"
+app = "the_village.ui:main"
 
 [build-system]
 requires = ["hatchling"]
