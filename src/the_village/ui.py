@@ -28,6 +28,17 @@ def format_deaths_panel(state: GameState) -> str:
     return "\n".join(lines)
 
 
+def format_alive_panel(state: GameState) -> str:
+    alive = [villager for villager in state.villagers if villager.is_alive]
+    if not alive:
+        return "No one is left."
+    lines = [
+        f"- {villager.name} (me)" if villager.name == state.player_name else f"- {villager.name}"
+        for villager in alive
+    ]
+    return "\n".join(lines)
+
+
 def start_game(player_name: str):
     if not player_name or not player_name.strip():
         raise gr.Error("Please enter your name.")
@@ -47,6 +58,7 @@ def start_game(player_name: str):
         gr.update(visible=True),
         format_event_log(state),
         format_deaths_panel(state),
+        format_alive_panel(state),
     )
 
 
@@ -61,13 +73,21 @@ def build_app() -> gr.Blocks:
                 gr.Markdown("### Events")
                 event_log = gr.Markdown()
             with gr.Column():
+                gr.Markdown("### Alive Villagers")
+                alive_panel = gr.Markdown()
                 gr.Markdown("### Killed by Werewolves")
                 deaths_panel = gr.Markdown()
 
         start_button.click(
             fn=start_game,
             inputs=[name_input],
-            outputs=[start_screen, result_screen, event_log, deaths_panel],
+            outputs=[
+                start_screen,
+                result_screen,
+                event_log,
+                deaths_panel,
+                alive_panel,
+            ],
             concurrency_limit=None,
         )
 

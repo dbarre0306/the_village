@@ -2,7 +2,12 @@ import gradio as gr
 import pytest
 
 from the_village.state import Death, GameState, Villager
-from the_village.ui import format_deaths_panel, format_event_log, start_game
+from the_village.ui import (
+    format_alive_panel,
+    format_deaths_panel,
+    format_event_log,
+    start_game,
+)
 
 
 def make_state_with_one_death() -> GameState:
@@ -38,14 +43,25 @@ def test_format_deaths_panel_with_a_death():
     assert format_deaths_panel(state) == "- Monday: A"
 
 
+def test_format_alive_panel_marks_player_and_excludes_dead_villagers():
+    state = make_state_with_one_death()
+    assert format_alive_panel(state) == "- Dana (me)"
+
+
+def test_format_alive_panel_with_no_villagers():
+    state = GameState(player_name="Dana", day_number=1)
+    assert format_alive_panel(state) == "No one is left."
+
+
 def test_start_game_rejects_blank_name():
     with pytest.raises(gr.Error):
         start_game("   ")
 
 
-def test_start_game_returns_four_outputs_and_never_targets_the_player():
+def test_start_game_returns_five_outputs_and_never_targets_the_player():
     outputs = start_game("TestPlayer")
 
-    assert len(outputs) == 4
+    assert len(outputs) == 5
     assert "TestPlayer" not in outputs[2]
     assert "TestPlayer" not in outputs[3]
+    assert "TestPlayer (me)" in outputs[4]
