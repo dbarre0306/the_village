@@ -170,13 +170,21 @@ rotation — before the rotation resumes where it left off. If that reply
 itself sets `addressed_to`, it does **not** chain into another bonus reply
 — it's recorded normally, and whoever it names may pick it up on their own
 next natural turn. This bounds the state machine and prevents back-and-forth
-ping-ponging between two participants.
+ping-ponging between two participants. **This no-chain rule applies
+uniformly, even when the bonus reply happens to name the player**: it does
+not pause the discussion or set up a special "you've been asked" state for
+the player. Only a *primary* message — one produced by the normal rotation,
+never a bonus reply itself — can pause the discussion for the player. This
+keeps the pause/resume behavior triggered by exactly one thing (a
+rotation-turn message naming the player), rather than by any point in a
+reply chain.
 
-If the addressed participant is the player, `advance()` pauses (see below)
-and waits for their reply. If the player passes here — declining to
-respond to being asked/accused — that is **not** a permanent pass; they
-remain active for future normal turns. This is the one place passing does
-not remove a participant from the discussion.
+If the addressed participant is the player **and the addressing message was
+a primary rotation-turn message** (not a bonus reply), `advance()` pauses
+(see below) and waits for their reply. If the player passes here —
+declining to respond to being asked/accused — that is **not** a permanent
+pass; they remain active for future normal turns. This is the one place
+passing does not remove a participant from the discussion.
 
 Defensive handling: if a generated `addressed_to` names someone who isn't
 a current living participant (parse issue, LLM naming error, or the
