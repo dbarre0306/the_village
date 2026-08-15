@@ -1,6 +1,9 @@
 import random
 
+import pytest
+
 from the_village.night import resolve_night_one
+from the_village.roster import build_initial_roster
 from the_village.state import GameState, Villager
 
 
@@ -51,3 +54,12 @@ def test_day_number_advances_to_two():
 
     assert state.day_number == 2
     assert state.deaths[0].day_number == 2
+
+
+@pytest.mark.parametrize("seed", range(50))
+def test_player_is_never_killed_and_stays_alive_across_seeds(seed):
+    state = build_initial_roster("Alice", random.Random(seed))
+    resolve_night_one(state, random.Random(seed))
+
+    assert state.deaths[0].name != "Alice"
+    assert state.villagers[0].is_alive is True

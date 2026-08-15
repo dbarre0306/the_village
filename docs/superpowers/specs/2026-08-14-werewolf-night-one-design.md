@@ -63,10 +63,14 @@ VillageFlow (CrewAI Flow)
         - increment state.day_number
 ```
 
-Each Gradio browser session holds its own `gr.State` wrapping a
-`VillageFlow` instance's resulting `GameState`. There is no shared/global
-mutable state, so concurrent users' games cannot collide — each "Start Game"
-click kicks off an independent `Flow` run.
+Game state is intentionally transient for this night-one-only build: each
+"Start Game" click builds a fresh `VillageFlow()`, kicks it off, and renders
+its resulting `GameState` directly into the response — nothing is persisted
+server-side beyond that single request/response, and there is no
+`gr.State`. There is no shared/global mutable state, so concurrent users'
+games cannot collide. A future multi-night task would need to introduce
+session-scoped state (e.g. `gr.State`) at that point, to carry a game
+forward across turns within a session.
 
 ## Data Model
 
@@ -162,9 +166,11 @@ kill the player on night one" special case to maintain.
 **On submit:**
 - Reject blank/whitespace-only names inline; don't kick off the flow.
 - Disable the button, show a loading state while `VillageFlow().kickoff(
-  inputs={"player_name": name})` runs synchronously. Gradio queues
-  concurrent requests across sessions automatically, so this doesn't block
-  other users' games.
+  inputs={"player_name": name})` runs synchronously. The click handler sets
+  `concurrency_limit=None`, since Gradio's default limit of 1 would
+  otherwise serialize every session's "Start Game" click globally; with no
+  shared mutable state to protect (see above), concurrent sessions can run
+  their flows in parallel without blocking each other.
 - On success, switch to the result screen.
 
 **Result screen (two columns):**

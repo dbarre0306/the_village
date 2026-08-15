@@ -1,7 +1,11 @@
+import logging
+
 import gradio as gr
 
 from the_village.main import VillageFlow
 from the_village.state import WEEKDAYS, GameState
+
+logger = logging.getLogger(__name__)
 
 
 def format_event_log(state: GameState) -> str:
@@ -18,7 +22,7 @@ def format_deaths_panel(state: GameState) -> str:
     if not state.deaths:
         return "No one has been killed yet."
     lines = [
-        f"{WEEKDAYS[(death.day_number - 1) % 7]}: {death.name}"
+        f"- {WEEKDAYS[(death.day_number - 1) % 7]}: {death.name}"
         for death in state.deaths
     ]
     return "\n".join(lines)
@@ -33,8 +37,9 @@ def start_game(player_name: str):
         flow.kickoff(inputs={"player_name": player_name.strip()})
     except gr.Error:
         raise
-    except Exception:
-        raise gr.Error("Something went wrong, please try again.")
+    except Exception as exc:
+        logger.exception("Flow kickoff failed")
+        raise gr.Error("Something went wrong, please try again.") from exc
 
     state = flow.state
     return (
@@ -63,6 +68,7 @@ def build_app() -> gr.Blocks:
             fn=start_game,
             inputs=[name_input],
             outputs=[start_screen, result_screen, event_log, deaths_panel],
+            concurrency_limit=None,
         )
 
     return demo

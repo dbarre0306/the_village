@@ -1,5 +1,7 @@
 import random
 
+import pytest
+
 from the_village.roster import VILLAGER_NAME_POOL, build_initial_roster
 
 
@@ -51,3 +53,10 @@ def test_ai_villager_names_exclude_a_player_name_case_insensitively():
 def test_day_number_starts_at_one():
     state = build_initial_roster("Dana", random.Random(1))
     assert state.day_number == 1
+
+
+@pytest.mark.parametrize("seed", range(50))
+def test_player_is_never_targeted_and_never_duplicated_across_seeds(seed):
+    state = build_initial_roster("Alice", random.Random(seed))
+    assert state.villagers[0].player_type == "user"
+    assert all(v.name != "Alice" for v in state.villagers[1:])

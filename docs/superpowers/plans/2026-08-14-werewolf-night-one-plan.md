@@ -4,7 +4,7 @@
 
 **Goal:** Let a player start a game (entering their first name in a Gradio UI), have a 7-villager roster (1 player + 6 AI villagers, 2 of them secretly werewolves) generated, resolve the werewolves' first-night kill as a random pick among the non-werewolf AI villagers, and show the player a two-column result screen (event log + running list of werewolf kills).
 
-**Architecture:** A `CrewAI Flow` (`VillageFlow`) holds a typed `GameState` (Pydantic). `@start()` builds the roster and assigns werewolves/pack-leader; `@listen()` resolves the night-one kill. Both steps are plain deterministic Python — no `Agent`/`Task`/`Crew` is used, since night one has no information for werewolves to reason about (see spec's "Why no CrewAI Crew" section). A Gradio `Blocks` app wraps `VillageFlow().kickoff(...)` per session, using `gr.State` so concurrent users' games never share state.
+**Architecture:** A `CrewAI Flow` (`VillageFlow`) holds a typed `GameState` (Pydantic). `@start()` builds the roster and assigns werewolves/pack-leader; `@listen()` resolves the night-one kill. Both steps are plain deterministic Python — no `Agent`/`Task`/`Crew` is used, since night one has no information for werewolves to reason about (see spec's "Why no CrewAI Crew" section). A Gradio `Blocks` app wraps `VillageFlow().kickoff(...)` per session; game state is intentionally transient (no `gr.State`, nothing persisted server-side beyond a single request/response) since this build is night-one-only, and a fresh `VillageFlow()` per click already keeps concurrent users' games from sharing state.
 
 **Tech Stack:** Python 3.13, `crewai` (Flow only, no Agent/Crew), Pydantic (via crewai), `gradio`, `pytest`, `uv` for dependency management.
 
@@ -17,7 +17,7 @@
 - `day_number` starts at `1` (Sunday). Night one's kill is revealed as `day_number=2` ("Monday").
 - The player (`player_type="user"`) is never eligible to be killed on night one — eligible targets are always `player_type == "villager" and is_alive`.
 - No LLM/Crew/Agent/Task is used for the night-one kill decision — it is `random.choice` over eligible targets, done in plain code.
-- Each Gradio browser session gets its own `gr.State`-backed `VillageFlow` run; no shared/global mutable game state.
+- Each Gradio browser session gets its own transient `VillageFlow` run (fresh `VillageFlow()` per click, no `gr.State`); no shared/global mutable game state. A future multi-night task would need session-scoped state to carry a game forward across turns.
 - Never use YAML files for CrewAI config (per `AGENTS.md`) — not triggered here since no `Agent`/`Crew` config is created, but stays true for any future extension of this code.
 
 ---

@@ -13,7 +13,6 @@ dependencies = [
 kickoff = "the_village.main:kickoff"
 run_crew = "the_village.main:kickoff"
 plot = "the_village.main:plot"
-run_with_trigger = "the_village.main:run_with_trigger"
 app = "the_village.ui:main"
 
 [build-system]
