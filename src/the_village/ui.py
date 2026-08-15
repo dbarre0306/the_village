@@ -252,25 +252,31 @@ def build_app() -> gr.Blocks:
             begin_discussion_button,
         ]
 
+        # These three handlers all mutate the same DiscussionRunner/GameState.discussion.
+        # Sharing one concurrency slot keeps overlapping clicks (e.g. a double-click
+        # while a turn is still streaming) queued instead of racing on that shared state.
         begin_discussion_button.click(
             fn=begin_discussion,
             inputs=[game_state],
             outputs=discussion_outputs,
-            concurrency_limit=None,
+            concurrency_limit=1,
+            concurrency_id="discussion_turn",
         )
 
         send_button.click(
             fn=send_discussion_turn,
             inputs=[discussion_runner_state, discussion_textbox, discussion_addressed_to],
             outputs=discussion_outputs,
-            concurrency_limit=None,
+            concurrency_limit=1,
+            concurrency_id="discussion_turn",
         )
 
         pass_button.click(
             fn=pass_discussion_turn,
             inputs=[discussion_runner_state],
             outputs=discussion_outputs,
-            concurrency_limit=None,
+            concurrency_limit=1,
+            concurrency_id="discussion_turn",
         )
 
     return demo
