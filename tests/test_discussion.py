@@ -5,6 +5,7 @@ from the_village.discussion import (
     _active_participants,
     _build_round,
     _last_speaker_today,
+    _resolve_target,
     start_discussion,
 )
 from the_village.state import DiscussionMessage, GameState, Villager
@@ -130,3 +131,29 @@ def test_build_round_allows_repeat_when_only_one_active_participant():
     )
     order = _build_round(runner)
     assert order == ["A"]
+
+
+def test_resolve_target_returns_none_for_none_candidate():
+    runner = make_runner()
+    assert _resolve_target(None, runner, exclude="A") is None
+
+
+def test_resolve_target_returns_none_for_self_address():
+    runner = make_runner()
+    assert _resolve_target("A", runner, exclude="A") is None
+
+
+def test_resolve_target_returns_none_for_unknown_name():
+    runner = make_runner()
+    assert _resolve_target("Ghost", runner, exclude="A") is None
+
+
+def test_resolve_target_returns_none_for_passed_participant():
+    runner = make_runner()
+    runner.passed.add("B")
+    assert _resolve_target("B", runner, exclude="A") is None
+
+
+def test_resolve_target_returns_valid_target():
+    runner = make_runner()
+    assert _resolve_target("B", runner, exclude="A") == "B"

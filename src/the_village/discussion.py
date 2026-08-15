@@ -94,3 +94,15 @@ def _build_round(runner: DiscussionRunner) -> list[str]:
         swap_index = runner.rng.randrange(1, len(order))
         order[0], order[swap_index] = order[swap_index], order[0]
     return order
+
+
+def _resolve_target(
+    candidate: str | None, runner: DiscussionRunner, exclude: str
+) -> str | None:
+    if not candidate or candidate == exclude:
+        return None
+    if candidate not in runner.budgets:
+        return None
+    if candidate in runner.passed:
+        return None
+    return candidate
