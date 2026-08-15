@@ -119,7 +119,9 @@ Notes:
 1. Take `player_name` as input (already validated non-blank by the UI layer
    — see Error Handling).
 2. Sample 6 distinct names from a fixed hardcoded name pool (~10-15 names)
-   without replacement.
+   without replacement, first excluding any pool name that matches the
+   player's name (case-insensitive) — so no AI villager shares the
+   player's name.
 3. Build the roster: one `Villager(name=player_name, player_type="user")`
    plus 6 `Villager(name=..., player_type="villager")`.
 4. Randomly choose 2 of the 6 AI villagers and set `player_type="werewolf"`

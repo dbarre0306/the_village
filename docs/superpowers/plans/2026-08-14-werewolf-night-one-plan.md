@@ -13,6 +13,7 @@
 ## Global Constraints
 
 - Roster is fixed at 7 villagers: 1 `player_type="user"` + 6 `player_type="villager"`, of which exactly 2 are reassigned `player_type="werewolf"`, one of those flagged `is_pack_leader=True`. Not configurable via UI.
+- AI villager names are sampled from the fixed name pool, excluding (case-insensitive) any pool entry matching the player's name — no AI villager may share the player's name.
 - `day_number` starts at `1` (Sunday). Night one's kill is revealed as `day_number=2` ("Monday").
 - The player (`player_type="user"`) is never eligible to be killed on night one — eligible targets are always `player_type == "villager" and is_alive`.
 - No LLM/Crew/Agent/Task is used for the night-one kill decision — it is `random.choice` over eligible targets, done in plain code.
@@ -190,6 +191,18 @@ def test_ai_villager_names_come_from_pool_and_are_unique():
     assert all(name in VILLAGER_NAME_POOL for name in ai_names)
 
 
+def test_ai_villager_names_exclude_a_player_name_matching_the_pool():
+    state = build_initial_roster("Alice", random.Random(1))
+    ai_names = [v.name for v in state.villagers if v.player_type != "user"]
+    assert "Alice" not in ai_names
+
+
+def test_ai_villager_names_exclude_a_player_name_case_insensitively():
+    state = build_initial_roster("alice", random.Random(1))
+    ai_names = [v.name for v in state.villagers if v.player_type != "user"]
+    assert "Alice" not in ai_names
+
+
 def test_day_number_starts_at_one():
     state = build_initial_roster("Dana", random.Random(1))
     assert state.day_number == 1
@@ -230,7 +243,12 @@ def build_initial_roster(
 ) -> GameState:
     rng = rng or random.Random()
 
-    ai_names = rng.sample(VILLAGER_NAME_POOL, 6)
+    available_names = [
+        name
+        for name in VILLAGER_NAME_POOL
+        if name.lower() != player_name.strip().lower()
+    ]
+    ai_names = rng.sample(available_names, 6)
     villagers = [Villager(name=player_name, player_type="user")]
     villagers += [
         Villager(name=name, player_type="villager") for name in ai_names
@@ -247,7 +265,7 @@ def build_initial_roster(
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/test_roster.py -v`
-Expected: PASS (6 tests)
+Expected: PASS (8 tests)
 
 - [ ] **Step 5: Commit**
 
