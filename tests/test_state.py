@@ -1,4 +1,4 @@
-from the_village.state import WEEKDAYS, Death, GameState, Villager
+from the_village.state import WEEKDAYS, Death, DiscussionMessage, GameState, Villager
 
 
 def test_villager_defaults():
@@ -24,3 +24,26 @@ def test_game_state_defaults():
 def test_weekdays_starts_on_sunday():
     assert WEEKDAYS[0] == "Sunday"
     assert len(WEEKDAYS) == 7
+
+
+def test_discussion_message_fields():
+    message = DiscussionMessage(day_number=1, speaker="Alice", message="hello")
+    assert message.day_number == 1
+    assert message.speaker == "Alice"
+    assert message.message == "hello"
+    assert message.addressed_to is None
+
+
+def test_discussion_message_addressed_to():
+    message = DiscussionMessage(
+        day_number=1,
+        speaker="Alice",
+        message="Bram, where were you?",
+        addressed_to="Bram",
+    )
+    assert message.addressed_to == "Bram"
+
+
+def test_game_state_discussion_defaults_to_empty_list():
+    state = GameState()
+    assert state.discussion == []

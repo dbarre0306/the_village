@@ -27,8 +27,16 @@ class Death(BaseModel):
     day_number: int
 
 
+class DiscussionMessage(BaseModel):
+    day_number: int
+    speaker: str
+    message: str
+    addressed_to: str | None = None
+
+
 class GameState(BaseModel):
     player_name: str = ""
     day_number: int = 1
     villagers: list[Villager] = []
     deaths: list[Death] = []
+    discussion: list[DiscussionMessage] = []
