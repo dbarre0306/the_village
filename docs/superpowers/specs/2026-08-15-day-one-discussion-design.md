@@ -16,12 +16,19 @@ Scope for this design:
 2. The human player participates in real time — typing messages, asking
    or answering questions, optionally passing.
 3. The Gradio UI changes needed to drive this turn by turn.
+4. Discussion history is preserved on `GameState` for the lifetime of the
+   game session, so that when future days/nights are built, villagers can
+   recall what was discussed on prior days.
 
 Explicitly out of scope (future work):
 
 - Lynch voting / elimination based on the discussion.
-- Multiple discussion rounds across subsequent days/nights.
-- Persisting discussion across server restarts.
+- The day 2+ discussion loop itself (the UI/orchestration to actually run
+  a second day) — only today's data model is shaped to support it.
+- Persisting discussion (or any `GameState`) across server restarts —
+  "preserved throughout the game" means in-memory for the session, the
+  same durability `GameState` already has; it does not mean durable
+  storage.
 - Automated hallucination/fact-checking guardrails beyond prompt
   instructions.
 
@@ -62,6 +69,7 @@ models and `night.py`/`roster.py` for logic):
 
 ```python
 class DiscussionMessage(BaseModel):
+    day_number: int
     speaker: str
     message: str
     addressed_to: str | None = None
@@ -71,10 +79,27 @@ class DiscussionMessage(BaseModel):
 both direct questions ("Corin, where were you?") and accusations ("I think
 it's Corin") alike. It is not restricted to grammatical questions.
 
-`DiscussionMessage` does not get added to `GameState`. Discussion is
-UI-driven, ephemeral orchestration state (see below), not part of the
-persisted game story the way `deaths` is — there is nothing in scope yet
-that needs discussion history to outlive the browser session.
+`day_number` mirrors `Death.day_number` and records which day's discussion
+this message belongs to.
+
+Unlike the earlier draft of this design, `DiscussionMessage` **is** added
+to `GameState`:
+
+```python
+class GameState(BaseModel):
+    player_name: str = ""
+    day_number: int = 1
+    villagers: list[Villager] = []
+    deaths: list[Death] = []
+    discussion: list[DiscussionMessage] = []
+```
+
+Discussion needs to outlive a single day: villagers must be able to recall
+what was discussed on prior days once a day 2+ loop exists. Putting it on
+`GameState` — the same place `deaths` lives — makes it part of the
+persisted game story rather than orchestration-only state, and future
+days' agents build their context from this accumulated list rather than
+from anything scoped to a single day's `DiscussionRunner`.
 
 ## Orchestration State (`discussion.py`)
 
@@ -84,16 +109,30 @@ data model):
 
 ```python
 class DiscussionRunner:
+    state: GameState                  # appends new messages directly to state.discussion
     agents: dict[str, Agent]          # AI villager name -> Agent
     budgets: dict[str, int]           # participant name -> remaining budget (starts at 3)
     passed: set[str]                  # participants permanently done
-    transcript: list[DiscussionMessage]
-    last_speaker: str | None          # author of the most recent transcript entry
 ```
 
-It is held in a Gradio `gr.State`, scoped to one browser session, for the
-duration of the discussion only — same "no shared mutable state across
-sessions" property the night-one design established for `GameState`.
+`DiscussionRunner` holds a reference to `GameState` and appends each new
+`DiscussionMessage` straight onto `state.discussion` as it's produced —
+there is no separate transcript to copy over at completion. `budgets` and
+`passed` are the only state that's genuinely scoped to the *current* day's
+in-progress round-robin (whose turn budget is left, who's permanently
+passed today) and don't belong on `GameState`; they're rebuilt fresh each
+time `start_discussion()` runs for a new day.
+
+The runner itself is held in a Gradio `gr.State`, scoped to one browser
+session, for the duration of the current day's discussion only — same
+"no shared mutable state across sessions" property the night-one design
+established for `GameState`.
+
+`last_speaker`, used for the round-boundary constraint below, is not
+separately tracked — it's derived on demand as the speaker of the last
+entry in `state.discussion` where `day_number == state.day_number` (i.e.
+scoped to today's messages only, so the constraint naturally resets at the
+start of each new day rather than looking across the day boundary).
 
 ### Participants
 
@@ -167,8 +206,12 @@ class TurnOutput(BaseModel):
 ```
 
 `has_something_to_say=False` is how an AI villager passes (see budget
-rules above). The `Task` description includes the public transcript so
-far and the two persona instructions below.
+rules above). The `Task` description includes all of `state.discussion`
+— every prior day's messages plus today's so far, in `day_number` order —
+and the two persona instructions below. Passing the full accumulated
+history (not just today's) is what lets villagers reference what was said
+on earlier days once a day 2+ loop exists; day one itself, this list is
+just today's messages.
 
 **Persona instructions** (prompt-level, not code-enforced — consistent
 with keeping this build simple, same reasoning the night-one design used
@@ -177,10 +220,11 @@ validate):
 
 - Speak like a person reacting to a death in their community — shock,
   grief, anger, suspicion are natural and expected. Not flat recitation.
-- Ground every statement strictly in: (a) the public transcript so far,
-  (b) the public fact of who died and when, (c) their own private
-  knowledge (their own role; a werewolf also knows their pack). Never
-  invent facts, alibis, or claims not present in that context.
+- Ground every statement strictly in: (a) the discussion history provided
+  (all days, oldest first), (b) the public fact of who died and when,
+  (c) their own private knowledge (their own role; a werewolf also knows
+  their pack). Never invent facts, alibis, or claims not present in that
+  context.
 
 ## `advance()` — the stepping function
 
@@ -256,6 +300,11 @@ Additions to the existing result screen:
 - Unit tests for the `addressed_to` bonus-reply mechanic, including that a
   bonus reply's own `addressed_to` does not chain into a second bonus
   reply.
+- Unit test that messages produced during discussion land on
+  `state.discussion` with the correct `day_number`, and that a seeded
+  `state.discussion` from a prior day is included, unmodified, in the
+  context passed to agents on a later day (mocked agent — assert on the
+  constructed `Task` input, not real output).
 - Agent/LLM calls are mocked in tests — assertions target orchestration
   logic (turn order, budgets, stop condition), not generated text or
   persona quality, which isn't something a unit test can meaningfully
