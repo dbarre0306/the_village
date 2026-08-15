@@ -69,3 +69,28 @@ def start_discussion(
     return DiscussionRunner(
         state=state, agents=agents, budgets=budgets, rng=rng or random.Random()
     )
+
+
+def _active_participants(runner: DiscussionRunner) -> list[str]:
+    return [
+        name
+        for name, budget in runner.budgets.items()
+        if budget > 0 and name not in runner.passed
+    ]
+
+
+def _last_speaker_today(runner: DiscussionRunner) -> str | None:
+    today_messages = [
+        m for m in runner.state.discussion if m.day_number == runner.state.day_number
+    ]
+    return today_messages[-1].speaker if today_messages else None
+
+
+def _build_round(runner: DiscussionRunner) -> list[str]:
+    order = _active_participants(runner)
+    runner.rng.shuffle(order)
+    last_speaker = _last_speaker_today(runner)
+    if last_speaker is not None and len(order) > 1 and order[0] == last_speaker:
+        swap_index = runner.rng.randrange(1, len(order))
+        order[0], order[swap_index] = order[swap_index], order[0]
+    return order
