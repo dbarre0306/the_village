@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
+from enum import Enum
+from typing import Iterator
 
 from crewai import Agent
 from pydantic import BaseModel
@@ -177,3 +179,102 @@ def _generate_bonus_reply(
     )
     runner.state.discussion.append(reply)
     return reply
+
+
+class AdvanceStatus(str, Enum):
+    WAITING_FOR_TURN = "waiting_for_turn"
+    WAITING_FOR_ANSWER = "waiting_for_answer"
+    COMPLETE = "complete"
+
+
+def advance(
+    runner: DiscussionRunner,
+    player_input: str | None = None,
+    player_addressed_to: str | None = None,
+    player_pass: bool = False,
+) -> Iterator[DiscussionMessage | AdvanceStatus]:
+    state = runner.state
+    player = state.player_name
+
+    if runner.awaiting_reply_from == player:
+        runner.awaiting_reply_from = None
+        if player_input and not player_pass:
+            msg = DiscussionMessage(
+                day_number=state.day_number,
+                speaker=player,
+                message=player_input,
+                addressed_to=_resolve_target(
+                    player_addressed_to, runner, exclude=player
+                ),
+            )
+            state.discussion.append(msg)
+            yield msg
+
+    elif runner.queue and runner.queue[0] == player:
+        runner.queue.pop(0)
+        if player_pass or not player_input:
+            runner.passed.add(player)
+        else:
+            runner.budgets[player] -= 1
+            addressed_to = _resolve_target(
+                player_addressed_to, runner, exclude=player
+            )
+            msg = DiscussionMessage(
+                day_number=state.day_number,
+                speaker=player,
+                message=player_input,
+                addressed_to=addressed_to,
+            )
+            state.discussion.append(msg)
+            yield msg
+            if addressed_to is not None:
+                bonus = _generate_bonus_reply(runner, msg)
+                if bonus is not None:
+                    yield bonus
+
+    yield from _run_ai_turns(runner)
+
+
+def _run_ai_turns(
+    runner: DiscussionRunner,
+) -> Iterator[DiscussionMessage | AdvanceStatus]:
+    state = runner.state
+    player = state.player_name
+
+    while True:
+        if not runner.queue:
+            runner.queue = _build_round(runner)
+            if not runner.queue:
+                yield AdvanceStatus.COMPLETE
+                return
+
+        next_name = runner.queue[0]
+        if next_name == player:
+            yield AdvanceStatus.WAITING_FOR_TURN
+            return
+
+        runner.queue.pop(0)
+        output = _ask_agent(runner.agents[next_name], state, addressed_by=None)
+        if not output.has_something_to_say or not output.message:
+            runner.passed.add(next_name)
+            continue
+
+        runner.budgets[next_name] -= 1
+        addressed_to = _resolve_target(output.addressed_to, runner, exclude=next_name)
+        msg = DiscussionMessage(
+            day_number=state.day_number,
+            speaker=next_name,
+            message=output.message,
+            addressed_to=addressed_to,
+        )
+        state.discussion.append(msg)
+        yield msg
+
+        if addressed_to == player:
+            runner.awaiting_reply_from = player
+            yield AdvanceStatus.WAITING_FOR_ANSWER
+            return
+        elif addressed_to is not None:
+            bonus = _generate_bonus_reply(runner, msg)
+            if bonus is not None:
+                yield bonus

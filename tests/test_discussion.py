@@ -2,6 +2,7 @@ import random
 from types import SimpleNamespace
 
 from the_village.discussion import (
+    AdvanceStatus,
     DiscussionRunner,
     TurnOutput,
     _active_participants,
@@ -12,6 +13,7 @@ from the_village.discussion import (
     _generate_bonus_reply,
     _last_speaker_today,
     _resolve_target,
+    advance,
     start_discussion,
 )
 from the_village.state import Death, DiscussionMessage, GameState, Villager
@@ -70,7 +72,11 @@ def make_runner(day_number: int = 1) -> DiscussionRunner:
         Villager(name="F", player_type="werewolf"),
     ]
     state = GameState(player_name="Dana", day_number=day_number, villagers=villagers)
-    return start_discussion(state, random.Random(1))
+    runner = start_discussion(state, random.Random(1))
+    # Provide default mocked agents that pass by default (can be overridden in tests)
+    for name in runner.agents:
+        runner.agents[name] = ScriptedAgent([TurnOutput(has_something_to_say=False)])
+    return runner
 
 
 def test_active_participants_excludes_passed():
@@ -266,3 +272,137 @@ def test_generate_bonus_reply_does_not_chain_further_bonus_replies():
 
     assert reply.addressed_to == "A"
     assert len(runner.state.discussion) == 1
+
+
+def test_advance_auto_plays_ai_turns_then_pauses_for_player():
+    runner = make_runner()
+    runner.agents["A"] = ScriptedAgent(
+        [TurnOutput(has_something_to_say=True, message="I'm scared.")]
+    )
+    runner.agents["B"] = ScriptedAgent(
+        [TurnOutput(has_something_to_say=True, message="Me too.")]
+    )
+    runner.queue = ["A", "B", "Dana"]
+
+    events = list(advance(runner))
+
+    messages = [e for e in events if isinstance(e, DiscussionMessage)]
+    assert [m.speaker for m in messages] == ["A", "B"]
+    assert events[-1] == AdvanceStatus.WAITING_FOR_TURN
+    assert runner.queue == ["Dana"]
+
+
+def test_advance_records_player_message_and_decrements_budget():
+    runner = make_runner()
+    runner.queue = ["Dana"]
+    starting_budget = runner.budgets["Dana"]
+
+    events = list(advance(runner, player_input="I didn't do it!"))
+
+    messages = [e for e in events if isinstance(e, DiscussionMessage)]
+    assert messages[0].speaker == "Dana"
+    assert messages[0].message == "I didn't do it!"
+    assert runner.budgets["Dana"] == starting_budget - 1
+
+
+def test_advance_player_pass_on_normal_turn_is_permanent():
+    runner = make_runner()
+    runner.queue = ["Dana"]
+
+    list(advance(runner, player_pass=True))
+
+    assert "Dana" in runner.passed
+
+
+def test_advance_pauses_for_player_when_addressed_by_ai():
+    runner = make_runner()
+    runner.agents["A"] = ScriptedAgent(
+        [
+            TurnOutput(
+                has_something_to_say=True,
+                message="Dana, where were you last night?",
+                addressed_to="Dana",
+            )
+        ]
+    )
+    runner.queue = ["A", "B"]
+
+    events = list(advance(runner))
+
+    assert events[-1] == AdvanceStatus.WAITING_FOR_ANSWER
+    assert runner.awaiting_reply_from == "Dana"
+    assert runner.queue == ["B"]
+
+
+def test_advance_player_answer_to_question_costs_no_budget_and_resumes_queue():
+    runner = make_runner()
+    runner.agents["B"] = ScriptedAgent(
+        [TurnOutput(has_something_to_say=True, message="I agree with Dana.")]
+    )
+    runner.awaiting_reply_from = "Dana"
+    runner.queue = ["B"]
+    starting_budget = runner.budgets["Dana"]
+
+    events = list(advance(runner, player_input="I was home asleep."))
+
+    messages = [e for e in events if isinstance(e, DiscussionMessage)]
+    assert messages[0].speaker == "Dana"
+    assert messages[0].message == "I was home asleep."
+    assert runner.budgets["Dana"] == starting_budget
+    assert runner.awaiting_reply_from is None
+    assert messages[1].speaker == "B"
+
+
+def test_advance_player_pass_when_addressed_is_not_permanent():
+    runner = make_runner()
+    runner.awaiting_reply_from = "Dana"
+    runner.queue = []
+
+    list(advance(runner, player_pass=True))
+
+    assert "Dana" not in runner.passed
+
+
+def test_advance_completes_when_no_participants_remain_active():
+    runner = make_runner()
+    runner.budgets = {"Dana": 0, "A": 0, "B": 0, "C": 0, "E": 0, "F": 0}
+    runner.queue = []
+
+    events = list(advance(runner))
+
+    assert events == [AdvanceStatus.COMPLETE]
+
+
+def test_advance_ai_addressing_another_ai_does_not_pause_for_player():
+    runner = make_runner()
+    runner.agents["A"] = ScriptedAgent(
+        [
+            TurnOutput(
+                has_something_to_say=True,
+                message="B, explain yourself.",
+                addressed_to="B",
+            )
+        ]
+    )
+    runner.agents["B"] = ScriptedAgent(
+        [TurnOutput(has_something_to_say=True, message="I have nothing to hide.")]
+    )
+    runner.queue = ["A", "Dana"]
+
+    events = list(advance(runner))
+
+    messages = [e for e in events if isinstance(e, DiscussionMessage)]
+    assert [m.speaker for m in messages] == ["A", "B"]
+    assert events[-1] == AdvanceStatus.WAITING_FOR_TURN
+
+
+def test_advance_ai_pass_marks_participant_permanently_passed():
+    runner = make_runner()
+    runner.agents["A"] = ScriptedAgent([TurnOutput(has_something_to_say=False)])
+    runner.queue = ["A", "Dana"]
+
+    events = list(advance(runner))
+
+    assert [e for e in events if isinstance(e, DiscussionMessage)] == []
+    assert "A" in runner.passed
+    assert events[-1] == AdvanceStatus.WAITING_FOR_TURN
