@@ -104,13 +104,29 @@ def _last_speaker_today(runner: DiscussionRunner) -> str | None:
     return today_messages[-1].speaker if today_messages else None
 
 
+def _avoid_immediate_repeat(
+    order: list[str], last_speaker: str | None, rng: random.Random
+) -> None:
+    """Reorder `order` in place so its front entry never repeats `last_speaker`.
+
+    A bonus/direct reply lets someone speak out of turn while still sitting
+    later in the round queue. Without this check, resuming the queue right
+    after such a reply can immediately re-select that same person — this
+    is called both when a round is built and every time the queue is about
+    to hand out a turn, so a mid-round repeat gets deferred too.
+    """
+    if last_speaker is None or len(order) <= 1:
+        return
+    if order[0] != last_speaker:
+        return
+    swap_index = rng.randrange(1, len(order))
+    order[0], order[swap_index] = order[swap_index], order[0]
+
+
 def _build_round(runner: DiscussionRunner) -> list[str]:
     order = _active_participants(runner)
     runner.rng.shuffle(order)
-    last_speaker = _last_speaker_today(runner)
-    if last_speaker is not None and len(order) > 1 and order[0] == last_speaker:
-        swap_index = runner.rng.randrange(1, len(order))
-        order[0], order[swap_index] = order[swap_index], order[0]
+    _avoid_immediate_repeat(order, _last_speaker_today(runner), runner.rng)
     return order
 
 
@@ -310,6 +326,7 @@ def _run_ai_turns(
                 yield AdvanceStatus.COMPLETE
                 return
 
+        _avoid_immediate_repeat(runner.queue, _last_speaker_today(runner), runner.rng)
         next_name = runner.queue[0]
         if next_name == player:
             yield AdvanceStatus.WAITING_FOR_TURN

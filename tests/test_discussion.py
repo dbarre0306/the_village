@@ -427,6 +427,71 @@ def test_advance_bonus_reply_addressing_player_pauses_for_answer():
     assert runner.queue == ["Dana"]
 
 
+def test_advance_defers_players_queued_turn_after_answering_direct_question():
+    runner = make_runner()
+    runner.agents["A"] = ScriptedAgent(
+        [
+            TurnOutput(
+                has_something_to_say=True,
+                message="Dana, where were you last night?",
+                addressed_to="Dana",
+            )
+        ]
+    )
+    runner.agents["B"] = ScriptedAgent(
+        [TurnOutput(has_something_to_say=True, message="I agree with Dana.")]
+    )
+    runner.queue = ["A", "Dana", "B"]
+
+    events = list(advance(runner))
+    assert events[-1] == AdvanceStatus.WAITING_FOR_ANSWER
+    assert runner.queue == ["Dana", "B"]
+
+    events = list(advance(runner, player_input="I was home asleep."))
+
+    messages = [e for e in events if isinstance(e, DiscussionMessage)]
+    speakers = [m.speaker for m in messages]
+    assert speakers[0] == "Dana"
+    assert "B" in speakers, "B should get a turn instead of Dana being re-prompted"
+    for prev, nxt in zip(speakers, speakers[1:]):
+        assert prev != nxt, f"{prev} spoke twice in a row: {speakers}"
+
+
+def test_advance_defers_ai_queued_turn_after_bonus_reply():
+    runner = make_runner()
+    decline = TurnOutput(has_something_to_say=False)
+    runner.agents["A"] = ScriptedAgent(
+        [
+            TurnOutput(
+                has_something_to_say=True,
+                message="B, explain yourself.",
+                addressed_to="B",
+            ),
+            decline,
+        ]
+    )
+    runner.agents["B"] = ScriptedAgent(
+        [
+            TurnOutput(has_something_to_say=True, message="I have nothing to hide."),
+            TurnOutput(has_something_to_say=True, message="Anyway, moving on."),
+            decline,
+        ]
+    )
+    runner.agents["C"] = ScriptedAgent(
+        [TurnOutput(has_something_to_say=True, message="Interesting."), decline]
+    )
+    runner.queue = ["A", "B", "C"]
+
+    events = list(advance(runner))
+
+    speakers = [e.speaker for e in events if isinstance(e, DiscussionMessage)]
+    # A's bonus reply from B is inline and immediate (by design); what this
+    # guards against is B's own still-queued turn firing right after it.
+    assert speakers[:4] == ["A", "B", "C", "B"]
+    for prev, nxt in zip(speakers, speakers[1:]):
+        assert prev != nxt, f"{prev} spoke twice in a row: {speakers}"
+
+
 def test_advance_player_bonus_reply_addressing_player_pauses_for_answer():
     runner = make_runner()
     runner.agents["A"] = ScriptedAgent(
