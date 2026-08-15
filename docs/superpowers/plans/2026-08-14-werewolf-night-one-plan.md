@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Let a player start a game (entering their first name in a Gradio UI), have a 6-villager roster (1 player + 5 AI villagers, 2 of them secretly werewolves) generated, resolve the werewolves' first-night kill as a random pick among the non-werewolf AI villagers, and show the player a two-column result screen (event log + running list of werewolf kills).
+**Goal:** Let a player start a game (entering their first name in a Gradio UI), have a 7-villager roster (1 player + 6 AI villagers, 2 of them secretly werewolves) generated, resolve the werewolves' first-night kill as a random pick among the non-werewolf AI villagers, and show the player a two-column result screen (event log + running list of werewolf kills).
 
 **Architecture:** A `CrewAI Flow` (`VillageFlow`) holds a typed `GameState` (Pydantic). `@start()` builds the roster and assigns werewolves/pack-leader; `@listen()` resolves the night-one kill. Both steps are plain deterministic Python — no `Agent`/`Task`/`Crew` is used, since night one has no information for werewolves to reason about (see spec's "Why no CrewAI Crew" section). A Gradio `Blocks` app wraps `VillageFlow().kickoff(...)` per session, using `gr.State` so concurrent users' games never share state.
 
@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Roster is fixed at 6 villagers: 1 `player_type="user"` + 5 `player_type="villager"`, of which exactly 2 are reassigned `player_type="werewolf"`, one of those flagged `is_pack_leader=True`. Not configurable via UI.
+- Roster is fixed at 7 villagers: 1 `player_type="user"` + 6 `player_type="villager"`, of which exactly 2 are reassigned `player_type="werewolf"`, one of those flagged `is_pack_leader=True`. Not configurable via UI.
 - `day_number` starts at `1` (Sunday). Night one's kill is revealed as `day_number=2` ("Monday").
 - The player (`player_type="user"`) is never eligible to be killed on night one — eligible targets are always `player_type == "villager" and is_alive`.
 - No LLM/Crew/Agent/Task is used for the night-one kill decision — it is `random.choice` over eligible targets, done in plain code.
@@ -157,17 +157,17 @@ import random
 from the_village.roster import VILLAGER_NAME_POOL, build_initial_roster
 
 
-def test_roster_has_six_villagers():
+def test_roster_has_seven_villagers():
     state = build_initial_roster("Dana", random.Random(1))
-    assert len(state.villagers) == 6
+    assert len(state.villagers) == 7
 
 
-def test_roster_has_one_user_two_werewolves_three_villagers():
+def test_roster_has_one_user_two_werewolves_four_villagers():
     state = build_initial_roster("Dana", random.Random(1))
     by_type = {"user": 0, "werewolf": 0, "villager": 0}
     for villager in state.villagers:
         by_type[villager.player_type] += 1
-    assert by_type == {"user": 1, "werewolf": 2, "villager": 3}
+    assert by_type == {"user": 1, "werewolf": 2, "villager": 4}
 
 
 def test_player_is_first_villager_and_is_user_type():
@@ -230,7 +230,7 @@ def build_initial_roster(
 ) -> GameState:
     rng = rng or random.Random()
 
-    ai_names = rng.sample(VILLAGER_NAME_POOL, 5)
+    ai_names = rng.sample(VILLAGER_NAME_POOL, 6)
     villagers = [Villager(name=player_name, player_type="user")]
     villagers += [
         Villager(name=name, player_type="villager") for name in ai_names
@@ -285,8 +285,9 @@ def make_state() -> GameState:
         Villager(name="A", player_type="villager"),
         Villager(name="B", player_type="villager"),
         Villager(name="C", player_type="villager"),
-        Villager(name="D", player_type="werewolf", is_pack_leader=True),
-        Villager(name="E", player_type="werewolf"),
+        Villager(name="D", player_type="villager"),
+        Villager(name="E", player_type="werewolf", is_pack_leader=True),
+        Villager(name="F", player_type="werewolf"),
     ]
     return GameState(player_name="Dana", day_number=1, villagers=villagers)
 
@@ -297,7 +298,7 @@ def test_kills_a_non_player_non_werewolf_villager():
 
     assert len(state.deaths) == 1
     killed_name = state.deaths[0].name
-    assert killed_name in {"A", "B", "C"}
+    assert killed_name in {"A", "B", "C", "D"}
 
 
 def test_killed_villager_marked_not_alive():
@@ -397,7 +398,7 @@ def test_village_flow_produces_valid_night_one_result():
     flow.kickoff(inputs={"player_name": "Dana"})
     state = flow.state
 
-    assert len(state.villagers) == 6
+    assert len(state.villagers) == 7
     assert len(state.deaths) == 1
 
     death = state.deaths[0]

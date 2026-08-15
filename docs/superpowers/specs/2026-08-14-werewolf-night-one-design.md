@@ -50,8 +50,8 @@ Gradio UI (single page, two states: start screen / result screen)
         ▼
 VillageFlow (CrewAI Flow)
   ├─ @start()  setup_game(player_name) -> GameState
-  │     - sample 5 AI villager names from a fixed name pool
-  │     - roster = player ("user") + 5 AI villagers ("villager")
+  │     - sample 6 AI villager names from a fixed name pool
+  │     - roster = player ("user") + 6 AI villagers ("villager")
   │     - randomly reassign 2 of the AI villagers to player_type="werewolf"
   │     - flag one of the two werewolves is_pack_leader=True
   │
@@ -106,9 +106,9 @@ Notes:
 - `player_type` uses a 3-value `Literal` instead of separate booleans so a
   future `"seer"` value (and any other role) can be added without
   restructuring the model.
-- Roster size is fixed for this build: 6 total (1 `"user"` + 5 AI
-  villagers), 2 of the 5 AI villagers are werewolves. Not configurable via
-  UI yet.
+- Roster size is fixed for this build: 7 total (1 `"user"` + 6 AI
+  villagers), 2 of the 6 AI villagers are werewolves, leaving 4 eligible
+  night-one kill targets. Not configurable via UI yet.
 - `Death` is a list, not a single field, so the UI can always render the
   full history of werewolf kills — required even though night one produces
   only one entry, because the shape needs to hold up once more nights are
@@ -118,11 +118,11 @@ Notes:
 
 1. Take `player_name` as input (already validated non-blank by the UI layer
    — see Error Handling).
-2. Sample 5 distinct names from a fixed hardcoded name pool (~10-15 names)
+2. Sample 6 distinct names from a fixed hardcoded name pool (~10-15 names)
    without replacement.
 3. Build the roster: one `Villager(name=player_name, player_type="user")`
-   plus 5 `Villager(name=..., player_type="villager")`.
-4. Randomly choose 2 of the 5 AI villagers and set `player_type="werewolf"`
+   plus 6 `Villager(name=..., player_type="villager")`.
+4. Randomly choose 2 of the 6 AI villagers and set `player_type="werewolf"`
    on them.
 5. Randomly choose 1 of those 2 werewolves and set `is_pack_leader=True`.
    (Pack leader has no effect in this build — night one's kill is a random
@@ -137,7 +137,7 @@ calls.
 ## Night-One Kill Logic (`run_night_one`)
 
 1. Compute eligible targets: villagers where `player_type == "villager"
-   and is_alive`. On night one this is always the 3 non-werewolf AI
+   and is_alive`. On night one this is always the 4 non-werewolf AI
    villagers (the player is never eligible, and werewolves don't target
    each other).
 2. `killed = random.choice(eligible_targets)`.
@@ -190,7 +190,7 @@ what a villager character would actually know.
 
 ## Testing
 
-- Unit test `setup_game` with a seeded RNG: roster is 6 villagers, exactly
+- Unit test `setup_game` with a seeded RNG: roster is 7 villagers, exactly
   1 `"user"`, exactly 2 `"werewolf"`, exactly 1 `is_pack_leader=True` among
   the werewolves.
 - Unit test `run_night_one`: killed villager is always `player_type ==
