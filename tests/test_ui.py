@@ -41,22 +41,28 @@ def test_format_event_log_with_a_death():
 
 def test_format_deaths_panel_with_no_deaths():
     state = GameState(player_name="Dana", day_number=1)
-    assert format_deaths_panel(state) == "No one has been killed yet."
+    assert format_deaths_panel(state) == '<div class="chip-list">No one has been killed yet.</div>'
 
 
 def test_format_deaths_panel_with_a_death():
     state = make_state_with_one_death()
-    assert format_deaths_panel(state) == "- Monday: A"
+    assert (
+        format_deaths_panel(state)
+        == '<div class="chip-list"><span class="villager-chip dead">A</span></div>'
+    )
 
 
 def test_format_alive_panel_marks_player_and_excludes_dead_villagers():
     state = make_state_with_one_death()
-    assert format_alive_panel(state) == "- Dana (me)"
+    assert (
+        format_alive_panel(state)
+        == '<div class="chip-list"><span class="villager-chip">Dana (me)</span></div>'
+    )
 
 
 def test_format_alive_panel_with_no_villagers():
     state = GameState(player_name="Dana", day_number=1)
-    assert format_alive_panel(state) == "No one is left."
+    assert format_alive_panel(state) == '<div class="chip-list">No one is left.</div>'
 
 
 def test_start_game_rejects_blank_name():
@@ -77,7 +83,7 @@ def test_start_game_returns_six_outputs_including_game_state():
 
 def test_format_discussion_transcript_with_no_messages():
     state = GameState(player_name="Dana")
-    assert format_discussion_transcript(state) == "The discussion hasn't started yet."
+    assert format_discussion_transcript(state) == ""
 
 
 def test_format_discussion_transcript_lists_messages():

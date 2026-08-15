@@ -23,6 +23,9 @@ SPEAKER_COLORS = [
 ]
 
 DISCUSSION_TRANSCRIPT_CLASS = "discussion-transcript"
+PINNED_BAR_CLASS = "pinned-bar"
+CHIP_LIST_CLASS = "chip-list"
+VILLAGER_CHIP_CLASS = "villager-chip"
 
 
 def _speaker_color_css() -> str:
@@ -39,6 +42,47 @@ def _speaker_color_css() -> str:
     }}
     .dark .{DISCUSSION_TRANSCRIPT_CLASS} {{ {dark_vars}; }}
     .{DISCUSSION_TRANSCRIPT_CLASS} .speaker-name {{ font-weight: 600; }}
+    """
+
+
+def _layout_css() -> str:
+    return f"""
+    /* Sticky positioning needs an unambiguous scrolling ancestor. Gradio's
+       default layout lets the document/body scroll, and an in-between
+       wrapper can silently break `position: sticky` depending on its
+       overflow. Making the container itself the explicit scroll context
+       guarantees the pinned bar always has a well-defined ancestor to
+       stick to. */
+    .gradio-container {{
+        height: 100vh;
+        overflow-y: auto;
+    }}
+    .{PINNED_BAR_CLASS} {{
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: var(--body-background-fill);
+        border-bottom: 1px solid var(--border-color-primary);
+        padding-bottom: 8px;
+        margin-bottom: 8px;
+    }}
+    .{CHIP_LIST_CLASS} {{
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }}
+    .{VILLAGER_CHIP_CLASS} {{
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 999px;
+        background: var(--background-fill-secondary);
+        border: 1px solid var(--border-color-primary);
+        font-size: 0.85em;
+    }}
+    .{VILLAGER_CHIP_CLASS}.dead {{
+        text-decoration: line-through;
+        opacity: 0.6;
+    }}
     """
 
 
@@ -61,28 +105,30 @@ def format_event_log(state: GameState) -> str:
 
 def format_deaths_panel(state: GameState) -> str:
     if not state.deaths:
-        return "No one has been killed yet."
-    lines = [
-        f"- {WEEKDAYS[(death.day_number - 1) % 7]}: {death.name}"
+        return f'<div class="{CHIP_LIST_CLASS}">No one has been killed yet.</div>'
+    chips = "".join(
+        f'<span class="{VILLAGER_CHIP_CLASS} dead">{death.name}</span>'
         for death in state.deaths
-    ]
-    return "\n".join(lines)
+    )
+    return f'<div class="{CHIP_LIST_CLASS}">{chips}</div>'
 
 
 def format_alive_panel(state: GameState) -> str:
     alive = [villager for villager in state.villagers if villager.is_alive]
     if not alive:
-        return "No one is left."
-    lines = [
-        f"- {villager.name} (me)" if villager.name == state.player_name else f"- {villager.name}"
+        return f'<div class="{CHIP_LIST_CLASS}">No one is left.</div>'
+    chips = "".join(
+        f'<span class="{VILLAGER_CHIP_CLASS}">'
+        f'{villager.name}{" (me)" if villager.name == state.player_name else ""}'
+        f"</span>"
         for villager in alive
-    ]
-    return "\n".join(lines)
+    )
+    return f'<div class="{CHIP_LIST_CLASS}">{chips}</div>'
 
 
 def format_discussion_transcript(state: GameState) -> str:
     if not state.discussion:
-        return "The discussion hasn't started yet."
+        return ""
     lines = [
         f'<span class="speaker-name" '
         f'style="color: var(--speaker-{_speaker_color_index(m.speaker, state)})">'
@@ -206,7 +252,14 @@ def build_app() -> gr.Blocks:
             name_input = gr.Textbox(label="Your first name")
             start_button = gr.Button("Start Game")
 
-        with gr.Row(visible=False) as result_screen:
+        with gr.Column(visible=False) as result_screen:
+            with gr.Row(elem_classes=[PINNED_BAR_CLASS]):
+                with gr.Column():
+                    gr.Markdown("### Living Villagers")
+                    alive_panel = gr.Markdown()
+                with gr.Column():
+                    gr.Markdown("### Killed by Werewolves")
+                    deaths_panel = gr.Markdown()
             with gr.Column():
                 gr.Markdown("### Events")
                 event_log = gr.Markdown()
@@ -219,14 +272,10 @@ def build_app() -> gr.Blocks:
                     discussion_addressed_to = gr.Dropdown(
                         label="Address to (optional)", choices=[], scale=1
                     )
-                    send_button = gr.Button("Send")
-                    pass_button = gr.Button("I have nothing to say")
+                    with gr.Column(scale=1):
+                        send_button = gr.Button("Send")
+                        pass_button = gr.Button("I have nothing to say")
                 discussion_status = gr.Markdown(visible=False)
-            with gr.Column():
-                gr.Markdown("### Alive Villagers")
-                alive_panel = gr.Markdown()
-                gr.Markdown("### Killed by Werewolves")
-                deaths_panel = gr.Markdown()
 
         start_button.click(
             fn=start_game,
@@ -283,7 +332,7 @@ def build_app() -> gr.Blocks:
 
 
 def main():
-    build_app().launch(css=_speaker_color_css())
+    build_app().launch(css=_speaker_color_css() + _layout_css())
 
 
 if __name__ == "__main__":
