@@ -295,10 +295,11 @@ def advance(
 
     elif runner.queue and runner.queue[0] == player:
         runner.queue.pop(0)
+        runner.budgets[player] -= 1
         if player_pass or not player_input:
-            runner.passed.add(player)
+            if runner.budgets[player] <= 0:
+                runner.passed.add(player)
         else:
-            runner.budgets[player] -= 1
             addressed_to = _resolve_target(
                 player_addressed_to, runner, exclude=player
             )

@@ -305,12 +305,25 @@ def test_advance_records_player_message_and_decrements_budget():
     assert runner.budgets["Dana"] == starting_budget - 1
 
 
-def test_advance_player_pass_on_normal_turn_is_permanent():
+def test_advance_player_pass_on_normal_turn_costs_budget_but_gives_another_chance():
     runner = make_runner()
+    runner.queue = ["Dana"]
+    starting_budget = runner.budgets["Dana"]
+
+    list(advance(runner, player_pass=True))
+
+    assert runner.budgets["Dana"] == starting_budget - 1
+    assert "Dana" not in runner.passed
+
+
+def test_advance_player_pass_is_permanent_once_budget_is_exhausted():
+    runner = make_runner()
+    runner.budgets["Dana"] = 1
     runner.queue = ["Dana"]
 
     list(advance(runner, player_pass=True))
 
+    assert runner.budgets["Dana"] == 0
     assert "Dana" in runner.passed
 
 
