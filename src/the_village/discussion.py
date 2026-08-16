@@ -328,7 +328,13 @@ def _run_ai_turns(
 
     while True:
         if not runner.queue:
-            if len(_active_participants(runner)) <= 1:
+            active = _active_participants(runner)
+            if not active:
+                yield AdvanceStatus.COMPLETE
+                return
+            if len(active) == 1 and active[0] == _last_speaker_today(runner):
+                # The lone active participant would just be repeating
+                # themselves with no one else able to join — end instead.
                 yield AdvanceStatus.COMPLETE
                 return
             runner.queue = _build_round(runner)

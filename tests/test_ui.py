@@ -149,7 +149,7 @@ def test_begin_discussion_yields_waiting_status_when_only_player_active():
     assert dropdown_update["choices"] == []
 
 
-def test_send_discussion_turn_records_message_and_shows_waiting_status():
+def test_send_discussion_turn_records_message_and_ends_discussion_when_player_is_sole_participant():
     state = GameState(
         player_name="Dana",
         day_number=1,
@@ -159,9 +159,12 @@ def test_send_discussion_turn_records_message_and_shows_waiting_status():
 
     events = list(send_discussion_turn(runner, "I'm scared.", ""))
 
-    _, transcript, _, _, input_visibility, _, _ = events[-1]
+    _, transcript, _, _, input_visibility, status_update, _ = events[-1]
     assert "I'm scared." in transcript
-    assert input_visibility["visible"] is True
+    # No one else is in the discussion to respond, so it ends rather than
+    # asking Dana to repeat herself to an empty room.
+    assert input_visibility["visible"] is False
+    assert status_update["visible"] is True
 
 
 def test_pass_discussion_turn_marks_player_passed_and_shows_ended_status():
@@ -170,7 +173,9 @@ def test_pass_discussion_turn_marks_player_passed_and_shows_ended_status():
         day_number=1,
         villagers=[Villager(name="Dana", player_type="user")],
     )
-    runner = DiscussionRunner(state=state, agents={}, budgets={"Dana": 3}, queue=["Dana"])
+    # Budget of 1 so this single pass exhausts it -- passing only costs one
+    # budget point, so a player with budget remaining is not marked passed.
+    runner = DiscussionRunner(state=state, agents={}, budgets={"Dana": 1}, queue=["Dana"])
 
     events = list(pass_discussion_turn(runner))
 
