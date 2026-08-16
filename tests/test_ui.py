@@ -48,7 +48,8 @@ def test_format_deaths_panel_with_a_death():
     state = make_state_with_one_death()
     assert (
         format_deaths_panel(state)
-        == '<div class="chip-list"><span class="villager-chip dead">A</span></div>'
+        == '<div class="chip-list"><span class="villager-chip dead" '
+        'style="color: var(--speaker-1)">A</span></div>'
     )
 
 
@@ -56,7 +57,8 @@ def test_format_alive_panel_marks_player_and_excludes_dead_villagers():
     state = make_state_with_one_death()
     assert (
         format_alive_panel(state)
-        == '<div class="chip-list"><span class="villager-chip">Dana (me)</span></div>'
+        == '<div class="chip-list"><span class="villager-chip" '
+        'style="color: var(--speaker-0)">Dana (me)</span></div>'
     )
 
 

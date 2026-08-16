@@ -14,10 +14,10 @@ logger = logging.getLogger(__name__)
 SPEAKER_COLORS = [
     ("#2a78d6", "#3987e5"),  # blue
     ("#eb6834", "#d95926"),  # orange
-    ("#1baf7a", "#199e70"),  # aqua
+    ("#0e9488", "#14b8a6"),  # teal
     ("#eda100", "#c98500"),  # yellow
     ("#e87ba4", "#d55181"),  # magenta
-    ("#008300", "#008300"),  # green
+    ("#4c9a2a", "#6cbf3f"),  # green
     ("#4a3aa7", "#9085e9"),  # violet
     ("#e34948", "#e66767"),  # red
 ]
@@ -29,6 +29,9 @@ VILLAGER_CHIP_CLASS = "villager-chip"
 
 
 def _speaker_color_css() -> str:
+    # Defined on :root (not scoped to the transcript) so the same
+    # --speaker-N variables are available to the living/dead villager chip
+    # lists, which live in separate DOM subtrees from the transcript.
     light_vars = "; ".join(
         f"--speaker-{i}: {light}" for i, (light, _dark) in enumerate(SPEAKER_COLORS)
     )
@@ -36,11 +39,11 @@ def _speaker_color_css() -> str:
         f"--speaker-{i}: {dark}" for i, (_light, dark) in enumerate(SPEAKER_COLORS)
     )
     return f"""
-    .{DISCUSSION_TRANSCRIPT_CLASS} {{ {light_vars}; }}
+    :root {{ {light_vars}; }}
     @media (prefers-color-scheme: dark) {{
-        .{DISCUSSION_TRANSCRIPT_CLASS} {{ {dark_vars}; }}
+        :root {{ {dark_vars}; }}
     }}
-    .dark .{DISCUSSION_TRANSCRIPT_CLASS} {{ {dark_vars}; }}
+    .dark {{ {dark_vars}; }}
     .{DISCUSSION_TRANSCRIPT_CLASS} .speaker-name {{ font-weight: 600; }}
     """
 
@@ -135,7 +138,9 @@ def format_deaths_panel(state: GameState) -> str:
     if not state.deaths:
         return f'<div class="{CHIP_LIST_CLASS}">No one has been killed yet.</div>'
     chips = "".join(
-        f'<span class="{VILLAGER_CHIP_CLASS} dead">{death.name}</span>'
+        f'<span class="{VILLAGER_CHIP_CLASS} dead" '
+        f'style="color: var(--speaker-{_speaker_color_index(death.name, state)})">'
+        f"{death.name}</span>"
         for death in state.deaths
     )
     return f'<div class="{CHIP_LIST_CLASS}">{chips}</div>'
@@ -146,7 +151,8 @@ def format_alive_panel(state: GameState) -> str:
     if not alive:
         return f'<div class="{CHIP_LIST_CLASS}">No one is left.</div>'
     chips = "".join(
-        f'<span class="{VILLAGER_CHIP_CLASS}">'
+        f'<span class="{VILLAGER_CHIP_CLASS}" '
+        f'style="color: var(--speaker-{_speaker_color_index(villager.name, state)})">'
         f'{villager.name}{" (me)" if villager.name == state.player_name else ""}'
         f"</span>"
         for villager in alive
