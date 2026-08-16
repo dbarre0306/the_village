@@ -86,6 +86,34 @@ def _layout_css() -> str:
     """
 
 
+def _autoscroll_js() -> str:
+    # The transcript streams in as separate yields during a discussion turn,
+    # so we can't hook a single event's completion to know when to scroll.
+    # A MutationObserver reacts to every content change instead, regardless
+    # of how many times the Markdown gets updated.
+    return f"""
+    (() => {{
+        const attach = () => {{
+            const transcript = document.querySelector(".{DISCUSSION_TRANSCRIPT_CLASS}");
+            const scrollContainer = document.querySelector(".gradio-container");
+            if (!transcript || !scrollContainer) {{
+                setTimeout(attach, 200);
+                return;
+            }}
+            const scrollToBottom = () => {{
+                scrollContainer.scrollTop = scrollContainer.scrollHeight;
+            }};
+            new MutationObserver(scrollToBottom).observe(transcript, {{
+                childList: true,
+                subtree: true,
+                characterData: true,
+            }});
+        }};
+        attach();
+    }})();
+    """
+
+
 def _speaker_color_index(name: str, state: GameState) -> int:
     roster_names = [villager.name for villager in state.villagers]
     if name not in roster_names:
@@ -332,7 +360,7 @@ def build_app() -> gr.Blocks:
 
 
 def main():
-    build_app().launch(css=_speaker_color_css() + _layout_css())
+    build_app().launch(css=_speaker_color_css() + _layout_css(), js=_autoscroll_js())
 
 
 if __name__ == "__main__":
