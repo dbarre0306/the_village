@@ -32,7 +32,7 @@ TYPING_INDICATOR_CLASS = "typing-indicator"
 # How long a speaker's "typing" placeholder stays up before their message is
 # revealed. Paces the transcript to human reading speed instead of dumping
 # each AI turn in all at once.
-SPEAKER_THINKING_DELAY_SECONDS = 2.0
+SPEAKER_THINKING_DELAY_SECONDS = 3.0
 
 
 def _speaker_color_css() -> str:
