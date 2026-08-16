@@ -310,6 +310,18 @@ def send_discussion_turn(runner: DiscussionRunner, message: str, addressed_to: s
 
 
 def pass_discussion_turn(runner: DiscussionRunner):
+    # Hide the input row the instant the player passes, before driving any
+    # AI turns -- generating the next villager's turn can block on an LLM
+    # call, and the row shouldn't linger open while that happens.
+    yield (
+        runner,
+        gr.update(),
+        gr.update(),
+        gr.update(),
+        gr.update(visible=False),
+        gr.update(),
+        gr.update(),
+    )
     yield from _drive_discussion(runner, advance(runner, player_pass=True))
 
 

@@ -185,6 +185,42 @@ def test_pass_discussion_turn_marks_player_passed_and_shows_ended_status():
     assert status_update["visible"] is True
 
 
+def test_pass_discussion_turn_hides_input_row_before_asking_next_agent():
+    call_order = []
+
+    class RecordingAgent:
+        def kickoff(self, messages, response_format=None):
+            call_order.append("agent_called")
+            return SimpleNamespace(
+                pydantic=TurnOutput(has_something_to_say=True, message="hi there")
+            )
+
+    state = GameState(
+        player_name="Dana",
+        day_number=1,
+        villagers=[
+            Villager(name="Dana", player_type="user"),
+            Villager(name="A", player_type="villager"),
+        ],
+    )
+    runner = DiscussionRunner(
+        state=state,
+        agents={"A": RecordingAgent()},
+        budgets={"Dana": 3, "A": 3},
+        queue=["Dana", "A"],
+    )
+
+    events = pass_discussion_turn(runner)
+    first_event = next(events)
+    call_order.append("first_event_received")
+
+    _, _, _, _, input_visibility, _, _ = first_event
+    assert input_visibility["visible"] is False
+    # The row must hide before the next villager's (potentially slow) turn
+    # is generated, not only once that turn's message comes back.
+    assert call_order == ["first_event_received"]
+
+
 def test_format_discussion_transcript_with_pending_speaker_hides_its_message():
     state = GameState(
         player_name="Dana",
