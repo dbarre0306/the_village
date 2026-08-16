@@ -4,17 +4,17 @@ from the_village.state import GameState, Villager
 
 VILLAGER_NAME_POOL = [
     "Alice",
-    "Bram",
+    "Bruce",
     "Corin",
     "Della",
     "Edwin",
     "Fiora",
     "Garrick",
     "Hattie",
-    "Ilsa",
-    "Jorah",
+    "Lisa",
+    "Joshua",
     "Kestrel",
-    "Lior",
+    "Stephen",
 ]
 
 
