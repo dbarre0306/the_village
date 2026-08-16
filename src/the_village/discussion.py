@@ -106,7 +106,7 @@ def _last_speaker_today(runner: DiscussionRunner) -> str | None:
 
 def _avoid_immediate_repeat(
     order: list[str], last_speaker: str | None, rng: random.Random
-) -> None:
+) -> bool:
     """Reorder `order` in place so its front entry never repeats `last_speaker`.
 
     A bonus/direct reply lets someone speak out of turn while still sitting
@@ -114,13 +114,18 @@ def _avoid_immediate_repeat(
     after such a reply can immediately re-select that same person — this
     is called both when a round is built and every time the queue is about
     to hand out a turn, so a mid-round repeat gets deferred too.
+
+    Returns True if `order` has no one else to swap in (its only entry is
+    `last_speaker`), so the caller must decide what to do instead of handing
+    out a turn.
     """
-    if last_speaker is None or len(order) <= 1:
-        return
-    if order[0] != last_speaker:
-        return
+    if last_speaker is None or not order or order[0] != last_speaker:
+        return False
+    if len(order) == 1:
+        return True
     swap_index = rng.randrange(1, len(order))
     order[0], order[swap_index] = order[swap_index], order[0]
+    return False
 
 
 def _build_round(runner: DiscussionRunner) -> list[str]:
@@ -321,12 +326,21 @@ def _run_ai_turns(
 
     while True:
         if not runner.queue:
-            runner.queue = _build_round(runner)
-            if not runner.queue:
+            if len(_active_participants(runner)) <= 1:
                 yield AdvanceStatus.COMPLETE
                 return
+            runner.queue = _build_round(runner)
 
-        _avoid_immediate_repeat(runner.queue, _last_speaker_today(runner), runner.rng)
+        unresolved = _avoid_immediate_repeat(
+            runner.queue, _last_speaker_today(runner), runner.rng
+        )
+        if unresolved:
+            # The only entry left in this round's queue is the last speaker,
+            # but others are still active for a future round — defer instead
+            # of repeating them immediately.
+            runner.queue = []
+            continue
+
         next_name = runner.queue[0]
         if next_name == player:
             yield AdvanceStatus.WAITING_FOR_TURN

@@ -373,6 +373,48 @@ def test_advance_completes_when_no_participants_remain_active():
     assert events == [AdvanceStatus.COMPLETE]
 
 
+def test_advance_completes_when_only_one_participant_remains_active_instead_of_repeating():
+    runner = make_runner()
+    runner.passed.update({"Dana", "B", "C", "E", "F"})
+    runner.state.discussion.append(
+        DiscussionMessage(day_number=1, speaker="A", message="Only me left.")
+    )
+    runner.agents["A"] = ScriptedAgent(
+        [TurnOutput(has_something_to_say=True, message="Should not be asked again.")]
+    )
+    runner.queue = []
+
+    events = list(advance(runner))
+
+    assert events == [AdvanceStatus.COMPLETE]
+
+
+def test_advance_defers_sole_remaining_queue_entry_when_others_are_still_active():
+    """A bonus reply can leave someone as the only entry left in this round's
+    queue while they're also the last speaker. Even though nobody else can
+    join *this* round, other participants (A and C here) are still active for
+    a future round, so B must not be asked again immediately -- the round
+    should end and let a fresh round (which can include everyone) resolve it.
+    """
+    runner = make_runner()
+    runner.passed.update({"Dana", "E", "F"})
+    runner.state.discussion.append(
+        DiscussionMessage(day_number=1, speaker="B", message="B's bonus reply.")
+    )
+    runner.agents["B"] = ScriptedAgent(
+        [TurnOutput(has_something_to_say=True, message="B should not repeat.")]
+    )
+    runner.agents["A"] = ScriptedAgent([TurnOutput(has_something_to_say=False)])
+    runner.agents["C"] = ScriptedAgent([TurnOutput(has_something_to_say=False)])
+    runner.queue = ["B"]
+
+    events = list(advance(runner))
+
+    messages = [e for e in events if isinstance(e, DiscussionMessage)]
+    assert messages == []
+    assert events[-1] == AdvanceStatus.COMPLETE
+
+
 def test_advance_ai_addressing_another_ai_does_not_pause_for_player():
     runner = make_runner()
     runner.agents["A"] = ScriptedAgent(
