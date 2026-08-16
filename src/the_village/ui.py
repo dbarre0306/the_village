@@ -24,6 +24,7 @@ SPEAKER_COLORS = [
 ]
 
 DISCUSSION_TRANSCRIPT_CLASS = "discussion-transcript"
+DISCUSSION_INPUT_ROW_CLASS = "discussion-input-row"
 PINNED_BAR_CLASS = "pinned-bar"
 CHIP_LIST_CLASS = "chip-list"
 VILLAGER_CHIP_CLASS = "villager-chip"
@@ -146,6 +147,35 @@ def _autoscroll_js() -> str:
             }});
         }};
         attach();
+    }})();
+    """
+
+
+def _autofocus_js() -> str:
+    # Gradio doesn't keep the row in the DOM with display:none while
+    # hidden -- it's conditionally mounted, so a fresh <div> (and a fresh
+    # <textarea> inside it) is created each time it's the player's turn.
+    # Watching one node's attributes for a visibility flip never fires;
+    # instead watch the document for that node being inserted at all.
+    return f"""
+    (() => {{
+        const focusedRows = new WeakSet();
+        const tryFocus = () => {{
+            const row = document.querySelector(".{DISCUSSION_INPUT_ROW_CLASS}");
+            if (!row || focusedRows.has(row) || getComputedStyle(row).display === "none") {{
+                return;
+            }}
+            const textarea = row.querySelector("textarea");
+            if (textarea) {{
+                textarea.focus();
+                focusedRows.add(row);
+            }}
+        }};
+        new MutationObserver(tryFocus).observe(document.body, {{
+            childList: true,
+            subtree: true,
+        }});
+        tryFocus();
     }})();
     """
 
@@ -387,7 +417,9 @@ def build_app() -> gr.Blocks:
                 discussion_transcript = gr.Markdown(
                     elem_classes=[DISCUSSION_TRANSCRIPT_CLASS]
                 )
-                with gr.Row(visible=False) as discussion_input_row:
+                with gr.Row(
+                    visible=False, elem_classes=[DISCUSSION_INPUT_ROW_CLASS]
+                ) as discussion_input_row:
                     discussion_textbox = gr.Textbox(label="Say something", scale=3)
                     discussion_addressed_to = gr.Dropdown(
                         label="Address to (optional)", choices=[], scale=1
@@ -460,7 +492,10 @@ def build_app() -> gr.Blocks:
 
 
 def main():
-    build_app().launch(css=_speaker_color_css() + _layout_css(), js=_autoscroll_js())
+    build_app().launch(
+        css=_speaker_color_css() + _layout_css(),
+        js=_autoscroll_js() + _autofocus_js(),
+    )
 
 
 if __name__ == "__main__":
