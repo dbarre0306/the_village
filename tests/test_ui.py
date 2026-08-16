@@ -1,7 +1,10 @@
+from types import SimpleNamespace
+
 import gradio as gr
 import pytest
 
-from the_village.discussion import DiscussionRunner
+from the_village import ui
+from the_village.discussion import DiscussionRunner, TurnOutput
 from the_village.state import DiscussionMessage, Death, GameState, Villager
 from the_village.ui import (
     _living_ai_names,
@@ -14,6 +17,14 @@ from the_village.ui import (
     send_discussion_turn,
     start_game,
 )
+
+
+class ScriptedAgent:
+    def __init__(self, outputs):
+        self._outputs = list(outputs)
+
+    def kickoff(self, messages, response_format=None):
+        return SimpleNamespace(pydantic=self._outputs.pop(0))
 
 
 def make_state_with_one_death() -> GameState:
@@ -167,6 +178,93 @@ def test_pass_discussion_turn_marks_player_passed_and_shows_ended_status():
     assert "Dana" in runner.passed
     assert input_visibility["visible"] is False
     assert status_update["visible"] is True
+
+
+def test_format_discussion_transcript_with_pending_speaker_hides_its_message():
+    state = GameState(
+        player_name="Dana",
+        villagers=[
+            Villager(name="Dana", player_type="user"),
+            Villager(name="A", player_type="villager"),
+        ],
+        discussion=[DiscussionMessage(day_number=1, speaker="A", message="hello")],
+    )
+    transcript = format_discussion_transcript(state, pending_speaker="A")
+    assert "hello" not in transcript
+    assert "typing-indicator" in transcript
+    assert "A:</span>" in transcript
+
+
+def test_format_discussion_transcript_with_pending_speaker_keeps_prior_messages():
+    state = GameState(
+        player_name="Dana",
+        villagers=[
+            Villager(name="Dana", player_type="user"),
+            Villager(name="A", player_type="villager"),
+        ],
+        discussion=[
+            DiscussionMessage(day_number=1, speaker="A", message="first"),
+            DiscussionMessage(day_number=1, speaker="Dana", message="second"),
+        ],
+    )
+    transcript = format_discussion_transcript(state, pending_speaker="Dana")
+    assert "first" in transcript
+    assert "second" not in transcript
+    assert "typing-indicator" in transcript
+
+
+def test_ai_turn_shows_pending_spinner_before_revealing_message(monkeypatch):
+    sleep_calls = []
+    monkeypatch.setattr(ui.time, "sleep", lambda seconds: sleep_calls.append(seconds))
+
+    state = GameState(
+        player_name="Dana",
+        day_number=1,
+        villagers=[
+            Villager(name="Dana", player_type="user"),
+            Villager(name="A", player_type="villager"),
+        ],
+    )
+    runner = DiscussionRunner(
+        state=state,
+        agents={
+            "A": ScriptedAgent(
+                [TurnOutput(has_something_to_say=True, message="hi there")]
+            )
+        },
+        budgets={"Dana": 3, "A": 3},
+        queue=["A"],
+    )
+
+    events = list(pass_discussion_turn(runner))
+    transcripts = [event[1] for event in events]
+
+    pending_index = next(i for i, t in enumerate(transcripts) if "typing-indicator" in t)
+    assert "hi there" not in transcripts[pending_index]
+    assert "A:</span>" in transcripts[pending_index]
+    assert "hi there" in transcripts[pending_index + 1]
+    assert sleep_calls == [ui.SPEAKER_THINKING_DELAY_SECONDS]
+
+
+def test_player_message_shows_immediately_without_spinner_or_sleep(monkeypatch):
+    sleep_calls = []
+    monkeypatch.setattr(ui.time, "sleep", lambda seconds: sleep_calls.append(seconds))
+
+    state = GameState(
+        player_name="Dana",
+        day_number=1,
+        villagers=[Villager(name="Dana", player_type="user")],
+    )
+    runner = DiscussionRunner(
+        state=state, agents={}, budgets={"Dana": 3}, queue=["Dana"]
+    )
+
+    events = list(send_discussion_turn(runner, "I'm scared.", ""))
+    transcripts = [event[1] for event in events]
+
+    assert "typing-indicator" not in transcripts[0]
+    assert "I'm scared." in transcripts[0]
+    assert sleep_calls == []
 
 
 def test_send_discussion_turn_wraps_unexpected_errors_as_gr_error():

@@ -1,4 +1,5 @@
 import logging
+import time
 
 import gradio as gr
 
@@ -26,6 +27,12 @@ DISCUSSION_TRANSCRIPT_CLASS = "discussion-transcript"
 PINNED_BAR_CLASS = "pinned-bar"
 CHIP_LIST_CLASS = "chip-list"
 VILLAGER_CHIP_CLASS = "villager-chip"
+TYPING_INDICATOR_CLASS = "typing-indicator"
+
+# How long a speaker's "typing" placeholder stays up before their message is
+# revealed. Paces the transcript to human reading speed instead of dumping
+# each AI turn in all at once.
+SPEAKER_THINKING_DELAY_SECONDS = 2.0
 
 
 def _speaker_color_css() -> str:
@@ -85,6 +92,25 @@ def _layout_css() -> str:
     .{VILLAGER_CHIP_CLASS}.dead {{
         text-decoration: line-through;
         opacity: 0.6;
+    }}
+    .{TYPING_INDICATOR_CLASS} {{
+        display: inline-flex;
+        gap: 4px;
+        vertical-align: middle;
+    }}
+    .{TYPING_INDICATOR_CLASS} span {{
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--body-text-color-subdued);
+        opacity: 0.4;
+        animation: typing-bounce 1s infinite ease-in-out;
+    }}
+    .{TYPING_INDICATOR_CLASS} span:nth-child(2) {{ animation-delay: 0.15s; }}
+    .{TYPING_INDICATOR_CLASS} span:nth-child(3) {{ animation-delay: 0.3s; }}
+    @keyframes typing-bounce {{
+        0%, 80%, 100% {{ opacity: 0.4; transform: scale(0.8); }}
+        40% {{ opacity: 1; transform: scale(1); }}
     }}
     """
 
@@ -160,15 +186,31 @@ def format_alive_panel(state: GameState) -> str:
     return f'<div class="{CHIP_LIST_CLASS}">{chips}</div>'
 
 
-def format_discussion_transcript(state: GameState) -> str:
-    if not state.discussion:
-        return ""
-    lines = [
+def _speaker_name_span(name: str, state: GameState) -> str:
+    return (
         f'<span class="speaker-name" '
-        f'style="color: var(--speaker-{_speaker_color_index(m.speaker, state)})">'
-        f"{m.speaker}:</span> {m.message}"
-        for m in state.discussion
+        f'style="color: var(--speaker-{_speaker_color_index(name, state)})">'
+        f"{name}:</span>"
+    )
+
+
+def format_discussion_transcript(
+    state: GameState, pending_speaker: str | None = None
+) -> str:
+    # `pending_speaker` hides the last message (already appended to
+    # state.discussion by the time this is called) and shows a "typing"
+    # placeholder for that speaker instead, so the reveal can be paced.
+    messages = state.discussion[:-1] if pending_speaker is not None else state.discussion
+    lines = [
+        f"{_speaker_name_span(m.speaker, state)} {m.message}" for m in messages
     ]
+    if pending_speaker is not None:
+        lines.append(
+            f'{_speaker_name_span(pending_speaker, state)} '
+            f'<span class="{TYPING_INDICATOR_CLASS}"><span></span><span></span><span></span></span>'
+        )
+    if not lines:
+        return ""
     return "\n\n".join(lines)
 
 
@@ -187,8 +229,8 @@ def _drive_discussion(runner, events, dropdown_choices=None, begin_button_update
     )
     try:
         for event in events:
-            transcript = format_discussion_transcript(runner.state)
             if isinstance(event, AdvanceStatus):
+                transcript = format_discussion_transcript(runner.state)
                 complete = event == AdvanceStatus.COMPLETE
                 # Reset the textbox and "address to" dropdown once per driven
                 # sequence (on the status yield), not on every message yield.
@@ -212,6 +254,24 @@ def _drive_discussion(runner, events, dropdown_choices=None, begin_button_update
                 pending_choices = None
                 pending_begin_button_update = gr.update()
             else:
+                # Pace AI turns to reading speed with a "typing" placeholder;
+                # the player's own message (already visible to them as they
+                # typed it) shows immediately with no delay.
+                if event.speaker != runner.state.player_name:
+                    pending_transcript = format_discussion_transcript(
+                        runner.state, pending_speaker=event.speaker
+                    )
+                    yield (
+                        runner,
+                        pending_transcript,
+                        gr.update(),
+                        gr.update(),
+                        gr.update(visible=False),
+                        gr.update(),
+                        pending_begin_button_update,
+                    )
+                    time.sleep(SPEAKER_THINKING_DELAY_SECONDS)
+                transcript = format_discussion_transcript(runner.state)
                 yield (
                     runner,
                     transcript,
