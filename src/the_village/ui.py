@@ -112,6 +112,13 @@ def _layout_css() -> str:
         0%, 80%, 100% {{ opacity: 0.4; transform: scale(0.8); }}
         40% {{ opacity: 1; transform: scale(1); }}
     }}
+    /* Discussion turns already show their own "typing" placeholder while
+       streaming, so Gradio's generic pulsing border on components mid-update
+       is redundant noise -- suppress it. */
+    .generating {{
+        border: none !important;
+        animation: none !important;
+    }}
     """
 
 
@@ -222,11 +229,8 @@ def _living_ai_names(state: GameState) -> list[str]:
     ]
 
 
-def _drive_discussion(runner, events, dropdown_choices=None, begin_button_update=None):
+def _drive_discussion(runner, events, dropdown_choices=None):
     pending_choices = dropdown_choices
-    pending_begin_button_update = (
-        begin_button_update if begin_button_update is not None else gr.update()
-    )
     try:
         for event in events:
             if isinstance(event, AdvanceStatus):
@@ -249,10 +253,9 @@ def _drive_discussion(runner, events, dropdown_choices=None, begin_button_update
                         visible=complete,
                         value="The discussion has ended." if complete else "",
                     ),
-                    pending_begin_button_update,
+                    gr.update(),
                 )
                 pending_choices = None
-                pending_begin_button_update = gr.update()
             else:
                 # Pace AI turns to reading speed with a "typing" placeholder;
                 # the player's own message (already visible to them as they
@@ -268,7 +271,7 @@ def _drive_discussion(runner, events, dropdown_choices=None, begin_button_update
                         gr.update(),
                         gr.update(visible=False),
                         gr.update(),
-                        pending_begin_button_update,
+                        gr.update(),
                     )
                     time.sleep(SPEAKER_THINKING_DELAY_SECONDS)
                 transcript = format_discussion_transcript(runner.state)
@@ -279,7 +282,7 @@ def _drive_discussion(runner, events, dropdown_choices=None, begin_button_update
                     gr.update(),
                     gr.update(visible=False),
                     gr.update(),
-                    pending_begin_button_update,
+                    gr.update(),
                 )
     except gr.Error:
         raise
@@ -290,11 +293,22 @@ def _drive_discussion(runner, events, dropdown_choices=None, begin_button_update
 
 def begin_discussion(state: GameState):
     runner = start_discussion(state)
+    # Hide the button the instant it's clicked, before driving any AI turns
+    # -- generating the first villager's turn can block on an LLM call, and
+    # the button shouldn't linger visible while that happens.
+    yield (
+        runner,
+        gr.update(),
+        gr.update(),
+        gr.update(),
+        gr.update(),
+        gr.update(),
+        gr.update(visible=False),
+    )
     yield from _drive_discussion(
         runner,
         advance(runner),
         dropdown_choices=_living_ai_names(state),
-        begin_button_update=gr.update(visible=False),
     )
 
 
