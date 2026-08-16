@@ -2,6 +2,7 @@ import random
 from types import SimpleNamespace
 
 from the_village.discussion import (
+    INITIAL_BUDGET,
     AdvanceStatus,
     DiscussionRunner,
     TurnOutput,
@@ -73,9 +74,14 @@ def make_runner(day_number: int = 1) -> DiscussionRunner:
     ]
     state = GameState(player_name="Dana", day_number=day_number, villagers=villagers)
     runner = start_discussion(state, random.Random(1))
-    # Provide default mocked agents that pass by default (can be overridden in tests)
+    # Provide default mocked agents that pass by default (can be overridden in
+    # tests). A decline only costs one budget point now, so a participant may
+    # be asked again in a later round -- queue up enough declines to cover
+    # their whole budget.
     for name in runner.agents:
-        runner.agents[name] = ScriptedAgent([TurnOutput(has_something_to_say=False)])
+        runner.agents[name] = ScriptedAgent(
+            [TurnOutput(has_something_to_say=False)] * INITIAL_BUDGET
+        )
     return runner
 
 
@@ -411,6 +417,8 @@ def test_advance_defers_sole_remaining_queue_entry_when_others_are_still_active(
     """
     runner = make_runner()
     runner.passed.update({"Dana", "E", "F"})
+    runner.budgets["A"] = 1
+    runner.budgets["C"] = 1
     runner.state.discussion.append(
         DiscussionMessage(day_number=1, speaker="B", message="B's bonus reply.")
     )
@@ -568,13 +576,29 @@ def test_advance_player_bonus_reply_addressing_player_pauses_for_answer():
     assert runner.awaiting_reply_from == "Dana"
 
 
-def test_advance_ai_pass_marks_participant_permanently_passed():
+def test_advance_ai_pass_costs_budget_but_gives_another_chance():
     runner = make_runner()
+    runner.agents["A"] = ScriptedAgent([TurnOutput(has_something_to_say=False)])
+    runner.queue = ["A", "Dana"]
+    starting_budget = runner.budgets["A"]
+
+    events = list(advance(runner))
+
+    assert [e for e in events if isinstance(e, DiscussionMessage)] == []
+    assert runner.budgets["A"] == starting_budget - 1
+    assert "A" not in runner.passed
+    assert events[-1] == AdvanceStatus.WAITING_FOR_TURN
+
+
+def test_advance_ai_pass_is_permanent_once_budget_is_exhausted():
+    runner = make_runner()
+    runner.budgets["A"] = 1
     runner.agents["A"] = ScriptedAgent([TurnOutput(has_something_to_say=False)])
     runner.queue = ["A", "Dana"]
 
     events = list(advance(runner))
 
     assert [e for e in events if isinstance(e, DiscussionMessage)] == []
+    assert runner.budgets["A"] == 0
     assert "A" in runner.passed
     assert events[-1] == AdvanceStatus.WAITING_FOR_TURN

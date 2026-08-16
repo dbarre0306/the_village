@@ -150,8 +150,9 @@ def _resolve_target(
 class TurnOutput(BaseModel):
     has_something_to_say: bool = Field(
         description=(
-            "Whether you have something to say right now. False means you are "
-            "permanently done for the day — you will not be asked again."
+            "Whether you have something to say right now. False means you'll "
+            "sit this turn out — you may still be asked again later, but only "
+            "a limited number of times, so don't decline lightly."
         )
     )
     message: str | None = Field(
@@ -349,11 +350,12 @@ def _run_ai_turns(
 
         runner.queue.pop(0)
         output = _ask_agent(runner.agents[next_name], state, addressed_by=None)
+        runner.budgets[next_name] -= 1
         if not output.has_something_to_say or not output.message:
-            runner.passed.add(next_name)
+            if runner.budgets[next_name] <= 0:
+                runner.passed.add(next_name)
             continue
 
-        runner.budgets[next_name] -= 1
         addressed_to = _resolve_target(output.addressed_to, runner, exclude=next_name)
         msg = DiscussionMessage(
             day_number=state.day_number,
