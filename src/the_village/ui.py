@@ -440,6 +440,14 @@ def build_app() -> gr.Blocks:
             concurrency_id="discussion_turn",
         )
 
+        discussion_textbox.submit(
+            fn=send_discussion_turn,
+            inputs=[discussion_runner_state, discussion_textbox, discussion_addressed_to],
+            outputs=discussion_outputs,
+            concurrency_limit=1,
+            concurrency_id="discussion_turn",
+        )
+
         pass_button.click(
             fn=pass_discussion_turn,
             inputs=[discussion_runner_state],
