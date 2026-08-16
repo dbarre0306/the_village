@@ -590,6 +590,75 @@ def test_advance_ai_pass_costs_budget_but_gives_another_chance():
     assert events[-1] == AdvanceStatus.WAITING_FOR_TURN
 
 
+def test_advance_bonus_reply_addressing_a_third_villager_also_gets_a_bonus_reply():
+    """A's real turn addresses B; B's bonus reply redirects to C instead of
+    answering. C was just asked a direct question by name and should get her
+    own bonus reply -- the discussion shouldn't fall through to the next
+    queued turn (e.g. the player) while C's question sits unanswered.
+    """
+    runner = make_runner()
+    runner.agents["A"] = ScriptedAgent(
+        [
+            TurnOutput(
+                has_something_to_say=True,
+                message="B, where were you?",
+                addressed_to="B",
+            )
+        ]
+    )
+    runner.agents["B"] = ScriptedAgent(
+        [
+            TurnOutput(
+                has_something_to_say=True,
+                message="Ask C, not me.",
+                addressed_to="C",
+            )
+        ]
+    )
+    runner.agents["C"] = ScriptedAgent(
+        [TurnOutput(has_something_to_say=True, message="Fine, I'll answer.")]
+    )
+    runner.queue = ["A", "Dana"]
+
+    events = list(advance(runner))
+
+    speakers = [e.speaker for e in events if isinstance(e, DiscussionMessage)]
+    assert speakers == ["A", "B", "C"]
+
+
+def test_advance_bonus_reply_chain_stops_on_repeat_to_avoid_ping_pong():
+    """If the chain loops back to someone who already spoke in it (B replies
+    to A, who originally asked), stop chaining instead of bonus-replying
+    forever.
+    """
+    runner = make_runner()
+    runner.agents["A"] = ScriptedAgent(
+        [
+            TurnOutput(
+                has_something_to_say=True,
+                message="B, where were you?",
+                addressed_to="B",
+            ),
+            TurnOutput(has_something_to_say=False),
+        ]
+    )
+    runner.agents["B"] = ScriptedAgent(
+        [
+            TurnOutput(
+                has_something_to_say=True,
+                message="Why don't you tell us, A?",
+                addressed_to="A",
+            )
+        ]
+    )
+    runner.queue = ["A", "Dana"]
+
+    events = list(advance(runner))
+
+    speakers = [e.speaker for e in events if isinstance(e, DiscussionMessage)]
+    assert speakers == ["A", "B"]
+
+
 def test_advance_ai_pass_is_permanent_once_budget_is_exhausted():
     runner = make_runner()
     runner.budgets["A"] = 1

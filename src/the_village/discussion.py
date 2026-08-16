@@ -247,9 +247,17 @@ def _generate_bonus_reply(
 
 
 def _run_bonus_reply(
-    runner: DiscussionRunner, msg: DiscussionMessage
+    runner: DiscussionRunner,
+    msg: DiscussionMessage,
+    chain: frozenset[str] = frozenset(),
 ) -> Iterator[DiscussionMessage | AdvanceStatus]:
     """Yield a bonus reply to `msg`, pausing for player input if it addresses them.
+
+    If that reply itself addresses someone new, they get their own bonus
+    reply in turn — a direct question shouldn't go unanswered just because it
+    arrived via someone else's bonus reply rather than their queued turn.
+    `chain` tracks everyone who has already spoken in this back-and-forth so
+    it stops instead of ping-ponging forever between the same participants.
 
     Returns True (via the generator's return value) if the discussion paused
     waiting on the player, so callers know to stop advancing.
@@ -262,6 +270,9 @@ def _run_bonus_reply(
         runner.awaiting_reply_from = runner.state.player_name
         yield AdvanceStatus.WAITING_FOR_ANSWER
         return True
+    chain = chain | {msg.speaker, msg.addressed_to}
+    if bonus.addressed_to is not None and bonus.addressed_to not in chain:
+        return (yield from _run_bonus_reply(runner, bonus, chain))
     return False
 
 
