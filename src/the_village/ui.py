@@ -198,12 +198,25 @@ def _speaker_color_index(name: str, state: GameState) -> int:
     return roster_names.index(name) % len(SPEAKER_COLORS)
 
 
+DEATH_MESSAGE_TEMPLATES = [
+    "{name} was found dead, torn apart by a werewolf attack.",
+    "{name} didn't survive the night — a werewolf got to them first.",
+    "The pack struck again: {name} was found mauled to death.",
+    "{name} was found dead, ravaged by wolf jaws in the dark of night.",
+    "A werewolf attack claimed {name} overnight; their body was found at dawn.",
+    "{name} never made it to morning, savaged by a werewolf under cover of darkness.",
+]
+
+
 def format_event_log(state: GameState) -> str:
     if not state.deaths:
         return "Nothing has happened yet."
     lines = [
-        f"{WEEKDAYS[(death.day_number - 1) % 7]} morning: {death.name} was found dead."
-        for death in state.deaths
+        f"{WEEKDAYS[(death.day_number - 1) % 7]} morning: "
+        + DEATH_MESSAGE_TEMPLATES[index % len(DEATH_MESSAGE_TEMPLATES)].format(
+            name=death.name
+        )
+        for index, death in enumerate(state.deaths)
     ]
     return "\n\n".join(lines)
 
