@@ -29,6 +29,7 @@ PINNED_BAR_CLASS = "pinned-bar"
 CHIP_LIST_CLASS = "chip-list"
 VILLAGER_CHIP_CLASS = "villager-chip"
 TYPING_INDICATOR_CLASS = "typing-indicator"
+BEGIN_DISCUSSION_BUTTON_CLASS = "begin-discussion-button"
 
 # How long a speaker's "typing" placeholder stays up before their message is
 # revealed. Paces the transcript to human reading speed instead of dumping
@@ -119,6 +120,15 @@ def _layout_css() -> str:
     .generating {{
         border: none !important;
         animation: none !important;
+    }}
+    .{BEGIN_DISCUSSION_BUTTON_CLASS} {{
+        background: #2e7d32;
+        border-color: #2e7d32;
+        color: #fff;
+    }}
+    .{BEGIN_DISCUSSION_BUTTON_CLASS}:hover {{
+        background: #276729;
+        border-color: #276729;
     }}
     """
 
@@ -415,7 +425,9 @@ def build_app() -> gr.Blocks:
             with gr.Column():
                 gr.Markdown("### Events")
                 event_log = gr.Markdown()
-                begin_discussion_button = gr.Button("Begin Discussion")
+                begin_discussion_button = gr.Button(
+                    "Begin Discussion", elem_classes=[BEGIN_DISCUSSION_BUTTON_CLASS]
+                )
                 discussion_transcript = gr.Markdown(
                     elem_classes=[DISCUSSION_TRANSCRIPT_CLASS]
                 )
