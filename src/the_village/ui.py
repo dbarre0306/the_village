@@ -275,33 +275,16 @@ def format_discussion_transcript(
     return "\n\n".join(lines)
 
 
-def _living_ai_names(state: GameState) -> list[str]:
-    return [
-        villager.name
-        for villager in state.villagers
-        if villager.is_alive and villager.player_type in ("villager", "werewolf")
-    ]
-
-
-def _drive_discussion(runner, events, dropdown_choices=None):
-    pending_choices = dropdown_choices
+def _drive_discussion(runner, events):
     try:
         for event in events:
             if isinstance(event, AdvanceStatus):
                 transcript = format_discussion_transcript(runner.state)
                 complete = event == AdvanceStatus.COMPLETE
-                # Reset the textbox and "address to" dropdown once per driven
-                # sequence (on the status yield), not on every message yield.
-                dropdown_reset = (
-                    gr.update(choices=pending_choices, value=None)
-                    if pending_choices is not None
-                    else gr.update(value=None)
-                )
                 yield (
                     runner,
                     transcript,
                     gr.update(value=""),
-                    dropdown_reset,
                     gr.update(visible=not complete),
                     gr.update(
                         visible=complete,
@@ -310,7 +293,6 @@ def _drive_discussion(runner, events, dropdown_choices=None):
                     gr.update(),
                     gr.update(),
                 )
-                pending_choices = None
             else:
                 # Pace AI turns to reading speed with a "typing" placeholder;
                 # the player's own message (already visible to them as they
@@ -323,7 +305,6 @@ def _drive_discussion(runner, events, dropdown_choices=None):
                         runner,
                         pending_transcript,
                         gr.update(),
-                        gr.update(),
                         gr.update(visible=False),
                         gr.update(),
                         gr.update(),
@@ -334,7 +315,6 @@ def _drive_discussion(runner, events, dropdown_choices=None):
                 yield (
                     runner,
                     transcript,
-                    gr.update(),
                     gr.update(),
                     gr.update(visible=False),
                     gr.update(),
@@ -360,18 +340,13 @@ def begin_discussion(state: GameState):
         gr.update(),
         gr.update(),
         gr.update(),
-        gr.update(),
         gr.update(visible=False),
         gr.update(value=f"### {weekday}'s Discussion", visible=True),
     )
-    yield from _drive_discussion(
-        runner,
-        advance(runner),
-        dropdown_choices=_living_ai_names(state),
-    )
+    yield from _drive_discussion(runner, advance(runner))
 
 
-def send_discussion_turn(runner: DiscussionRunner, message: str, addressed_to: str):
+def send_discussion_turn(runner: DiscussionRunner, message: str):
     if not message.strip():
         # Pressing Enter on an empty textbox is a no-op, not an error.
         yield (
@@ -382,14 +357,22 @@ def send_discussion_turn(runner: DiscussionRunner, message: str, addressed_to: s
             gr.skip(),
             gr.skip(),
             gr.skip(),
-            gr.skip(),
         )
         return
-    events = advance(
+    # Hide the input row the instant the player sends a message, before
+    # working out who (if anyone) it's addressed to -- that inference can
+    # block on an LLM call, and the row shouldn't linger open while it
+    # resolves.
+    yield (
         runner,
-        player_input=message.strip(),
-        player_addressed_to=addressed_to or None,
+        gr.update(),
+        gr.update(),
+        gr.update(visible=False),
+        gr.update(),
+        gr.update(),
+        gr.update(),
     )
+    events = advance(runner, player_input=message.strip())
     yield from _drive_discussion(runner, events)
 
 
@@ -399,7 +382,6 @@ def pass_discussion_turn(runner: DiscussionRunner):
     # call, and the row shouldn't linger open while that happens.
     yield (
         runner,
-        gr.update(),
         gr.update(),
         gr.update(),
         gr.update(visible=False),
@@ -467,9 +449,6 @@ def build_app() -> gr.Blocks:
                     visible=False, elem_classes=[DISCUSSION_INPUT_ROW_CLASS]
                 ) as discussion_input_row:
                     discussion_textbox = gr.Textbox(label="Say something", scale=3)
-                    discussion_addressed_to = gr.Dropdown(
-                        label="Address to (optional)", choices=[], scale=1
-                    )
                     with gr.Column(scale=1):
                         send_button = gr.Button("Post Message")
                         pass_button = gr.Button("I have nothing to say")
@@ -493,7 +472,6 @@ def build_app() -> gr.Blocks:
             discussion_runner_state,
             discussion_transcript,
             discussion_textbox,
-            discussion_addressed_to,
             discussion_input_row,
             discussion_status,
             begin_discussion_button,
@@ -513,7 +491,7 @@ def build_app() -> gr.Blocks:
 
         send_button.click(
             fn=send_discussion_turn,
-            inputs=[discussion_runner_state, discussion_textbox, discussion_addressed_to],
+            inputs=[discussion_runner_state, discussion_textbox],
             outputs=discussion_outputs,
             concurrency_limit=1,
             concurrency_id="discussion_turn",
@@ -521,7 +499,7 @@ def build_app() -> gr.Blocks:
 
         discussion_textbox.submit(
             fn=send_discussion_turn,
-            inputs=[discussion_runner_state, discussion_textbox, discussion_addressed_to],
+            inputs=[discussion_runner_state, discussion_textbox],
             outputs=discussion_outputs,
             concurrency_limit=1,
             concurrency_id="discussion_turn",

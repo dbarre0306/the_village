@@ -2,7 +2,9 @@ import random
 from types import SimpleNamespace
 
 from the_village.discussion import (
+    DECLINED_TO_RESPOND,
     INITIAL_BUDGET,
+    AddressResolution,
     AdvanceStatus,
     DiscussionRunner,
     TurnOutput,
@@ -12,6 +14,7 @@ from the_village.discussion import (
     _format_deaths,
     _format_history,
     _generate_bonus_reply,
+    _infer_player_target,
     _last_speaker_today,
     _resolve_target,
     advance,
@@ -82,6 +85,7 @@ def make_runner(day_number: int = 1) -> DiscussionRunner:
         runner.agents[name] = ScriptedAgent(
             [TurnOutput(has_something_to_say=False)] * INITIAL_BUDGET
         )
+    runner.address_resolver = StaticResolver()
     return runner
 
 
@@ -177,12 +181,49 @@ def test_resolve_target_returns_valid_target():
     assert _resolve_target("B", runner, exclude="A") == "B"
 
 
+def test_infer_player_target_returns_resolver_output():
+    runner = make_runner()
+    runner.address_resolver = StaticResolver("B")
+    assert _infer_player_target(runner, "B, where were you?") == "B"
+
+
+def test_infer_player_target_returns_none_when_resolver_finds_no_target():
+    runner = make_runner()
+    runner.address_resolver = StaticResolver(None)
+    assert _infer_player_target(runner, "I'm scared.") is None
+
+
+def test_infer_player_target_skips_resolver_call_when_no_other_participants():
+    state = GameState(player_name="Dana", villagers=[Villager(name="Dana", player_type="user")])
+    runner = DiscussionRunner(
+        state=state, agents={}, budgets={"Dana": 2}, address_resolver=BoomResolver()
+    )
+    assert _infer_player_target(runner, "Anyone there?") is None
+
+
 class ScriptedAgent:
     def __init__(self, outputs):
         self._outputs = list(outputs)
 
     def kickoff(self, messages, response_format=None):
         return SimpleNamespace(pydantic=self._outputs.pop(0))
+
+
+class StaticResolver:
+    """Always resolves the player's addressed-to target to a fixed name."""
+
+    def __init__(self, addressed_to=None):
+        self._response = AddressResolution(addressed_to=addressed_to)
+
+    def kickoff(self, messages, response_format=None):
+        return SimpleNamespace(pydantic=self._response)
+
+
+class BoomResolver:
+    """Fails the test if the resolver is ever called."""
+
+    def kickoff(self, messages, response_format=None):
+        raise AssertionError("address_resolver should not have been called")
 
 
 def test_format_deaths_with_no_deaths():
@@ -246,7 +287,7 @@ def test_generate_bonus_reply_records_message_and_costs_no_budget():
     assert runner.state.discussion[-1] == reply
 
 
-def test_generate_bonus_reply_returns_none_when_agent_declines():
+def test_generate_bonus_reply_records_decline_placeholder_when_agent_declines():
     runner = make_runner()
     runner.agents["B"] = ScriptedAgent([TurnOutput(has_something_to_say=False)])
     asking = DiscussionMessage(
@@ -255,8 +296,10 @@ def test_generate_bonus_reply_returns_none_when_agent_declines():
 
     reply = _generate_bonus_reply(runner, asking)
 
-    assert reply is None
-    assert runner.state.discussion == []
+    assert reply.speaker == "B"
+    assert reply.message == DECLINED_TO_RESPOND
+    assert reply.addressed_to is None
+    assert runner.state.discussion == [reply]
 
 
 def test_generate_bonus_reply_does_not_chain_further_bonus_replies():
@@ -372,6 +415,48 @@ def test_advance_player_answer_to_question_costs_no_budget_and_resumes_queue():
     assert messages[1].speaker == "B"
 
 
+def test_advance_player_answer_addressing_someone_new_gets_bonus_reply():
+    """The player's message here is itself an answer to a question, but if
+    it addresses someone new, that person should get a bonus reply too --
+    same as a normal queued turn would trigger.
+    """
+    runner = make_runner()
+    runner.address_resolver = StaticResolver("B")
+    runner.agents["B"] = ScriptedAgent(
+        [TurnOutput(has_something_to_say=True, message="I was home.")]
+    )
+    runner.awaiting_reply_from = "Dana"
+    runner.queue = []
+
+    events = list(advance(runner, player_input="B, where were you?"))
+
+    messages = [e for e in events if isinstance(e, DiscussionMessage)]
+    assert [m.speaker for m in messages] == ["Dana", "B"]
+
+
+def test_advance_player_answer_addressing_someone_who_turns_it_back_pauses_for_answer():
+    runner = make_runner()
+    runner.address_resolver = StaticResolver("A")
+    runner.agents["A"] = ScriptedAgent(
+        [
+            TurnOutput(
+                has_something_to_say=True,
+                message="You're the only one who'd know.",
+                addressed_to="Dana",
+            )
+        ]
+    )
+    runner.awaiting_reply_from = "Dana"
+    runner.queue = []
+
+    events = list(advance(runner, player_input="A, where were you?"))
+
+    messages = [e for e in events if isinstance(e, DiscussionMessage)]
+    assert [m.speaker for m in messages] == ["Dana", "A"]
+    assert events[-1] == AdvanceStatus.WAITING_FOR_ANSWER
+    assert runner.awaiting_reply_from == "Dana"
+
+
 def test_advance_player_pass_when_addressed_is_not_permanent():
     runner = make_runner()
     runner.awaiting_reply_from = "Dana"
@@ -380,6 +465,21 @@ def test_advance_player_pass_when_addressed_is_not_permanent():
     list(advance(runner, player_pass=True))
 
     assert "Dana" not in runner.passed
+
+
+def test_advance_records_decline_placeholder_when_player_passes_on_a_question():
+    runner = make_runner()
+    runner.awaiting_reply_from = "Dana"
+    runner.budgets = {"Dana": 1, "A": 0, "B": 0, "C": 0, "E": 0, "F": 0}
+    runner.queue = []
+
+    events = list(advance(runner, player_pass=True))
+
+    messages = [e for e in events if isinstance(e, DiscussionMessage)]
+    assert [m.speaker for m in messages] == ["Dana"]
+    assert messages[0].message == DECLINED_TO_RESPOND
+    assert messages[0].addressed_to is None
+    assert runner.awaiting_reply_from is None
 
 
 def test_advance_completes_when_no_participants_remain_active():
@@ -567,13 +667,30 @@ def test_advance_player_bonus_reply_addressing_player_pauses_for_answer():
         ]
     )
     runner.queue = ["Dana"]
+    runner.address_resolver = StaticResolver("A")
 
-    events = list(advance(runner, player_input="A, where were you?", player_addressed_to="A"))
+    events = list(advance(runner, player_input="A, where were you?"))
 
     messages = [e for e in events if isinstance(e, DiscussionMessage)]
     assert [m.speaker for m in messages] == ["Dana", "A"]
     assert events[-1] == AdvanceStatus.WAITING_FOR_ANSWER
     assert runner.awaiting_reply_from == "Dana"
+
+
+def test_advance_records_decline_placeholder_and_completes_when_addressed_ai_declines():
+    runner = make_runner()
+    runner.address_resolver = StaticResolver("A")
+    runner.agents["A"] = ScriptedAgent([TurnOutput(has_something_to_say=False)])
+    runner.budgets = {"Dana": 1, "A": 1, "B": 0, "C": 0, "E": 0, "F": 0}
+    runner.queue = ["Dana"]
+
+    events = list(advance(runner, player_input="A, where were you?"))
+
+    messages = [e for e in events if isinstance(e, DiscussionMessage)]
+    assert [m.speaker for m in messages] == ["Dana", "A"]
+    assert messages[-1].message == DECLINED_TO_RESPOND
+    assert messages[-1].addressed_to is None
+    assert events[-1] == AdvanceStatus.COMPLETE
 
 
 def test_advance_ai_pass_costs_budget_but_gives_another_chance():

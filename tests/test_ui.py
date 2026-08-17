@@ -7,7 +7,6 @@ from the_village import ui
 from the_village.discussion import DiscussionRunner, TurnOutput
 from the_village.state import DiscussionMessage, Death, GameState, Villager
 from the_village.ui import (
-    _living_ai_names,
     begin_discussion,
     format_alive_panel,
     format_deaths_panel,
@@ -113,19 +112,6 @@ def test_format_discussion_transcript_lists_messages():
     assert "hello" in transcript
 
 
-def test_living_ai_names_excludes_player_and_dead_villagers():
-    state = GameState(
-        player_name="Dana",
-        villagers=[
-            Villager(name="Dana", player_type="user"),
-            Villager(name="A", player_type="villager"),
-            Villager(name="D", player_type="villager", is_alive=False),
-            Villager(name="E", player_type="werewolf"),
-        ],
-    )
-    assert _living_ai_names(state) == ["A", "E"]
-
-
 def test_begin_discussion_yields_waiting_status_when_only_player_active():
     state = GameState(
         player_name="Dana",
@@ -139,14 +125,13 @@ def test_begin_discussion_yields_waiting_status_when_only_player_active():
         runner,
         transcript,
         textbox_update,
-        dropdown_update,
         input_visibility,
         status_update,
         begin_button_update,
+        title_update,
     ) = events[-1]
     assert isinstance(runner, DiscussionRunner)
     assert input_visibility["visible"] is True
-    assert dropdown_update["choices"] == []
 
 
 def test_send_discussion_turn_records_message_and_ends_discussion_when_player_is_sole_participant():
@@ -157,9 +142,9 @@ def test_send_discussion_turn_records_message_and_ends_discussion_when_player_is
     )
     runner = DiscussionRunner(state=state, agents={}, budgets={"Dana": 3}, queue=["Dana"])
 
-    events = list(send_discussion_turn(runner, "I'm scared.", ""))
+    events = list(send_discussion_turn(runner, "I'm scared."))
 
-    _, transcript, _, _, input_visibility, status_update, _ = events[-1]
+    _, transcript, _, input_visibility, status_update, _, _ = events[-1]
     assert "I'm scared." in transcript
     # No one else is in the discussion to respond, so it ends rather than
     # asking Dana to repeat herself to an empty room.
@@ -179,7 +164,7 @@ def test_pass_discussion_turn_marks_player_passed_and_shows_ended_status():
 
     events = list(pass_discussion_turn(runner))
 
-    _, _, _, _, input_visibility, status_update, _ = events[-1]
+    _, _, _, input_visibility, status_update, _, _ = events[-1]
     assert "Dana" in runner.passed
     assert input_visibility["visible"] is False
     assert status_update["visible"] is True
@@ -214,7 +199,7 @@ def test_pass_discussion_turn_hides_input_row_before_asking_next_agent():
     first_event = next(events)
     call_order.append("first_event_received")
 
-    _, _, _, _, input_visibility, _, _ = first_event
+    _, _, _, input_visibility, _, _, _ = first_event
     assert input_visibility["visible"] is False
     # The row must hide before the next villager's (potentially slow) turn
     # is generated, not only once that turn's message comes back.
@@ -300,11 +285,14 @@ def test_player_message_shows_immediately_without_spinner_or_sleep(monkeypatch):
         state=state, agents={}, budgets={"Dana": 3}, queue=["Dana"]
     )
 
-    events = list(send_discussion_turn(runner, "I'm scared.", ""))
+    events = list(send_discussion_turn(runner, "I'm scared."))
     transcripts = [event[1] for event in events]
 
-    assert "typing-indicator" not in transcripts[0]
-    assert "I'm scared." in transcripts[0]
+    # events[0] is the immediate row-hiding yield (a transcript no-op) that
+    # fires before the addressed-to inference call; the player's message
+    # itself shows on the very next yield, with no spinner or sleep.
+    assert "typing-indicator" not in transcripts[1]
+    assert "I'm scared." in transcripts[1]
     assert sleep_calls == []
 
 
@@ -322,4 +310,4 @@ def test_send_discussion_turn_wraps_unexpected_errors_as_gr_error():
     )
 
     with pytest.raises(gr.Error):
-        list(send_discussion_turn(runner, "hello", ""))
+        list(send_discussion_turn(runner, "hello"))
