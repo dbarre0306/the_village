@@ -30,6 +30,7 @@ CHIP_LIST_CLASS = "chip-list"
 VILLAGER_CHIP_CLASS = "villager-chip"
 TYPING_INDICATOR_CLASS = "typing-indicator"
 BEGIN_DISCUSSION_BUTTON_CLASS = "begin-discussion-button"
+DISCUSSION_TITLE_CLASS = "discussion-title"
 
 # How long a speaker's "typing" placeholder stays up before their message is
 # revealed. Paces the transcript to human reading speed instead of dumping
@@ -294,6 +295,7 @@ def _drive_discussion(runner, events, dropdown_choices=None):
                         value="The discussion has ended." if complete else "",
                     ),
                     gr.update(),
+                    gr.update(),
                 )
                 pending_choices = None
             else:
@@ -312,6 +314,7 @@ def _drive_discussion(runner, events, dropdown_choices=None):
                         gr.update(visible=False),
                         gr.update(),
                         gr.update(),
+                        gr.update(),
                     )
                     time.sleep(SPEAKER_THINKING_DELAY_SECONDS)
                 transcript = format_discussion_transcript(runner.state)
@@ -321,6 +324,7 @@ def _drive_discussion(runner, events, dropdown_choices=None):
                     gr.update(),
                     gr.update(),
                     gr.update(visible=False),
+                    gr.update(),
                     gr.update(),
                     gr.update(),
                 )
@@ -333,6 +337,7 @@ def _drive_discussion(runner, events, dropdown_choices=None):
 
 def begin_discussion(state: GameState):
     runner = start_discussion(state)
+    weekday = WEEKDAYS[(state.day_number - 1) % 7]
     # Hide the button the instant it's clicked, before driving any AI turns
     # -- generating the first villager's turn can block on an LLM call, and
     # the button shouldn't linger visible while that happens.
@@ -344,6 +349,7 @@ def begin_discussion(state: GameState):
         gr.update(),
         gr.update(),
         gr.update(visible=False),
+        gr.update(value=f"### {weekday}'s Discussion", visible=True),
     )
     yield from _drive_discussion(
         runner,
@@ -355,7 +361,16 @@ def begin_discussion(state: GameState):
 def send_discussion_turn(runner: DiscussionRunner, message: str, addressed_to: str):
     if not message.strip():
         # Pressing Enter on an empty textbox is a no-op, not an error.
-        yield gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip()
+        yield (
+            gr.skip(),
+            gr.skip(),
+            gr.skip(),
+            gr.skip(),
+            gr.skip(),
+            gr.skip(),
+            gr.skip(),
+            gr.skip(),
+        )
         return
     events = advance(
         runner,
@@ -375,6 +390,7 @@ def pass_discussion_turn(runner: DiscussionRunner):
         gr.update(),
         gr.update(),
         gr.update(visible=False),
+        gr.update(),
         gr.update(),
         gr.update(),
     )
@@ -428,6 +444,9 @@ def build_app() -> gr.Blocks:
                 begin_discussion_button = gr.Button(
                     "Begin Discussion", elem_classes=[BEGIN_DISCUSSION_BUTTON_CLASS]
                 )
+                discussion_title = gr.Markdown(
+                    visible=False, elem_classes=[DISCUSSION_TITLE_CLASS]
+                )
                 discussion_transcript = gr.Markdown(
                     elem_classes=[DISCUSSION_TRANSCRIPT_CLASS]
                 )
@@ -465,6 +484,7 @@ def build_app() -> gr.Blocks:
             discussion_input_row,
             discussion_status,
             begin_discussion_button,
+            discussion_title,
         ]
 
         # These three handlers all mutate the same DiscussionRunner/GameState.discussion.
