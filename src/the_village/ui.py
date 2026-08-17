@@ -344,7 +344,9 @@ def begin_discussion(state: GameState):
 
 def send_discussion_turn(runner: DiscussionRunner, message: str, addressed_to: str):
     if not message.strip():
-        raise gr.Error('Type something, or click "I have nothing to say."')
+        # Pressing Enter on an empty textbox is a no-op, not an error.
+        yield gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip()
+        return
     events = advance(
         runner,
         player_input=message.strip(),
