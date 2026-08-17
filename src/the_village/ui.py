@@ -439,7 +439,7 @@ def build_app() -> gr.Blocks:
                         label="Address to (optional)", choices=[], scale=1
                     )
                     with gr.Column(scale=1):
-                        send_button = gr.Button("Send")
+                        send_button = gr.Button("Post Message")
                         pass_button = gr.Button("I have nothing to say")
                 discussion_status = gr.Markdown(visible=False)
 
