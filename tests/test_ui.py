@@ -41,12 +41,17 @@ def make_state_with_one_death() -> GameState:
 
 def test_format_event_log_with_no_deaths():
     state = GameState(player_name="Dana", day_number=1)
-    assert format_event_log(state) == "Nothing has happened yet."
+    assert format_event_log(state) == "<strong>Nothing has happened yet.</strong>"
 
 
 def test_format_event_log_with_a_death():
     state = make_state_with_one_death()
-    assert format_event_log(state) == "Monday morning: A was found dead."
+    log = format_event_log(state)
+    assert (
+        log == "<strong>Monday morning: "
+        f'<span class="{ui.DEATH_LINE_CLASS}">'
+        "A was found dead, torn apart by a werewolf attack.</span></strong>"
+    )
 
 
 def test_format_deaths_panel_with_no_deaths():

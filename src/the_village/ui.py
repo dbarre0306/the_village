@@ -31,6 +31,10 @@ VILLAGER_CHIP_CLASS = "villager-chip"
 TYPING_INDICATOR_CLASS = "typing-indicator"
 BEGIN_DISCUSSION_BUTTON_CLASS = "begin-discussion-button"
 DISCUSSION_TITLE_CLASS = "discussion-title"
+DEATH_LINE_CLASS = "death-line"
+
+# (light, dark)
+DEATH_COLOR = ("#c62828", "#ef5350")
 
 # How long a speaker's "typing" placeholder stays up before their message is
 # revealed. Paces the transcript to human reading speed instead of dumping
@@ -48,13 +52,15 @@ def _speaker_color_css() -> str:
     dark_vars = "; ".join(
         f"--speaker-{i}: {dark}" for i, (_light, dark) in enumerate(SPEAKER_COLORS)
     )
+    light, dark = DEATH_COLOR
     return f"""
-    :root {{ {light_vars}; }}
+    :root {{ {light_vars}; --death-color: {light}; }}
     @media (prefers-color-scheme: dark) {{
-        :root {{ {dark_vars}; }}
+        :root {{ {dark_vars}; --death-color: {dark}; }}
     }}
-    .dark {{ {dark_vars}; }}
+    .dark {{ {dark_vars}; --death-color: {dark}; }}
     .{DISCUSSION_TRANSCRIPT_CLASS} .speaker-name {{ font-weight: 600; }}
+    .{DEATH_LINE_CLASS} {{ color: var(--death-color); }}
     """
 
 
@@ -210,12 +216,15 @@ DEATH_MESSAGE_TEMPLATES = [
 
 def format_event_log(state: GameState) -> str:
     if not state.deaths:
-        return "Nothing has happened yet."
+        return "<strong>Nothing has happened yet.</strong>"
     lines = [
+        "<strong>"
         f"{WEEKDAYS[(death.day_number - 1) % 7]} morning: "
+        f'<span class="{DEATH_LINE_CLASS}">'
         + DEATH_MESSAGE_TEMPLATES[index % len(DEATH_MESSAGE_TEMPLATES)].format(
             name=death.name
         )
+        + "</span></strong>"
         for index, death in enumerate(state.deaths)
     ]
     return "\n\n".join(lines)
@@ -434,7 +443,6 @@ def build_app() -> gr.Blocks:
                     gr.Markdown("### Killed by Werewolves")
                     deaths_panel = gr.Markdown()
             with gr.Column():
-                gr.Markdown("### Events")
                 event_log = gr.Markdown()
                 begin_discussion_button = gr.Button(
                     "Begin Discussion", elem_classes=[BEGIN_DISCUSSION_BUTTON_CLASS]
