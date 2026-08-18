@@ -400,3 +400,136 @@ def test_begin_voting_shows_vote_controls_and_hides_begin_button():
 
 def test_build_app_does_not_raise():
     ui.build_app()
+
+
+from the_village.discussion import DiscussionRunner
+from the_village.state import VoteRecord
+from the_village.ui import cast_player_abstain, cast_player_vote, format_vote_result
+from the_village.voting import VoteChoice, VoteOutcome
+
+
+class ScriptedVoteAgent:
+    def __init__(self, target):
+        self._target = target
+
+    def kickoff(self, messages, response_format=None):
+        return SimpleNamespace(pydantic=VoteChoice(target=self._target))
+
+
+def test_format_vote_result_lists_breakdown_and_lynch_outcome():
+    outcome = VoteOutcome(
+        day_number=2,
+        votes=[
+            VoteRecord(day_number=2, voter="Dana", target="A"),
+            VoteRecord(day_number=2, voter="B", target=None),
+        ],
+        tally={"A": 1},
+        lynched="A",
+    )
+    state = GameState(player_name="Dana", day_number=2)
+
+    result = format_vote_result(state, outcome)
+
+    assert "Dana voted for A." in result
+    assert "B abstained." in result
+    assert "A was lynched by the village." in result
+
+
+def test_format_vote_result_reports_tie():
+    outcome = VoteOutcome(day_number=2, votes=[], tally={"A": 1, "B": 1}, lynched=None)
+    state = GameState(player_name="Dana", day_number=2)
+
+    result = format_vote_result(state, outcome)
+
+    assert "tied" in result.lower()
+
+
+def test_format_vote_result_reports_no_votes():
+    outcome = VoteOutcome(day_number=2, votes=[], tally={}, lynched=None)
+    state = GameState(player_name="Dana", day_number=2)
+
+    result = format_vote_result(state, outcome)
+
+    assert "no one voted" in result.lower()
+
+
+def test_cast_player_vote_hides_controls_before_blocking_call():
+    state = GameState(
+        player_name="Dana",
+        day_number=2,
+        villagers=[
+            Villager(name="Dana", player_type="user"),
+            Villager(name="A", player_type="villager"),
+        ],
+    )
+    runner = DiscussionRunner(
+        state=state, agents={"A": ScriptedVoteAgent(None)}, budgets={}
+    )
+
+    events = cast_player_vote(state, runner, "A")
+    first_event = next(events)
+
+    row_update, status_update, _, _ = first_event
+    assert row_update["visible"] is False
+    assert status_update["value"] == "Tallying the votes…"
+
+
+def test_cast_player_vote_reveals_outcome_and_updates_panels():
+    state = GameState(
+        player_name="Dana",
+        day_number=2,
+        villagers=[
+            Villager(name="Dana", player_type="user"),
+            Villager(name="A", player_type="villager"),
+        ],
+    )
+    runner = DiscussionRunner(
+        state=state, agents={"A": ScriptedVoteAgent(None)}, budgets={}
+    )
+
+    events = list(cast_player_vote(state, runner, "A"))
+    _, status_update, alive_panel_value, lynched_panel_value = events[-1]
+
+    assert "A was lynched by the village." in status_update["value"]
+    assert "Dana" in alive_panel_value
+    assert "A" not in alive_panel_value
+    assert "A" in lynched_panel_value
+
+
+def test_cast_player_vote_wraps_unexpected_errors_as_gr_error():
+    state = GameState(
+        player_name="Dana",
+        day_number=2,
+        villagers=[
+            Villager(name="Dana", player_type="user"),
+            Villager(name="A", player_type="villager"),
+        ],
+    )
+
+    class BoomAgent:
+        def kickoff(self, *args, **kwargs):
+            raise RuntimeError("boom")
+
+    runner = DiscussionRunner(state=state, agents={"A": BoomAgent()}, budgets={})
+
+    with pytest.raises(gr.Error):
+        list(cast_player_vote(state, runner, "A"))
+
+
+def test_cast_player_abstain_records_no_target():
+    state = GameState(
+        player_name="Dana",
+        day_number=2,
+        villagers=[
+            Villager(name="Dana", player_type="user"),
+            Villager(name="A", player_type="villager"),
+        ],
+    )
+    runner = DiscussionRunner(
+        state=state, agents={"A": ScriptedVoteAgent(None)}, budgets={}
+    )
+
+    list(cast_player_abstain(state, runner))
+
+    dana_record = next(v for v in state.votes if v.voter == "Dana")
+    assert dana_record.target is None

@@ -6,6 +6,7 @@ import gradio as gr
 from the_village.discussion import AdvanceStatus, DiscussionRunner, advance, start_discussion
 from the_village.main import VillageFlow
 from the_village.state import WEEKDAYS, GameState
+from the_village.voting import VoteOutcome, cast_votes
 
 logger = logging.getLogger(__name__)
 
@@ -447,6 +448,51 @@ def begin_voting(state: GameState):
     )
 
 
+def format_vote_result(state: GameState, outcome: VoteOutcome) -> str:
+    lines = [
+        f"{record.voter} voted for {record.target}."
+        if record.target is not None
+        else f"{record.voter} abstained."
+        for record in outcome.votes
+    ]
+    lines.append("")
+    if outcome.lynched is not None:
+        lines.append(f"**{outcome.lynched} was lynched by the village.**")
+    elif outcome.tally:
+        lines.append("**The vote was tied — no one was lynched.**")
+    else:
+        lines.append("**No one voted to lynch anyone — no one was lynched.**")
+    return "\n\n".join(lines)
+
+
+def cast_player_vote(state: GameState, runner: DiscussionRunner, target: str | None):
+    # Hide the ballot the instant the player votes, before the blocking AI
+    # kickoff calls run -- the row shouldn't linger visible while they resolve.
+    yield (
+        gr.update(visible=False),
+        gr.update(value="Tallying the votes…", visible=True),
+        gr.update(),
+        gr.update(),
+    )
+    try:
+        outcome = cast_votes(state, runner.agents, player_vote=target)
+    except gr.Error:
+        raise
+    except Exception as exc:
+        logger.exception("Vote casting failed")
+        raise gr.Error("Something went wrong, please try again.") from exc
+    yield (
+        gr.update(visible=False),
+        gr.update(value=format_vote_result(state, outcome), visible=True),
+        format_alive_panel(state),
+        format_lynched_panel(state),
+    )
+
+
+def cast_player_abstain(state: GameState, runner: DiscussionRunner):
+    yield from cast_player_vote(state, runner, None)
+
+
 def start_game(player_name: str):
     if not player_name or not player_name.strip():
         raise gr.Error("Please enter your name.")
@@ -599,6 +645,21 @@ def build_app() -> gr.Blocks:
             fn=lambda status_text: gr.update(visible=bool(status_text)),
             inputs=[discussion_status],
             outputs=[begin_voting_button],
+        )
+
+        vote_outputs = [vote_button_row, vote_status, alive_panel, lynched_panel]
+
+        for button in candidate_buttons:
+            button.click(
+                fn=cast_player_vote,
+                inputs=[game_state, discussion_runner_state, button],
+                outputs=vote_outputs,
+            )
+
+        abstain_button.click(
+            fn=cast_player_abstain,
+            inputs=[game_state, discussion_runner_state],
+            outputs=vote_outputs,
         )
 
     return demo
