@@ -318,6 +318,10 @@ def format_alive_panel(state: GameState) -> str:
     return f'<div class="{CHIP_LIST_CLASS}">{chips}</div>'
 
 
+def _colored_name(name: str, state: GameState) -> str:
+    return f'<span style="color: var(--speaker-{_speaker_color_index(name, state)})">{name}</span>'
+
+
 def _speaker_name_span(name: str, state: GameState) -> str:
     return (
         f'<span class="speaker-name" '
@@ -475,16 +479,17 @@ def begin_voting(state: GameState):
 
 def format_vote_result(state: GameState, outcome: VoteOutcome) -> str:
     lines = [
-        f"{record.voter} voted for {record.target}."
+        f"{_colored_name(record.voter, state)} voted for "
+        f"{_colored_name(record.target, state)}."
         if record.target is not None
-        else f"{record.voter} abstained."
+        else f"{_colored_name(record.voter, state)} abstained."
         for record in outcome.votes
     ]
     lines.append("")
     if outcome.tally:
         lines.append(
             "  ·  ".join(
-                f"{name}: {count}"
+                f"{_colored_name(name, state)}: {count}"
                 for name, count in sorted(
                     outcome.tally.items(), key=lambda kv: (-kv[1], kv[0])
                 )
@@ -492,7 +497,7 @@ def format_vote_result(state: GameState, outcome: VoteOutcome) -> str:
         )
         lines.append("")
     if outcome.lynched is not None:
-        lines.append(f"**{outcome.lynched} was lynched by the village.**")
+        lines.append(f"**{_colored_name(outcome.lynched, state)} was lynched by the village.**")
     elif outcome.tally:
         lines.append("**The vote was tied — no one was lynched.**")
     else:

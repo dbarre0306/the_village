@@ -420,7 +420,23 @@ class ScriptedVoteAgent:
         return SimpleNamespace(pydantic=VoteChoice(target=self._target))
 
 
+def test_colored_name_wraps_name_in_speaker_color_span():
+    state = GameState(
+        player_name="Dana",
+        villagers=[
+            Villager(name="Dana", player_type="user"),
+            Villager(name="A", player_type="villager"),
+        ],
+    )
+    assert ui._colored_name("A", state) == '<span style="color: var(--speaker-1)">A</span>'
+
+
 def test_format_vote_result_lists_breakdown_and_lynch_outcome():
+    villagers = [
+        Villager(name="Dana", player_type="user"),
+        Villager(name="A", player_type="villager"),
+        Villager(name="B", player_type="villager"),
+    ]
     outcome = VoteOutcome(
         day_number=2,
         votes=[
@@ -430,14 +446,19 @@ def test_format_vote_result_lists_breakdown_and_lynch_outcome():
         tally={"A": 1},
         lynched="A",
     )
-    state = GameState(player_name="Dana", day_number=2)
+    state = GameState(player_name="Dana", day_number=2, villagers=villagers)
 
     result = format_vote_result(state, outcome)
 
-    assert "Dana voted for A." in result
-    assert "B abstained." in result
-    assert "A: 1" in result
-    assert "A was lynched by the village." in result
+    dana = ui._colored_name("Dana", state)
+    a = ui._colored_name("A", state)
+    b = ui._colored_name("B", state)
+    assert f"{dana} voted for {a}." in result
+    assert f"{b} abstained." in result
+    assert f"{a}: 1" in result
+    assert f"{a} was lynched by the village." in result
+    # Dana and A land in different speaker slots, so their spans differ.
+    assert dana != a
 
 
 def test_format_vote_result_omits_tally_line_when_no_non_abstain_votes():
@@ -451,7 +472,7 @@ def test_format_vote_result_omits_tally_line_when_no_non_abstain_votes():
 
     result = format_vote_result(state, outcome)
 
-    assert "Dana abstained." in result
+    assert f"{ui._colored_name('Dana', state)} abstained." in result
     # The tally separator only ever appears in the tally-counts line, so its
     # absence confirms no (empty) tally line was rendered.
     assert "  ·  " not in result
@@ -512,7 +533,7 @@ def test_cast_player_vote_reveals_outcome_and_updates_panels():
     events = list(cast_player_vote(state, runner, "A"))
     _, status_update, alive_panel_value, lynched_panel_value = events[-1]
 
-    assert "A was lynched by the village." in status_update["value"]
+    assert f"{ui._colored_name('A', state)} was lynched by the village." in status_update["value"]
     assert "Dana" in alive_panel_value
     # Target the actual chip markup for "A" rather than a bare substring
     # check -- "A" alone would also match unrelated text/markup.
