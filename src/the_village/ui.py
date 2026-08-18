@@ -242,6 +242,18 @@ def format_deaths_panel(state: GameState) -> str:
     return f'<div class="{CHIP_LIST_CLASS}">{chips}</div>'
 
 
+def format_lynched_panel(state: GameState) -> str:
+    if not state.lynchings:
+        return f'<div class="{CHIP_LIST_CLASS}">No one has been lynched yet.</div>'
+    chips = "".join(
+        f'<span class="{VILLAGER_CHIP_CLASS} dead" '
+        f'style="color: var(--speaker-{_speaker_color_index(lynching.name, state)})">'
+        f"{lynching.name}</span>"
+        for lynching in state.lynchings
+    )
+    return f'<div class="{CHIP_LIST_CLASS}">{chips}</div>'
+
+
 def format_alive_panel(state: GameState) -> str:
     alive = [villager for villager in state.villagers if villager.is_alive]
     if not alive:

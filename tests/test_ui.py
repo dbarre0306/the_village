@@ -5,13 +5,14 @@ import pytest
 
 from the_village import ui
 from the_village.discussion import DiscussionRunner, TurnOutput
-from the_village.state import DiscussionMessage, Death, GameState, Villager
+from the_village.state import DiscussionMessage, Death, GameState, Lynching, Villager
 from the_village.ui import (
     begin_discussion,
     format_alive_panel,
     format_deaths_panel,
     format_discussion_transcript,
     format_event_log,
+    format_lynched_panel,
     pass_discussion_turn,
     send_discussion_turn,
     start_game,
@@ -316,3 +317,29 @@ def test_send_discussion_turn_wraps_unexpected_errors_as_gr_error():
 
     with pytest.raises(gr.Error):
         list(send_discussion_turn(runner, "hello"))
+
+
+def test_format_lynched_panel_with_no_lynchings():
+    state = GameState(player_name="Dana", day_number=1)
+    assert (
+        format_lynched_panel(state)
+        == '<div class="chip-list">No one has been lynched yet.</div>'
+    )
+
+
+def test_format_lynched_panel_with_a_lynching():
+    villagers = [
+        Villager(name="Dana", player_type="user"),
+        Villager(name="A", player_type="villager", is_alive=False),
+    ]
+    state = GameState(
+        player_name="Dana",
+        day_number=2,
+        villagers=villagers,
+        lynchings=[Lynching(name="A", day_number=2)],
+    )
+    assert (
+        format_lynched_panel(state)
+        == '<div class="chip-list"><span class="villager-chip dead" '
+        'style="color: var(--speaker-1)">A</span></div>'
+    )
