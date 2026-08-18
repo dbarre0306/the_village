@@ -33,6 +33,11 @@ BEGIN_DISCUSSION_BUTTON_CLASS = "begin-discussion-button"
 DISCUSSION_TITLE_CLASS = "discussion-title"
 DEATH_LINE_CLASS = "death-line"
 
+# Matches roster.py's fixed count of 6 sampled AI villagers -- the vote
+# ballot pre-allocates this many button slots since Gradio's layout is
+# fixed at build time and can't grow/shrink with who's still alive.
+MAX_VOTE_CANDIDATES = 6
+
 # (light, dark)
 DEATH_COLOR = ("#c62828", "#ef5350")
 
@@ -252,6 +257,25 @@ def format_lynched_panel(state: GameState) -> str:
         for lynching in state.lynchings
     )
     return f'<div class="{CHIP_LIST_CLASS}">{chips}</div>'
+
+
+def _vote_candidate_names(state: GameState) -> list[str]:
+    return [
+        villager.name
+        for villager in state.villagers
+        if villager.is_alive and villager.name != state.player_name
+    ]
+
+
+def _vote_button_updates(state: GameState) -> list:
+    names = _vote_candidate_names(state)
+    updates = []
+    for i in range(MAX_VOTE_CANDIDATES):
+        if i < len(names):
+            updates.append(gr.update(value=names[i], visible=True))
+        else:
+            updates.append(gr.update(visible=False))
+    return updates
 
 
 def format_alive_panel(state: GameState) -> str:

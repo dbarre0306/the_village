@@ -343,3 +343,29 @@ def test_format_lynched_panel_with_a_lynching():
         == '<div class="chip-list"><span class="villager-chip dead" '
         'style="color: var(--speaker-1)">A</span></div>'
     )
+
+
+def test_vote_candidate_names_excludes_player_and_dead():
+    villagers = [
+        Villager(name="Dana", player_type="user"),
+        Villager(name="A", player_type="villager"),
+        Villager(name="B", player_type="villager", is_alive=False),
+    ]
+    state = GameState(player_name="Dana", villagers=villagers)
+    assert ui._vote_candidate_names(state) == ["A"]
+
+
+def test_vote_button_updates_labels_living_candidates_and_hides_extra_slots():
+    villagers = [Villager(name="Dana", player_type="user")] + [
+        Villager(name=n, player_type="villager") for n in ["A", "B"]
+    ]
+    state = GameState(player_name="Dana", villagers=villagers)
+
+    updates = ui._vote_button_updates(state)
+
+    assert len(updates) == ui.MAX_VOTE_CANDIDATES
+    assert updates[0]["value"] == "A"
+    assert updates[0]["visible"] is True
+    assert updates[1]["value"] == "B"
+    assert updates[1]["visible"] is True
+    assert updates[2]["visible"] is False
