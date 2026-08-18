@@ -402,7 +402,6 @@ def test_build_app_does_not_raise():
     ui.build_app()
 
 
-from the_village.discussion import DiscussionRunner
 from the_village.state import VoteRecord
 from the_village.ui import cast_player_abstain, cast_player_vote, format_vote_result
 from the_village.voting import VoteChoice, VoteOutcome
@@ -432,7 +431,25 @@ def test_format_vote_result_lists_breakdown_and_lynch_outcome():
 
     assert "Dana voted for A." in result
     assert "B abstained." in result
+    assert "A: 1" in result
     assert "A was lynched by the village." in result
+
+
+def test_format_vote_result_omits_tally_line_when_no_non_abstain_votes():
+    outcome = VoteOutcome(
+        day_number=2,
+        votes=[VoteRecord(day_number=2, voter="Dana", target=None)],
+        tally={},
+        lynched=None,
+    )
+    state = GameState(player_name="Dana", day_number=2)
+
+    result = format_vote_result(state, outcome)
+
+    assert "Dana abstained." in result
+    # The tally separator only ever appears in the tally-counts line, so its
+    # absence confirms no (empty) tally line was rendered.
+    assert "  ·  " not in result
 
 
 def test_format_vote_result_reports_tie():
@@ -492,8 +509,10 @@ def test_cast_player_vote_reveals_outcome_and_updates_panels():
 
     assert "A was lynched by the village." in status_update["value"]
     assert "Dana" in alive_panel_value
-    assert "A" not in alive_panel_value
-    assert "A" in lynched_panel_value
+    # Target the actual chip markup for "A" rather than a bare substring
+    # check -- "A" alone would also match unrelated text/markup.
+    assert '>A</span>' not in alive_panel_value
+    assert '>A</span>' in lynched_panel_value
 
 
 def test_cast_player_vote_wraps_unexpected_errors_as_gr_error():
@@ -512,8 +531,16 @@ def test_cast_player_vote_wraps_unexpected_errors_as_gr_error():
 
     runner = DiscussionRunner(state=state, agents={"A": BoomAgent()}, budgets={})
 
+    events = cast_player_vote(state, runner, "A")
+    next(events)  # first yield: hides the ballot before the blocking call
+    # The error path must restore the ballot so the player can actually
+    # retry -- leaving it hidden would strand them with no way to vote again.
+    row_update, status_update, _, _ = next(events)
+    assert row_update["visible"] is True
+    assert status_update["visible"] is True
+
     with pytest.raises(gr.Error):
-        list(cast_player_vote(state, runner, "A"))
+        next(events)
 
 
 def test_cast_player_abstain_records_no_target():

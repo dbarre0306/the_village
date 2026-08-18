@@ -444,7 +444,7 @@ def begin_voting(state: GameState):
         gr.update(visible=True),  # vote_button_row
         *_vote_button_updates(state),
         gr.update(visible=False),  # vote_status
-        gr.update(visible=False),  # discussion_status
+        gr.update(value="", visible=False),  # discussion_status
     )
 
 
@@ -456,6 +456,16 @@ def format_vote_result(state: GameState, outcome: VoteOutcome) -> str:
         for record in outcome.votes
     ]
     lines.append("")
+    if outcome.tally:
+        lines.append(
+            "  ·  ".join(
+                f"{name}: {count}"
+                for name, count in sorted(
+                    outcome.tally.items(), key=lambda kv: (-kv[1], kv[0])
+                )
+            )
+        )
+        lines.append("")
     if outcome.lynched is not None:
         lines.append(f"**{outcome.lynched} was lynched by the village.**")
     elif outcome.tally:
@@ -480,6 +490,16 @@ def cast_player_vote(state: GameState, runner: DiscussionRunner, target: str | N
         raise
     except Exception as exc:
         logger.exception("Vote casting failed")
+        # Restore the ballot so the player can actually retry -- leaving it
+        # hidden after the error would strand them with no way to vote again.
+        yield (
+            gr.update(visible=True),
+            gr.update(
+                value="Something went wrong — try voting again.", visible=True
+            ),
+            gr.update(),
+            gr.update(),
+        )
         raise gr.Error("Something went wrong, please try again.") from exc
     yield (
         gr.update(visible=False),
@@ -649,17 +669,26 @@ def build_app() -> gr.Blocks:
 
         vote_outputs = [vote_button_row, vote_status, alive_panel, lynched_panel]
 
+        # Both handlers mutate the same shared GameState via cast_votes() and
+        # block on AI kickoff calls -- sharing one concurrency slot with
+        # cast_player_abstain prevents a double-click (or clicking a
+        # candidate and Abstain in quick succession) from racing on that
+        # shared state, mirroring the "discussion_turn" guard above.
         for button in candidate_buttons:
             button.click(
                 fn=cast_player_vote,
                 inputs=[game_state, discussion_runner_state, button],
                 outputs=vote_outputs,
+                concurrency_limit=1,
+                concurrency_id="vote_cast",
             )
 
         abstain_button.click(
             fn=cast_player_abstain,
             inputs=[game_state, discussion_runner_state],
             outputs=vote_outputs,
+            concurrency_limit=1,
+            concurrency_id="vote_cast",
         )
 
     return demo
