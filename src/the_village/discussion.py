@@ -74,7 +74,8 @@ def _build_agent(villager: Villager, all_villagers: list[Villager]) -> Agent:
             if v.player_type == "werewolf" and v.name != villager.name
         )
         role_knowledge = (
-            f"You are secretly a werewolf. Your fellow werewolf is {packmate} — "
+            f"You are secretly a werewolf. You are deceptive and cunning. "
+            "Your fellow werewolf is {packmate} — "
             "you know this, no one else does. You want someone else blamed for "
             "the killing, so you actively steer suspicion toward other "
             "villagers — voicing doubts about their behavior, questioning "
@@ -92,7 +93,9 @@ def _build_agent(villager: Villager, all_villagers: list[Villager]) -> Agent:
             "are, and you genuinely want to find out. You pay attention to "
             "who seems evasive, inconsistent, or too eager to point fingers, "
             "and you're willing to voice suspicion, ask pointed questions, and "
-            "press others for answers."
+            "press others for answers. You never lie or make things up unless "
+            "you are afraid for your own well-being (everyone seems to think you "
+            "are a werewolf)."
         )
         goal = (
             "Work out who is responsible for the killing by questioning and "
@@ -184,8 +187,6 @@ def _resolve_target(
         return None
     if candidate not in runner.budgets:
         return None
-    if candidate in runner.passed:
-        return None
     return candidate
 
 
@@ -243,7 +244,9 @@ def _living_participant_names(state: GameState) -> list[str]:
     return [v.name for v in state.villagers if v.is_alive]
 
 
-def _build_prompt(state: GameState, addressed_by: DiscussionMessage | None) -> str:
+def _build_prompt(
+    state: GameState, addressed_by: DiscussionMessage | None, budget: int
+) -> str:
     living_names = _living_participant_names(state)
     parts = [
         "Known facts:",
@@ -261,20 +264,30 @@ def _build_prompt(state: GameState, addressed_by: DiscussionMessage | None) -> s
             f'{addressed_by.speaker} just said to you: "{addressed_by.message}" '
             "Respond directly to this."
         )
-    else:
+    elif budget <= 1:
         parts.append(
             "It's your turn. Decide whether you have something to say — a "
             "statement, question, or accusation. If you have nothing to add, "
             "say so — but note that declining means you are done for the day "
             "and will not be asked again."
         )
+    else:
+        parts.append(
+            "It's your turn. Decide whether you have something to say — a "
+            "statement, question, or accusation. If you have nothing to add, "
+            "say so — you'll still be able to speak again later if something "
+            "comes up."
+        )
     return "\n".join(parts)
 
 
 def _ask_agent(
-    agent: Agent, state: GameState, addressed_by: DiscussionMessage | None
+    agent: Agent,
+    state: GameState,
+    addressed_by: DiscussionMessage | None,
+    budget: int,
 ) -> TurnOutput:
-    prompt = _build_prompt(state, addressed_by)
+    prompt = _build_prompt(state, addressed_by, budget)
     output = agent.kickoff(prompt, response_format=TurnOutput)
     return output.pydantic or TurnOutput(has_something_to_say=False)
 
@@ -321,7 +334,9 @@ def _generate_bonus_reply(
     runner: DiscussionRunner, msg: DiscussionMessage
 ) -> DiscussionMessage:
     agent = runner.agents[msg.addressed_to]
-    output = _ask_agent(agent, runner.state, addressed_by=msg)
+    output = _ask_agent(
+        agent, runner.state, addressed_by=msg, budget=runner.budgets[msg.addressed_to]
+    )
     if not output.has_something_to_say or not output.message:
         reply = DiscussionMessage(
             day_number=runner.state.day_number,
@@ -469,7 +484,12 @@ def _run_ai_turns(
             return
 
         runner.queue.pop(0)
-        output = _ask_agent(runner.agents[next_name], state, addressed_by=None)
+        output = _ask_agent(
+            runner.agents[next_name],
+            state,
+            addressed_by=None,
+            budget=runner.budgets[next_name],
+        )
         runner.budgets[next_name] -= 1
         if not output.has_something_to_say or not output.message:
             if runner.budgets[next_name] <= 0:
