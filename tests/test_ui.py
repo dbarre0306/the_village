@@ -88,15 +88,15 @@ def test_start_game_rejects_blank_name():
         start_game("   ")
 
 
-def test_start_game_returns_six_outputs_including_game_state():
+def test_start_game_returns_seven_outputs_including_game_state():
     outputs = start_game("TestPlayer")
 
-    assert len(outputs) == 6
+    assert len(outputs) == 7
     assert "TestPlayer" not in outputs[2]
     assert "TestPlayer" not in outputs[3]
     assert "TestPlayer (me)" in outputs[4]
-    assert isinstance(outputs[5], GameState)
-    assert outputs[5].player_name == "TestPlayer"
+    assert isinstance(outputs[6], GameState)
+    assert outputs[6].player_name == "TestPlayer"
 
 
 def test_format_discussion_transcript_with_no_messages():
@@ -369,3 +369,34 @@ def test_vote_button_updates_labels_living_candidates_and_hides_extra_slots():
     assert updates[1]["value"] == "B"
     assert updates[1]["visible"] is True
     assert updates[2]["visible"] is False
+
+
+def test_begin_voting_shows_vote_controls_and_hides_begin_button():
+    state = GameState(
+        player_name="Dana",
+        villagers=[
+            Villager(name="Dana", player_type="user"),
+            Villager(name="A", player_type="villager"),
+        ],
+    )
+
+    outputs = ui.begin_voting(state)
+
+    (
+        begin_button_update,
+        row_update,
+        *candidate_updates,
+        status_update,
+        discussion_status_update,
+    ) = outputs
+    assert begin_button_update["visible"] is False
+    assert row_update["visible"] is True
+    assert len(candidate_updates) == ui.MAX_VOTE_CANDIDATES
+    assert candidate_updates[0]["value"] == "A"
+    assert candidate_updates[0]["visible"] is True
+    assert status_update["visible"] is False
+    assert discussion_status_update["visible"] is False
+
+
+def test_build_app_does_not_raise():
+    ui.build_app()

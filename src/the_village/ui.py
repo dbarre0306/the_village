@@ -437,6 +437,16 @@ def pass_discussion_turn(runner: DiscussionRunner):
     yield from _drive_discussion(runner, advance(runner, player_pass=True))
 
 
+def begin_voting(state: GameState):
+    return (
+        gr.update(visible=False),  # begin_voting_button
+        gr.update(visible=True),  # vote_button_row
+        *_vote_button_updates(state),
+        gr.update(visible=False),  # vote_status
+        gr.update(visible=False),  # discussion_status
+    )
+
+
 def start_game(player_name: str):
     if not player_name or not player_name.strip():
         raise gr.Error("Please enter your name.")
@@ -457,6 +467,7 @@ def start_game(player_name: str):
         format_event_log(state),
         format_deaths_panel(state),
         format_alive_panel(state),
+        format_lynched_panel(state),
         state,
     )
 
@@ -478,6 +489,9 @@ def build_app() -> gr.Blocks:
                 with gr.Column():
                     gr.Markdown("### Killed by Werewolves")
                     deaths_panel = gr.Markdown()
+                with gr.Column():
+                    gr.Markdown("### Lynched by the Village")
+                    lynched_panel = gr.Markdown()
             with gr.Column():
                 event_log = gr.Markdown()
                 begin_discussion_button = gr.Button(
@@ -497,6 +511,17 @@ def build_app() -> gr.Blocks:
                         send_button = gr.Button("Post Message")
                         pass_button = gr.Button("I have nothing to say")
                 discussion_status = gr.Markdown(visible=False)
+                begin_voting_button = gr.Button(
+                    "Begin Voting",
+                    elem_classes=[BEGIN_DISCUSSION_BUTTON_CLASS],
+                    visible=False,
+                )
+                with gr.Row(visible=False) as vote_button_row:
+                    candidate_buttons = [
+                        gr.Button(visible=False) for _ in range(MAX_VOTE_CANDIDATES)
+                    ]
+                    abstain_button = gr.Button("Abstain")
+                vote_status = gr.Markdown(visible=False)
 
         start_button.click(
             fn=start_game,
@@ -507,6 +532,7 @@ def build_app() -> gr.Blocks:
                 event_log,
                 deaths_panel,
                 alive_panel,
+                lynched_panel,
                 game_state,
             ],
             concurrency_limit=None,
@@ -555,6 +581,24 @@ def build_app() -> gr.Blocks:
             outputs=discussion_outputs,
             concurrency_limit=1,
             concurrency_id="discussion_turn",
+        )
+
+        begin_voting_button.click(
+            fn=begin_voting,
+            inputs=[game_state],
+            outputs=[
+                begin_voting_button,
+                vote_button_row,
+                *candidate_buttons,
+                vote_status,
+                discussion_status,
+            ],
+        )
+
+        discussion_status.change(
+            fn=lambda status_text: gr.update(visible=bool(status_text)),
+            inputs=[discussion_status],
+            outputs=[begin_voting_button],
         )
 
     return demo
