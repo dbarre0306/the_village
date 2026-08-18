@@ -170,10 +170,13 @@ def test_resolve_target_returns_none_for_unknown_name():
     assert _resolve_target("Ghost", runner, exclude="A") is None
 
 
-def test_resolve_target_returns_none_for_passed_participant():
+def test_resolve_target_allows_passed_participant():
+    # Bonus/direct replies let someone respond out of turn regardless of
+    # their round-queue status, so having passed for the day doesn't
+    # disqualify them as an addressed_to target.
     runner = make_runner()
     runner.passed.add("B")
-    assert _resolve_target("B", runner, exclude="A") is None
+    assert _resolve_target("B", runner, exclude="A") == "B"
 
 
 def test_resolve_target_returns_valid_target():
@@ -257,14 +260,14 @@ def test_format_history_includes_prior_days_in_order():
 
 def test_build_prompt_without_addressed_by_prompts_free_turn():
     state = GameState(player_name="Dana")
-    prompt = _build_prompt(state, addressed_by=None)
+    prompt = _build_prompt(state, addressed_by=None, budget=INITIAL_BUDGET)
     assert "It's your turn" in prompt
 
 
 def test_build_prompt_with_addressed_by_includes_the_question():
     state = GameState(player_name="Dana")
     msg = DiscussionMessage(day_number=1, speaker="A", message="Where were you?")
-    prompt = _build_prompt(state, addressed_by=msg)
+    prompt = _build_prompt(state, addressed_by=msg, budget=INITIAL_BUDGET)
     assert "A just said to you" in prompt
     assert "Where were you?" in prompt
 
