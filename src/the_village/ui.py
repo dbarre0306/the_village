@@ -33,6 +33,7 @@ TYPING_INDICATOR_CLASS = "typing-indicator"
 BEGIN_DISCUSSION_BUTTON_CLASS = "begin-discussion-button"
 DISCUSSION_TITLE_CLASS = "discussion-title"
 DEATH_LINE_CLASS = "death-line"
+VOTE_CANDIDATE_BUTTON_CLASS = "vote-candidate-button"
 
 # Matches roster.py's fixed count of 6 sampled AI villagers -- the vote
 # ballot pre-allocates this many button slots since Gradio's layout is
@@ -67,6 +68,22 @@ def _speaker_color_css() -> str:
     .dark {{ {dark_vars}; --death-color: {dark}; }}
     .{DISCUSSION_TRANSCRIPT_CLASS} .speaker-name {{ font-weight: 600; }}
     .{DEATH_LINE_CLASS} {{ color: var(--death-color); }}
+    {_vote_button_color_css()}
+    """
+
+
+def _vote_button_color_css() -> str:
+    # Each candidate button is relabeled to a different villager every
+    # round, so its color has to travel with a CSS class keyed to that
+    # villager's speaker slot rather than a fixed per-button color.
+    rules = "\n".join(
+        f'.{VOTE_CANDIDATE_BUTTON_CLASS}.speaker-btn-{i} {{ '
+        f"background: var(--speaker-{i}); border-color: var(--speaker-{i}); }}"
+        for i in range(len(SPEAKER_COLORS))
+    )
+    return f"""
+    .{VOTE_CANDIDATE_BUTTON_CLASS} {{ color: #fff; }}
+    {rules}
     """
 
 
@@ -273,9 +290,17 @@ def _vote_button_updates(state: GameState) -> list:
     updates = []
     for i in range(MAX_VOTE_CANDIDATES):
         if i < len(names):
-            updates.append(gr.update(value=names[i], visible=True))
+            name = names[i]
+            color_index = _speaker_color_index(name, state)
+            updates.append(
+                gr.Button(
+                    value=name,
+                    visible=True,
+                    elem_classes=[VOTE_CANDIDATE_BUTTON_CLASS, f"speaker-btn-{color_index}"],
+                )
+            )
         else:
-            updates.append(gr.update(visible=False))
+            updates.append(gr.Button(visible=False))
     return updates
 
 

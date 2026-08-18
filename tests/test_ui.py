@@ -364,11 +364,13 @@ def test_vote_button_updates_labels_living_candidates_and_hides_extra_slots():
     updates = ui._vote_button_updates(state)
 
     assert len(updates) == ui.MAX_VOTE_CANDIDATES
-    assert updates[0]["value"] == "A"
-    assert updates[0]["visible"] is True
-    assert updates[1]["value"] == "B"
-    assert updates[1]["visible"] is True
-    assert updates[2]["visible"] is False
+    assert updates[0].value == "A"
+    assert updates[0].visible is True
+    assert f"speaker-btn-{ui._speaker_color_index('A', state)}" in updates[0].elem_classes
+    assert updates[1].value == "B"
+    assert updates[1].visible is True
+    assert f"speaker-btn-{ui._speaker_color_index('B', state)}" in updates[1].elem_classes
+    assert updates[2].visible is False
 
 
 def test_begin_voting_shows_vote_controls_and_hides_begin_button():
@@ -392,8 +394,8 @@ def test_begin_voting_shows_vote_controls_and_hides_begin_button():
     assert begin_button_update["visible"] is False
     assert row_update["visible"] is True
     assert len(candidate_updates) == ui.MAX_VOTE_CANDIDATES
-    assert candidate_updates[0]["value"] == "A"
-    assert candidate_updates[0]["visible"] is True
+    assert candidate_updates[0].value == "A"
+    assert candidate_updates[0].visible is True
     assert status_update["visible"] is False
     # discussion_status is left untouched so its "moderator ended the
     # discussion" message stays visible through the voting phase.
