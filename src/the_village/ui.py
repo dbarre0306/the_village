@@ -363,7 +363,7 @@ def _drive_discussion(runner, events):
                     gr.update(visible=not complete),
                     gr.update(
                         visible=complete,
-                        value="The moderator has ended the discussion." if complete else "",
+                        value="The Moderator has ended the discussion." if complete else "",
                     ),
                     gr.update(),
                     gr.update(),
@@ -468,8 +468,10 @@ def pass_discussion_turn(runner: DiscussionRunner):
 
 
 def begin_voting(state: GameState):
+    weekday = WEEKDAYS[(state.day_number - 1) % 7]
     return (
         gr.update(visible=False),  # begin_voting_button
+        gr.update(value=f"### {weekday}'s Voting", visible=True),  # voting_title
         gr.update(visible=True),  # vote_button_row
         *_vote_button_updates(state),
         gr.update(visible=False),  # vote_status
@@ -612,6 +614,9 @@ def build_app() -> gr.Blocks:
                     elem_classes=[BEGIN_DISCUSSION_BUTTON_CLASS],
                     visible=False,
                 )
+                voting_title = gr.Markdown(
+                    visible=False, elem_classes=[DISCUSSION_TITLE_CLASS]
+                )
                 with gr.Row(visible=False) as vote_button_row:
                     candidate_buttons = [
                         gr.Button(visible=False) for _ in range(MAX_VOTE_CANDIDATES)
@@ -684,6 +689,7 @@ def build_app() -> gr.Blocks:
             inputs=[game_state],
             outputs=[
                 begin_voting_button,
+                voting_title,
                 vote_button_row,
                 *candidate_buttons,
                 vote_status,

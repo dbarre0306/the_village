@@ -386,12 +386,15 @@ def test_begin_voting_shows_vote_controls_and_hides_begin_button():
 
     (
         begin_button_update,
+        title_update,
         row_update,
         *candidate_updates,
         status_update,
         discussion_status_update,
     ) = outputs
     assert begin_button_update["visible"] is False
+    assert title_update["value"] == "### Sunday's Voting"
+    assert title_update["visible"] is True
     assert row_update["visible"] is True
     assert len(candidate_updates) == ui.MAX_VOTE_CANDIDATES
     assert candidate_updates[0].value == "A"
