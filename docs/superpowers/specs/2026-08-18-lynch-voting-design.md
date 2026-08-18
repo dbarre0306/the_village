@@ -108,7 +108,6 @@ def cast_votes(
     state: GameState,
     agents: dict[str, Agent],
     player_vote: str | None,
-    rng: random.Random | None = None,
 ) -> VoteOutcome:
     ...
 ```
@@ -135,7 +134,9 @@ def cast_votes(
   (already chosen via UI button click) — no `kickoff()` call for it.
 - One `VoteRecord` is appended to `state.votes` per living villager
   (the player included), all stamped with the current `state.day_number`.
-- Tally: count non-abstain votes per target among all recorded votes.
+- Tally: count non-abstain votes per target among this round's votes just
+  collected (not the full historical `state.votes` list, which accumulates
+  across every day).
   - No non-abstain votes at all → `lynched = None`.
   - A single target with the strictly highest count → that villager is
     lynched: `is_alive = False` on their `Villager`, a `Lynching`
