@@ -34,9 +34,22 @@ class DiscussionMessage(BaseModel):
     addressed_to: str | None = None
 
 
+class VoteRecord(BaseModel):
+    day_number: int
+    voter: str
+    target: str | None = None
+
+
+class Lynching(BaseModel):
+    name: str
+    day_number: int
+
+
 class GameState(BaseModel):
     player_name: str = ""
     day_number: int = 1
     villagers: list[Villager] = []
     deaths: list[Death] = []
     discussion: list[DiscussionMessage] = []
+    votes: list[VoteRecord] = []
+    lynchings: list[Lynching] = []

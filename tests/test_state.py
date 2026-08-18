@@ -1,4 +1,4 @@
-from the_village.state import WEEKDAYS, Death, DiscussionMessage, GameState, Villager
+from the_village.state import WEEKDAYS, Death, DiscussionMessage, GameState, Lynching, VoteRecord, Villager
 
 
 def test_villager_defaults():
@@ -47,3 +47,25 @@ def test_discussion_message_addressed_to():
 def test_game_state_discussion_defaults_to_empty_list():
     state = GameState()
     assert state.discussion == []
+
+
+def test_vote_record_defaults_to_abstain():
+    vote = VoteRecord(day_number=2, voter="Alice")
+    assert vote.target is None
+
+
+def test_vote_record_with_target():
+    vote = VoteRecord(day_number=2, voter="Alice", target="Bruce")
+    assert vote.target == "Bruce"
+
+
+def test_lynching_fields():
+    lynching = Lynching(name="Bruce", day_number=2)
+    assert lynching.name == "Bruce"
+    assert lynching.day_number == 2
+
+
+def test_game_state_votes_and_lynchings_default_to_empty_list():
+    state = GameState()
+    assert state.votes == []
+    assert state.lynchings == []
