@@ -87,6 +87,10 @@ def cast_votes(
             output = agents[name].kickoff(prompt, response_format=VoteChoice)
             choice = output.pydantic or VoteChoice()
             target = _resolve_target(choice.target, living_names, exclude=name)
+            if choice.target and target is None:
+                logger.warning(
+                    "Discarding %s's invalid vote for %r", name, choice.target
+                )
         votes.append(
             VoteRecord(day_number=state.day_number, voter=name, target=target)
         )

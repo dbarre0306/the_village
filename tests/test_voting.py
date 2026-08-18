@@ -112,6 +112,27 @@ def test_majority_vote_lynches_the_top_target():
     assert state.lynchings == [Lynching(name="B", day_number=2)]
 
 
+def test_ai_votes_can_lynch_the_player():
+    # The player is a candidate on every AI villager's ballot just like
+    # anyone else, so a majority of AI votes against them must be able to
+    # flip their is_alive flag -- this is reachable, in-scope behavior even
+    # though the day 2+ game loop/win conditions are out of scope.
+    state = make_voting_state()
+    agents = {
+        "A": ScriptedVoteAgent("Dana"),
+        "B": ScriptedVoteAgent("Dana"),
+        "C": ScriptedVoteAgent("Dana"),
+        "E": ScriptedVoteAgent(None),
+    }
+
+    outcome = cast_votes(state, agents, player_vote=None)
+
+    assert outcome.lynched == "Dana"
+    dana = next(v for v in state.villagers if v.name == "Dana")
+    assert dana.is_alive is False
+    assert state.lynchings == [Lynching(name="Dana", day_number=2)]
+
+
 def test_tie_results_in_no_lynch():
     state = make_voting_state()
     agents = {
