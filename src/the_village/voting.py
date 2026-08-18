@@ -9,6 +9,7 @@ from the_village.discussion import (
     _format_deaths,
     _format_history,
     _living_participant_names,
+    _weekday,
 )
 from the_village.state import GameState, Lynching, VoteRecord
 
@@ -46,7 +47,7 @@ def _format_lynchings(state: GameState) -> str:
     if not state.lynchings:
         return "(No one has been lynched yet.)"
     return "\n".join(
-        f"{lynching.name} was lynched by the village on day {lynching.day_number}."
+        f"{lynching.name} was lynched by the village on {_weekday(lynching.day_number)}."
         for lynching in state.lynchings
     )
 

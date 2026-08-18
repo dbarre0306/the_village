@@ -236,7 +236,7 @@ def test_format_deaths_with_no_deaths():
 
 def test_format_deaths_lists_each_death():
     state = GameState(player_name="Dana", deaths=[Death(name="D", day_number=2)])
-    assert _format_deaths(state) == "D was found dead on day 2."
+    assert _format_deaths(state) == "D was found dead on Monday."
 
 
 def test_format_history_with_no_messages():

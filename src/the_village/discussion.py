@@ -9,7 +9,7 @@ from typing import Iterator
 from crewai import Agent
 from pydantic import BaseModel, Field
 
-from the_village.state import DiscussionMessage, GameState, Villager
+from the_village.state import WEEKDAYS, DiscussionMessage, GameState, Villager
 
 logger = logging.getLogger(__name__)
 
@@ -225,11 +225,15 @@ class TurnOutput(BaseModel):
     )
 
 
+def _weekday(day_number: int) -> str:
+    return WEEKDAYS[(day_number - 1) % 7]
+
+
 def _format_deaths(state: GameState) -> str:
     if not state.deaths:
         return "(No one has died yet.)"
     return "\n".join(
-        f"{death.name} was found dead on day {death.day_number}."
+        f"{death.name} was found dead on {_weekday(death.day_number)}."
         for death in state.deaths
     )
 

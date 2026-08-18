@@ -47,7 +47,7 @@ def test_format_lynchings_lists_each_lynching():
     state = GameState(
         player_name="Dana", lynchings=[Lynching(name="C", day_number=1)]
     )
-    assert _format_lynchings(state) == "C was lynched by the village on day 1."
+    assert _format_lynchings(state) == "C was lynched by the village on Sunday."
 
 
 def test_build_vote_prompt_lists_candidates():
@@ -72,7 +72,7 @@ def test_build_vote_prompt_includes_lynching_history():
         player_name="Dana", lynchings=[Lynching(name="C", day_number=1)]
     )
     prompt = _build_vote_prompt(state, ["A", "B"])
-    assert "C was lynched by the village on day 1." in prompt
+    assert "C was lynched by the village on Sunday." in prompt
 
 
 class ScriptedVoteAgent:
