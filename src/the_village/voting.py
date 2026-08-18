@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import logging
 
+from crewai import Agent
 from pydantic import BaseModel, Field
 
-from the_village.discussion import _format_deaths, _format_history
-from the_village.state import GameState, VoteRecord
+from the_village.discussion import (
+    _format_deaths,
+    _format_history,
+    _living_participant_names,
+)
+from the_village.state import GameState, Lynching, VoteRecord
 
 logger = logging.getLogger(__name__)
 
@@ -62,4 +67,49 @@ def _build_vote_prompt(state: GameState, candidates: list[str]) -> str:
             "killing and vote to lynch them, or leave your vote unset to "
             "abstain. You may not vote for yourself.",
         ]
+    )
+
+
+def cast_votes(
+    state: GameState,
+    agents: dict[str, Agent],
+    player_vote: str | None,
+) -> VoteOutcome:
+    living_names = _living_participant_names(state)
+    votes: list[VoteRecord] = []
+
+    for name in living_names:
+        if name == state.player_name:
+            target = _resolve_target(player_vote, living_names, exclude=name)
+        else:
+            candidates = [n for n in living_names if n != name]
+            prompt = _build_vote_prompt(state, candidates)
+            output = agents[name].kickoff(prompt, response_format=VoteChoice)
+            choice = output.pydantic or VoteChoice()
+            target = _resolve_target(choice.target, living_names, exclude=name)
+        votes.append(
+            VoteRecord(day_number=state.day_number, voter=name, target=target)
+        )
+
+    state.votes.extend(votes)
+
+    tally: dict[str, int] = {}
+    for vote in votes:
+        if vote.target is not None:
+            tally[vote.target] = tally.get(vote.target, 0) + 1
+
+    lynched: str | None = None
+    if tally:
+        top_count = max(tally.values())
+        top_targets = [name for name, count in tally.items() if count == top_count]
+        if len(top_targets) == 1:
+            lynched = top_targets[0]
+
+    if lynched is not None:
+        villager = next(v for v in state.villagers if v.name == lynched)
+        villager.is_alive = False
+        state.lynchings.append(Lynching(name=lynched, day_number=state.day_number))
+
+    return VoteOutcome(
+        day_number=state.day_number, votes=votes, tally=tally, lynched=lynched
     )

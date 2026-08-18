@@ -1,10 +1,13 @@
-from the_village.state import DiscussionMessage, GameState, Lynching
+from types import SimpleNamespace
+
+from the_village.state import DiscussionMessage, GameState, Lynching, Villager
 from the_village.voting import (
     VoteChoice,
     VoteOutcome,
     _build_vote_prompt,
     _format_lynchings,
     _resolve_target,
+    cast_votes,
 )
 
 
@@ -70,3 +73,149 @@ def test_build_vote_prompt_includes_lynching_history():
     )
     prompt = _build_vote_prompt(state, ["A", "B"])
     assert "C was lynched by the village on day 1." in prompt
+
+
+class ScriptedVoteAgent:
+    def __init__(self, target):
+        self._target = target
+
+    def kickoff(self, messages, response_format=None):
+        return SimpleNamespace(pydantic=VoteChoice(target=self._target))
+
+
+def make_voting_state(day_number: int = 2) -> GameState:
+    villagers = [
+        Villager(name="Dana", player_type="user"),
+        Villager(name="A", player_type="villager"),
+        Villager(name="B", player_type="villager"),
+        Villager(name="C", player_type="villager"),
+        Villager(name="E", player_type="werewolf"),
+    ]
+    return GameState(player_name="Dana", day_number=day_number, villagers=villagers)
+
+
+def test_majority_vote_lynches_the_top_target():
+    state = make_voting_state()
+    agents = {
+        "A": ScriptedVoteAgent("B"),
+        "B": ScriptedVoteAgent("B"),
+        "C": ScriptedVoteAgent("B"),
+        "E": ScriptedVoteAgent("B"),
+    }
+
+    outcome = cast_votes(state, agents, player_vote="B")
+
+    assert outcome.lynched == "B"
+    assert outcome.tally == {"B": 4}
+    b = next(v for v in state.villagers if v.name == "B")
+    assert b.is_alive is False
+    assert state.lynchings == [Lynching(name="B", day_number=2)]
+
+
+def test_tie_results_in_no_lynch():
+    state = make_voting_state()
+    agents = {
+        "A": ScriptedVoteAgent("B"),
+        "B": ScriptedVoteAgent("C"),
+        "C": ScriptedVoteAgent("A"),
+        "E": ScriptedVoteAgent("A"),
+    }
+
+    outcome = cast_votes(state, agents, player_vote="B")
+
+    # tally: A=2 (from C, E), B=2 (from Dana, A) -> tied for the top
+    assert outcome.lynched is None
+    assert state.lynchings == []
+    assert all(v.is_alive for v in state.villagers)
+
+
+def test_all_abstain_results_in_no_lynch():
+    state = make_voting_state()
+    agents = {name: ScriptedVoteAgent(None) for name in ["A", "B", "C", "E"]}
+
+    outcome = cast_votes(state, agents, player_vote=None)
+
+    assert outcome.lynched is None
+    assert outcome.tally == {}
+
+
+def test_ai_self_vote_is_normalized_to_abstain():
+    state = make_voting_state()
+    agents = {
+        "A": ScriptedVoteAgent("A"),
+        "B": ScriptedVoteAgent(None),
+        "C": ScriptedVoteAgent(None),
+        "E": ScriptedVoteAgent(None),
+    }
+
+    outcome = cast_votes(state, agents, player_vote=None)
+
+    a_record = next(v for v in outcome.votes if v.voter == "A")
+    assert a_record.target is None
+
+
+def test_dead_villagers_excluded_from_voting_and_targets():
+    villagers = [
+        Villager(name="Dana", player_type="user"),
+        Villager(name="A", player_type="villager", is_alive=False),
+        Villager(name="B", player_type="villager"),
+    ]
+    state = GameState(player_name="Dana", day_number=3, villagers=villagers)
+    agents = {"B": ScriptedVoteAgent("A")}
+
+    outcome = cast_votes(state, agents, player_vote=None)
+
+    assert "A" not in [record.voter for record in outcome.votes]
+    b_record = next(v for v in outcome.votes if v.voter == "B")
+    assert b_record.target is None  # A is dead, so an invalid target
+
+
+def test_player_vote_used_directly_without_kickoff():
+    state = make_voting_state()
+    agents = {
+        "A": ScriptedVoteAgent(None),
+        "B": ScriptedVoteAgent(None),
+        "C": ScriptedVoteAgent(None),
+        "E": ScriptedVoteAgent(None),
+    }
+
+    outcome = cast_votes(state, agents, player_vote="B")
+
+    dana_record = next(v for v in outcome.votes if v.voter == "Dana")
+    assert dana_record.target == "B"
+
+
+def test_vote_records_stamped_with_current_day_number():
+    state = make_voting_state(day_number=5)
+    agents = {name: ScriptedVoteAgent(None) for name in ["A", "B", "C", "E"]}
+
+    outcome = cast_votes(state, agents, player_vote=None)
+
+    assert all(record.day_number == 5 for record in outcome.votes)
+    assert all(record.day_number == 5 for record in state.votes)
+
+
+def test_prompt_passed_to_agents_includes_full_multi_day_discussion_history():
+    state = make_voting_state()
+    state.discussion = [
+        DiscussionMessage(day_number=1, speaker="A", message="yesterday's claim"),
+        DiscussionMessage(day_number=2, speaker="B", message="today's claim"),
+    ]
+    captured = {}
+
+    class CapturingAgent:
+        def kickoff(self, messages, response_format=None):
+            captured["prompt"] = messages
+            return SimpleNamespace(pydantic=VoteChoice(target=None))
+
+    agents = {
+        "A": CapturingAgent(),
+        "B": ScriptedVoteAgent(None),
+        "C": ScriptedVoteAgent(None),
+        "E": ScriptedVoteAgent(None),
+    }
+
+    cast_votes(state, agents, player_vote=None)
+
+    assert "yesterday's claim" in captured["prompt"]
+    assert "today's claim" in captured["prompt"]
