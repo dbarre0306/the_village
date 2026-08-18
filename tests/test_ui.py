@@ -395,7 +395,10 @@ def test_begin_voting_shows_vote_controls_and_hides_begin_button():
     assert candidate_updates[0]["value"] == "A"
     assert candidate_updates[0]["visible"] is True
     assert status_update["visible"] is False
-    assert discussion_status_update["visible"] is False
+    # discussion_status is left untouched so its "moderator ended the
+    # discussion" message stays visible through the voting phase.
+    assert "visible" not in discussion_status_update
+    assert "value" not in discussion_status_update
 
 
 def test_build_app_does_not_raise():

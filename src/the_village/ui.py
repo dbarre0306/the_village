@@ -334,7 +334,7 @@ def _drive_discussion(runner, events):
                     gr.update(visible=not complete),
                     gr.update(
                         visible=complete,
-                        value="The discussion has ended." if complete else "",
+                        value="The moderator has ended the discussion." if complete else "",
                     ),
                     gr.update(),
                     gr.update(),
@@ -444,7 +444,7 @@ def begin_voting(state: GameState):
         gr.update(visible=True),  # vote_button_row
         *_vote_button_updates(state),
         gr.update(visible=False),  # vote_status
-        gr.update(value="", visible=False),  # discussion_status
+        gr.update(),  # discussion_status stays visible during voting
     )
 
 
