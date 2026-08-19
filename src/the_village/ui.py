@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import time
 
 import gradio as gr
 
@@ -370,7 +369,7 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                     gr.update(),
                     gr.update(),
                 )
-                time.sleep(SPEAKER_THINKING_DELAY_SECONDS)
+                await asyncio.sleep(SPEAKER_THINKING_DELAY_SECONDS)
             elif item == FlowStatus.WAITING_FOR_TURN or item == FlowStatus.WAITING_FOR_ANSWER:
                 yield (
                     bridge,
@@ -391,7 +390,7 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                     gr.update(
                         visible=True, value="The Moderator has ended the discussion."
                     ),
-                    gr.update(visible=True),
+                    gr.update(),
                     gr.update(),
                 )
                 return
