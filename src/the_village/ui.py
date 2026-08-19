@@ -1,11 +1,12 @@
+import asyncio
 import logging
 import time
 
 import gradio as gr
 
-from the_village.discussion import AdvanceStatus, DiscussionRunner, advance, start_discussion
+from the_village.bridge import FlowFailed, FlowStatus, PlayerInput, SessionBridge, run_flow
 from the_village.main import VillageFlow
-from the_village.state import WEEKDAYS, GameState
+from the_village.state import WEEKDAYS, DiscussionMessage, GameState
 from the_village.voting import VoteOutcome, cast_votes
 
 logger = logging.getLogger(__name__)
@@ -350,52 +351,50 @@ def format_discussion_transcript(
     return "\n\n".join(lines)
 
 
-def _drive_discussion(runner, events):
+async def _stream_bridge(bridge: SessionBridge, state: GameState):
+    """Drains bridge.outbox, yielding a UI-update tuple per item, until a
+    status tells the caller to stop and hand control back to the player."""
     try:
-        for event in events:
-            if isinstance(event, AdvanceStatus):
-                transcript = format_discussion_transcript(runner.state)
-                complete = event == AdvanceStatus.COMPLETE
+        while True:
+            item = await bridge.outbox.get()
+            if isinstance(item, FlowFailed):
+                raise gr.Error("Something went wrong, please try again.")
+            if isinstance(item, DiscussionMessage):
+                transcript = format_discussion_transcript(state)
                 yield (
-                    runner,
+                    bridge,
                     transcript,
                     gr.update(value=""),
-                    gr.update(visible=not complete),
-                    gr.update(
-                        visible=complete,
-                        value="The Moderator has ended the discussion." if complete else "",
-                    ),
-                    gr.update(),
-                    gr.update(),
-                )
-            else:
-                # Pace AI turns to reading speed with a "typing" placeholder;
-                # the player's own message (already visible to them as they
-                # typed it) shows immediately with no delay.
-                if event.speaker != runner.state.player_name:
-                    pending_transcript = format_discussion_transcript(
-                        runner.state, pending_speaker=event.speaker
-                    )
-                    yield (
-                        runner,
-                        pending_transcript,
-                        gr.update(),
-                        gr.update(visible=False),
-                        gr.update(),
-                        gr.update(),
-                        gr.update(),
-                    )
-                    time.sleep(SPEAKER_THINKING_DELAY_SECONDS)
-                transcript = format_discussion_transcript(runner.state)
-                yield (
-                    runner,
-                    transcript,
-                    gr.update(),
                     gr.update(visible=False),
                     gr.update(),
                     gr.update(),
                     gr.update(),
                 )
+                time.sleep(SPEAKER_THINKING_DELAY_SECONDS)
+            elif item == FlowStatus.WAITING_FOR_TURN or item == FlowStatus.WAITING_FOR_ANSWER:
+                yield (
+                    bridge,
+                    gr.update(),
+                    gr.update(value=""),
+                    gr.update(visible=True),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                )
+                return
+            elif item == FlowStatus.DISCUSSION_COMPLETE:
+                yield (
+                    bridge,
+                    gr.update(),
+                    gr.update(),
+                    gr.update(visible=False),
+                    gr.update(
+                        visible=True, value="The Moderator has ended the discussion."
+                    ),
+                    gr.update(visible=True),
+                    gr.update(),
+                )
+                return
     except gr.Error:
         raise
     except Exception as exc:
@@ -403,14 +402,12 @@ def _drive_discussion(runner, events):
         raise gr.Error("Something went wrong, please try again.") from exc
 
 
-def begin_discussion(state: GameState):
-    runner = start_discussion(state)
+async def begin_discussion(bridge: SessionBridge, state: GameState):
+    if not bridge.resolve_input(PlayerInput()):
+        return  # already resolved (e.g. double-click) -- no-op
     weekday = WEEKDAYS[(state.day_number - 1) % 7]
-    # Hide the button the instant it's clicked, before driving any AI turns
-    # -- generating the first villager's turn can block on an LLM call, and
-    # the button shouldn't linger visible while that happens.
     yield (
-        runner,
+        bridge,
         gr.update(),
         gr.update(),
         gr.update(),
@@ -418,28 +415,18 @@ def begin_discussion(state: GameState):
         gr.update(visible=False),
         gr.update(value=f"### {weekday}'s Discussion", visible=True),
     )
-    yield from _drive_discussion(runner, advance(runner))
+    async for update in _stream_bridge(bridge, state):
+        yield update
 
 
-def send_discussion_turn(runner: DiscussionRunner, message: str):
+async def send_discussion_turn(bridge: SessionBridge, state: GameState, message: str):
     if not message.strip():
-        # Pressing Enter on an empty textbox is a no-op, not an error.
-        yield (
-            gr.skip(),
-            gr.skip(),
-            gr.skip(),
-            gr.skip(),
-            gr.skip(),
-            gr.skip(),
-            gr.skip(),
-        )
+        yield (gr.skip(),) * 7
         return
-    # Hide the input row the instant the player sends a message, before
-    # working out who (if anyone) it's addressed to -- that inference can
-    # block on an LLM call, and the row shouldn't linger open while it
-    # resolves.
+    if not bridge.resolve_input(PlayerInput(message=message.strip())):
+        return
     yield (
-        runner,
+        bridge,
         gr.update(),
         gr.update(),
         gr.update(visible=False),
@@ -447,16 +434,15 @@ def send_discussion_turn(runner: DiscussionRunner, message: str):
         gr.update(),
         gr.update(),
     )
-    events = advance(runner, player_input=message.strip())
-    yield from _drive_discussion(runner, events)
+    async for update in _stream_bridge(bridge, state):
+        yield update
 
 
-def pass_discussion_turn(runner: DiscussionRunner):
-    # Hide the input row the instant the player passes, before driving any
-    # AI turns -- generating the next villager's turn can block on an LLM
-    # call, and the row shouldn't linger open while that happens.
+async def pass_discussion_turn(bridge: SessionBridge, state: GameState):
+    if not bridge.resolve_input(PlayerInput(message=None)):
+        return
     yield (
-        runner,
+        bridge,
         gr.update(),
         gr.update(),
         gr.update(visible=False),
@@ -464,7 +450,8 @@ def pass_discussion_turn(runner: DiscussionRunner):
         gr.update(),
         gr.update(),
     )
-    yield from _drive_discussion(runner, advance(runner, player_pass=True))
+    async for update in _stream_bridge(bridge, state):
+        yield update
 
 
 def begin_voting(state: GameState):
@@ -507,7 +494,7 @@ def format_vote_result(state: GameState, outcome: VoteOutcome) -> str:
     return "\n\n".join(lines)
 
 
-def cast_player_vote(state: GameState, runner: DiscussionRunner, target: str | None):
+def cast_player_vote(state: GameState, bridge: SessionBridge, target: str | None):
     # Hide the ballot the instant the player votes, before the blocking AI
     # kickoff calls run -- the row shouldn't linger visible while they resolve.
     yield (
@@ -517,7 +504,7 @@ def cast_player_vote(state: GameState, runner: DiscussionRunner, target: str | N
         gr.update(),
     )
     try:
-        outcome = cast_votes(state, runner.agents, player_vote=target)
+        outcome = cast_votes(state, bridge.agents, player_vote=target)
     except gr.Error:
         raise
     except Exception as exc:
@@ -541,25 +528,28 @@ def cast_player_vote(state: GameState, runner: DiscussionRunner, target: str | N
     )
 
 
-def cast_player_abstain(state: GameState, runner: DiscussionRunner):
-    yield from cast_player_vote(state, runner, None)
+def cast_player_abstain(state: GameState, bridge: SessionBridge):
+    yield from cast_player_vote(state, bridge, None)
 
 
-def start_game(player_name: str):
+async def start_game(player_name: str):
     if not player_name or not player_name.strip():
         raise gr.Error("Please enter your name.")
 
-    try:
-        flow = VillageFlow()
-        flow.kickoff(inputs={"player_name": player_name.strip()})
-    except gr.Error:
-        raise
-    except Exception as exc:
-        logger.exception("Flow kickoff failed")
-        raise gr.Error("Something went wrong, please try again.") from exc
+    bridge = SessionBridge()
+    village_flow = VillageFlow(bridge=bridge)
+    bridge.task = asyncio.create_task(
+        run_flow(
+            village_flow.kickoff_async(inputs={"player_name": player_name.strip()}), bridge
+        )
+    )
 
-    state = flow.state
-    return (
+    item = await bridge.outbox.get()
+    if isinstance(item, FlowFailed):
+        raise gr.Error("Something went wrong, please try again.")
+
+    state = village_flow.state
+    yield (
         gr.update(visible=False),
         gr.update(visible=True),
         format_event_log(state),
@@ -567,13 +557,14 @@ def start_game(player_name: str):
         format_alive_panel(state),
         format_lynched_panel(state),
         state,
+        bridge,
     )
 
 
 def build_app() -> gr.Blocks:
     with gr.Blocks(title="The Village") as demo:
         game_state = gr.State()
-        discussion_runner_state = gr.State()
+        session_bridge = gr.State()
 
         with gr.Column(visible=True) as start_screen:
             name_input = gr.Textbox(label="Your first name")
@@ -635,12 +626,13 @@ def build_app() -> gr.Blocks:
                 alive_panel,
                 lynched_panel,
                 game_state,
+                session_bridge,
             ],
             concurrency_limit=None,
         )
 
         discussion_outputs = [
-            discussion_runner_state,
+            session_bridge,
             discussion_transcript,
             discussion_textbox,
             discussion_input_row,
@@ -649,39 +641,32 @@ def build_app() -> gr.Blocks:
             discussion_title,
         ]
 
-        # These three handlers all mutate the same DiscussionRunner/GameState.discussion.
-        # Sharing one concurrency slot keeps overlapping clicks (e.g. a double-click
-        # while a turn is still streaming) queued instead of racing on that shared state.
+        # SessionBridge.resolve_input() is the per-session no-pending-future
+        # guard that replaces the old shared "discussion_turn" concurrency_id
+        # -- a double-click (or overlapping submit) becomes a no-op instead
+        # of racing on shared state, without serializing unrelated sessions.
         begin_discussion_button.click(
             fn=begin_discussion,
-            inputs=[game_state],
+            inputs=[session_bridge, game_state],
             outputs=discussion_outputs,
-            concurrency_limit=1,
-            concurrency_id="discussion_turn",
         )
 
         send_button.click(
             fn=send_discussion_turn,
-            inputs=[discussion_runner_state, discussion_textbox],
+            inputs=[session_bridge, game_state, discussion_textbox],
             outputs=discussion_outputs,
-            concurrency_limit=1,
-            concurrency_id="discussion_turn",
         )
 
         discussion_textbox.submit(
             fn=send_discussion_turn,
-            inputs=[discussion_runner_state, discussion_textbox],
+            inputs=[session_bridge, game_state, discussion_textbox],
             outputs=discussion_outputs,
-            concurrency_limit=1,
-            concurrency_id="discussion_turn",
         )
 
         pass_button.click(
             fn=pass_discussion_turn,
-            inputs=[discussion_runner_state],
+            inputs=[session_bridge, game_state],
             outputs=discussion_outputs,
-            concurrency_limit=1,
-            concurrency_id="discussion_turn",
         )
 
         begin_voting_button.click(
@@ -713,7 +698,7 @@ def build_app() -> gr.Blocks:
         for button in candidate_buttons:
             button.click(
                 fn=cast_player_vote,
-                inputs=[game_state, discussion_runner_state, button],
+                inputs=[game_state, session_bridge, button],
                 outputs=vote_outputs,
                 concurrency_limit=1,
                 concurrency_id="vote_cast",
@@ -721,7 +706,7 @@ def build_app() -> gr.Blocks:
 
         abstain_button.click(
             fn=cast_player_abstain,
-            inputs=[game_state, discussion_runner_state],
+            inputs=[game_state, session_bridge],
             outputs=vote_outputs,
             concurrency_limit=1,
             concurrency_id="vote_cast",

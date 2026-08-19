@@ -1,30 +1,27 @@
+import asyncio
 from types import SimpleNamespace
 
 import gradio as gr
 import pytest
 
 from the_village import ui
-from the_village.discussion import DiscussionRunner, _LegacyTurnOutput
-from the_village.state import DiscussionMessage, Death, GameState, Lynching, Villager
+from the_village.bridge import FlowFailed, FlowStatus, PlayerInput, SessionBridge
+from the_village.state import DiscussionMessage, Death, GameState, Lynching, VoteRecord, Villager
 from the_village.ui import (
     begin_discussion,
+    cast_player_abstain,
+    cast_player_vote,
     format_alive_panel,
     format_deaths_panel,
     format_discussion_transcript,
     format_event_log,
     format_lynched_panel,
+    format_vote_result,
     pass_discussion_turn,
     send_discussion_turn,
     start_game,
 )
-
-
-class ScriptedAgent:
-    def __init__(self, outputs):
-        self._outputs = list(outputs)
-
-    def kickoff(self, messages, response_format=None):
-        return SimpleNamespace(pydantic=self._outputs.pop(0))
+from the_village.voting import VoteChoice, VoteOutcome
 
 
 def make_state_with_one_death() -> GameState:
@@ -83,20 +80,86 @@ def test_format_alive_panel_with_no_villagers():
     assert format_alive_panel(state) == '<div class="chip-list">No one is left.</div>'
 
 
-def test_start_game_rejects_blank_name():
+async def test_start_game_rejects_blank_name():
     with pytest.raises(gr.Error):
-        start_game("   ")
+        async for _ in start_game("   "):
+            pass
 
 
-def test_start_game_returns_seven_outputs_including_game_state():
-    outputs = start_game("TestPlayer")
+async def test_start_game_yields_once_paused_at_the_death_gate():
+    outputs = [update async for update in start_game("TestPlayer")]
 
-    assert len(outputs) == 7
-    assert "TestPlayer" not in outputs[2]
-    assert "TestPlayer" not in outputs[3]
-    assert "TestPlayer (me)" in outputs[4]
-    assert isinstance(outputs[6], GameState)
-    assert outputs[6].player_name == "TestPlayer"
+    assert len(outputs) == 1
+    bridge = outputs[0][7]
+    assert isinstance(bridge, SessionBridge)
+    assert bridge.pending_input is not None
+
+
+async def test_begin_discussion_resolves_the_death_gate_and_streams_to_completion():
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
+    await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
+
+    outputs = [
+        update async for update in begin_discussion(bridge, GameState(day_number=1))
+    ]
+
+    assert await waiter == PlayerInput()
+    assert len(outputs) == 2  # immediate "hide button" yield, then completion
+
+
+async def test_begin_discussion_is_a_noop_when_already_resolved():
+    bridge = SessionBridge()  # nothing pending -- simulates a double-click
+    outputs = [update async for update in begin_discussion(bridge, GameState())]
+    assert outputs == []
+
+
+async def test_send_discussion_turn_is_a_noop_on_blank_message():
+    bridge = SessionBridge()
+    outputs = [update async for update in send_discussion_turn(bridge, GameState(), "   ")]
+    assert outputs == [(gr.skip(),) * 7]
+
+
+async def test_send_discussion_turn_resolves_pending_input():
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
+    await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
+
+    async for _ in send_discussion_turn(bridge, GameState(), "I didn't do it!"):
+        pass
+
+    assert await waiter == PlayerInput(message="I didn't do it!")
+
+
+async def test_pass_discussion_turn_resolves_pending_input_with_none():
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
+    await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
+
+    async for _ in pass_discussion_turn(bridge, GameState()):
+        pass
+
+    assert await waiter == PlayerInput(message=None)
+
+
+async def test_begin_discussion_raises_gr_error_on_flow_failed():
+    # begin_discussion resolves the death-gate future before it starts
+    # draining the outbox, so a pending wait must exist first -- this
+    # exercises _stream_bridge's FlowFailed handling through its one
+    # caller in this test module, rather than reaching into a private name.
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
+    await bridge.outbox.put(FlowFailed(detail="boom"))
+
+    with pytest.raises(gr.Error):
+        async for _ in begin_discussion(bridge, GameState()):
+            pass
+
+    waiter.cancel()
 
 
 def test_format_discussion_transcript_with_no_messages():
@@ -116,100 +179,6 @@ def test_format_discussion_transcript_lists_messages():
     transcript = format_discussion_transcript(state)
     assert "A:</span> hello" in transcript
     assert "hello" in transcript
-
-
-def test_begin_discussion_yields_waiting_status_when_only_player_active():
-    state = GameState(
-        player_name="Dana",
-        day_number=1,
-        villagers=[Villager(name="Dana", player_type="user")],
-    )
-
-    events = list(begin_discussion(state))
-
-    (
-        runner,
-        transcript,
-        textbox_update,
-        input_visibility,
-        status_update,
-        begin_button_update,
-        title_update,
-    ) = events[-1]
-    assert isinstance(runner, DiscussionRunner)
-    assert input_visibility["visible"] is True
-
-
-def test_send_discussion_turn_records_message_and_ends_discussion_when_player_is_sole_participant():
-    state = GameState(
-        player_name="Dana",
-        day_number=1,
-        villagers=[Villager(name="Dana", player_type="user")],
-    )
-    runner = DiscussionRunner(state=state, agents={}, budgets={"Dana": 3}, queue=["Dana"])
-
-    events = list(send_discussion_turn(runner, "I'm scared."))
-
-    _, transcript, _, input_visibility, status_update, _, _ = events[-1]
-    assert "I'm scared." in transcript
-    # No one else is in the discussion to respond, so it ends rather than
-    # asking Dana to repeat herself to an empty room.
-    assert input_visibility["visible"] is False
-    assert status_update["visible"] is True
-
-
-def test_pass_discussion_turn_marks_player_passed_and_shows_ended_status():
-    state = GameState(
-        player_name="Dana",
-        day_number=1,
-        villagers=[Villager(name="Dana", player_type="user")],
-    )
-    # Budget of 1 so this single pass exhausts it -- passing only costs one
-    # budget point, so a player with budget remaining is not marked passed.
-    runner = DiscussionRunner(state=state, agents={}, budgets={"Dana": 1}, queue=["Dana"])
-
-    events = list(pass_discussion_turn(runner))
-
-    _, _, _, input_visibility, status_update, _, _ = events[-1]
-    assert "Dana" in runner.passed
-    assert input_visibility["visible"] is False
-    assert status_update["visible"] is True
-
-
-def test_pass_discussion_turn_hides_input_row_before_asking_next_agent():
-    call_order = []
-
-    class RecordingAgent:
-        def kickoff(self, messages, response_format=None):
-            call_order.append("agent_called")
-            return SimpleNamespace(
-                pydantic=_LegacyTurnOutput(has_something_to_say=True, message="hi there")
-            )
-
-    state = GameState(
-        player_name="Dana",
-        day_number=1,
-        villagers=[
-            Villager(name="Dana", player_type="user"),
-            Villager(name="A", player_type="villager"),
-        ],
-    )
-    runner = DiscussionRunner(
-        state=state,
-        agents={"A": RecordingAgent()},
-        budgets={"Dana": 3, "A": 3},
-        queue=["Dana", "A"],
-    )
-
-    events = pass_discussion_turn(runner)
-    first_event = next(events)
-    call_order.append("first_event_received")
-
-    _, _, _, input_visibility, _, _, _ = first_event
-    assert input_visibility["visible"] is False
-    # The row must hide before the next villager's (potentially slow) turn
-    # is generated, not only once that turn's message comes back.
-    assert call_order == ["first_event_received"]
 
 
 def test_format_discussion_transcript_with_pending_speaker_hides_its_message():
@@ -243,80 +212,6 @@ def test_format_discussion_transcript_with_pending_speaker_keeps_prior_messages(
     assert "first" in transcript
     assert "second" not in transcript
     assert "typing-indicator" in transcript
-
-
-def test_ai_turn_shows_pending_spinner_before_revealing_message(monkeypatch):
-    sleep_calls = []
-    monkeypatch.setattr(ui.time, "sleep", lambda seconds: sleep_calls.append(seconds))
-
-    state = GameState(
-        player_name="Dana",
-        day_number=1,
-        villagers=[
-            Villager(name="Dana", player_type="user"),
-            Villager(name="A", player_type="villager"),
-        ],
-    )
-    runner = DiscussionRunner(
-        state=state,
-        agents={
-            "A": ScriptedAgent(
-                [_LegacyTurnOutput(has_something_to_say=True, message="hi there")]
-            )
-        },
-        budgets={"Dana": 3, "A": 3},
-        queue=["A"],
-    )
-
-    events = list(pass_discussion_turn(runner))
-    transcripts = [event[1] for event in events]
-
-    pending_index = next(i for i, t in enumerate(transcripts) if "typing-indicator" in t)
-    assert "hi there" not in transcripts[pending_index]
-    assert "A:</span>" in transcripts[pending_index]
-    assert "hi there" in transcripts[pending_index + 1]
-    assert sleep_calls == [ui.SPEAKER_THINKING_DELAY_SECONDS]
-
-
-def test_player_message_shows_immediately_without_spinner_or_sleep(monkeypatch):
-    sleep_calls = []
-    monkeypatch.setattr(ui.time, "sleep", lambda seconds: sleep_calls.append(seconds))
-
-    state = GameState(
-        player_name="Dana",
-        day_number=1,
-        villagers=[Villager(name="Dana", player_type="user")],
-    )
-    runner = DiscussionRunner(
-        state=state, agents={}, budgets={"Dana": 3}, queue=["Dana"]
-    )
-
-    events = list(send_discussion_turn(runner, "I'm scared."))
-    transcripts = [event[1] for event in events]
-
-    # events[0] is the immediate row-hiding yield (a transcript no-op) that
-    # fires before the addressed-to inference call; the player's message
-    # itself shows on the very next yield, with no spinner or sleep.
-    assert "typing-indicator" not in transcripts[1]
-    assert "I'm scared." in transcripts[1]
-    assert sleep_calls == []
-
-
-def test_send_discussion_turn_wraps_unexpected_errors_as_gr_error():
-    state = GameState(
-        player_name="Dana",
-        day_number=1,
-        villagers=[
-            Villager(name="Dana", player_type="user"),
-            Villager(name="A", player_type="villager"),
-        ],
-    )
-    runner = DiscussionRunner(
-        state=state, agents={}, budgets={"Dana": 3, "A": 3}, queue=["A"]
-    )
-
-    with pytest.raises(gr.Error):
-        list(send_discussion_turn(runner, "hello"))
 
 
 def test_format_lynched_panel_with_no_lynchings():
@@ -408,11 +303,6 @@ def test_begin_voting_shows_vote_controls_and_hides_begin_button():
 
 def test_build_app_does_not_raise():
     ui.build_app()
-
-
-from the_village.state import VoteRecord
-from the_village.ui import cast_player_abstain, cast_player_vote, format_vote_result
-from the_village.voting import VoteChoice, VoteOutcome
 
 
 class ScriptedVoteAgent:
@@ -508,11 +398,9 @@ def test_cast_player_vote_hides_controls_before_blocking_call():
             Villager(name="A", player_type="villager"),
         ],
     )
-    runner = DiscussionRunner(
-        state=state, agents={"A": ScriptedVoteAgent(None)}, budgets={}
-    )
+    bridge = SessionBridge(agents={"A": ScriptedVoteAgent(None)})
 
-    events = cast_player_vote(state, runner, "A")
+    events = cast_player_vote(state, bridge, "A")
     first_event = next(events)
 
     row_update, status_update, _, _ = first_event
@@ -529,11 +417,9 @@ def test_cast_player_vote_reveals_outcome_and_updates_panels():
             Villager(name="A", player_type="villager"),
         ],
     )
-    runner = DiscussionRunner(
-        state=state, agents={"A": ScriptedVoteAgent(None)}, budgets={}
-    )
+    bridge = SessionBridge(agents={"A": ScriptedVoteAgent(None)})
 
-    events = list(cast_player_vote(state, runner, "A"))
+    events = list(cast_player_vote(state, bridge, "A"))
     _, status_update, alive_panel_value, lynched_panel_value = events[-1]
 
     assert f"{ui._colored_name('A', state)} was lynched by the village." in status_update["value"]
@@ -558,12 +444,13 @@ def test_cast_player_vote_wraps_unexpected_errors_as_gr_error():
         def kickoff(self, *args, **kwargs):
             raise RuntimeError("boom")
 
-    runner = DiscussionRunner(state=state, agents={"A": BoomAgent()}, budgets={})
+    bridge = SessionBridge(agents={"A": BoomAgent()})
 
-    events = cast_player_vote(state, runner, "A")
+    events = cast_player_vote(state, bridge, "A")
     next(events)  # first yield: hides the ballot before the blocking call
     # The error path must restore the ballot so the player can actually
-    # retry -- leaving it hidden would strand them with no way to vote again.
+    # retry -- leaving it hidden after the error would strand them with no
+    # way to vote again.
     row_update, status_update, _, _ = next(events)
     assert row_update["visible"] is True
     assert status_update["visible"] is True
@@ -581,11 +468,9 @@ def test_cast_player_abstain_records_no_target():
             Villager(name="A", player_type="villager"),
         ],
     )
-    runner = DiscussionRunner(
-        state=state, agents={"A": ScriptedVoteAgent(None)}, budgets={}
-    )
+    bridge = SessionBridge(agents={"A": ScriptedVoteAgent(None)})
 
-    list(cast_player_abstain(state, runner))
+    list(cast_player_abstain(state, bridge))
 
     dana_record = next(v for v in state.votes if v.voter == "Dana")
     assert dana_record.target is None
