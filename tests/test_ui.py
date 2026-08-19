@@ -4,7 +4,7 @@ import gradio as gr
 import pytest
 
 from the_village import ui
-from the_village.discussion import DiscussionRunner, TurnOutput
+from the_village.discussion import DiscussionRunner, _LegacyTurnOutput
 from the_village.state import DiscussionMessage, Death, GameState, Lynching, Villager
 from the_village.ui import (
     begin_discussion,
@@ -183,7 +183,7 @@ def test_pass_discussion_turn_hides_input_row_before_asking_next_agent():
         def kickoff(self, messages, response_format=None):
             call_order.append("agent_called")
             return SimpleNamespace(
-                pydantic=TurnOutput(has_something_to_say=True, message="hi there")
+                pydantic=_LegacyTurnOutput(has_something_to_say=True, message="hi there")
             )
 
     state = GameState(
@@ -261,7 +261,7 @@ def test_ai_turn_shows_pending_spinner_before_revealing_message(monkeypatch):
         state=state,
         agents={
             "A": ScriptedAgent(
-                [TurnOutput(has_something_to_say=True, message="hi there")]
+                [_LegacyTurnOutput(has_something_to_say=True, message="hi there")]
             )
         },
         budgets={"Dana": 3, "A": 3},

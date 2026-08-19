@@ -1,5 +1,9 @@
+import asyncio
 import random
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
+from crewai import Agent
 
 from the_village.discussion import (
     DECLINED_TO_RESPOND,
@@ -16,10 +20,15 @@ from the_village.discussion import (
     _generate_bonus_reply,
     _infer_player_target,
     _last_speaker_today,
+    _LegacyTurnOutput,
+    _record_message,
     _resolve_target,
+    _run_ai_turn,
+    _run_player_turn,
     advance,
     start_discussion,
 )
+from the_village.bridge import PlayerInput, SessionBridge
 from the_village.state import Death, DiscussionMessage, GameState, Villager
 
 
@@ -83,7 +92,7 @@ def make_runner(day_number: int = 1) -> DiscussionRunner:
     # their whole budget.
     for name in runner.agents:
         runner.agents[name] = ScriptedAgent(
-            [TurnOutput(has_something_to_say=False)] * INITIAL_BUDGET
+            [_LegacyTurnOutput(has_something_to_say=False)] * INITIAL_BUDGET
         )
     runner.address_resolver = StaticResolver()
     return runner
@@ -104,7 +113,7 @@ def test_active_participants_excludes_exhausted_budget():
 
 def test_last_speaker_today_returns_none_with_no_messages():
     runner = make_runner()
-    assert _last_speaker_today(runner) is None
+    assert _last_speaker_today(runner.state) is None
 
 
 def test_last_speaker_today_ignores_other_days():
@@ -112,7 +121,7 @@ def test_last_speaker_today_ignores_other_days():
     runner.state.discussion.append(
         DiscussionMessage(day_number=1, speaker="A", message="yesterday")
     )
-    assert _last_speaker_today(runner) is None
+    assert _last_speaker_today(runner.state) is None
 
 
 def test_last_speaker_today_returns_most_recent_todays_speaker():
@@ -123,7 +132,7 @@ def test_last_speaker_today_returns_most_recent_todays_speaker():
     runner.state.discussion.append(
         DiscussionMessage(day_number=1, speaker="B", message="second")
     )
-    assert _last_speaker_today(runner) == "B"
+    assert _last_speaker_today(runner.state) == "B"
 
 
 def test_build_round_includes_only_active_participants():
@@ -157,17 +166,17 @@ def test_build_round_allows_repeat_when_only_one_active_participant():
 
 def test_resolve_target_returns_none_for_none_candidate():
     runner = make_runner()
-    assert _resolve_target(None, runner, exclude="A") is None
+    assert _resolve_target(None, runner.state, exclude="A") is None
 
 
 def test_resolve_target_returns_none_for_self_address():
     runner = make_runner()
-    assert _resolve_target("A", runner, exclude="A") is None
+    assert _resolve_target("A", runner.state, exclude="A") is None
 
 
 def test_resolve_target_returns_none_for_unknown_name():
     runner = make_runner()
-    assert _resolve_target("Ghost", runner, exclude="A") is None
+    assert _resolve_target("Ghost", runner.state, exclude="A") is None
 
 
 def test_resolve_target_allows_passed_participant():
@@ -176,12 +185,12 @@ def test_resolve_target_allows_passed_participant():
     # disqualify them as an addressed_to target.
     runner = make_runner()
     runner.passed.add("B")
-    assert _resolve_target("B", runner, exclude="A") == "B"
+    assert _resolve_target("B", runner.state, exclude="A") == "B"
 
 
 def test_resolve_target_returns_valid_target():
     runner = make_runner()
-    assert _resolve_target("B", runner, exclude="A") == "B"
+    assert _resolve_target("B", runner.state, exclude="A") == "B"
 
 
 def test_infer_player_target_returns_resolver_output():
@@ -275,7 +284,7 @@ def test_build_prompt_with_addressed_by_includes_the_question():
 def test_generate_bonus_reply_records_message_and_costs_no_budget():
     runner = make_runner()
     runner.agents["B"] = ScriptedAgent(
-        [TurnOutput(has_something_to_say=True, message="I was home.")]
+        [_LegacyTurnOutput(has_something_to_say=True, message="I was home.")]
     )
     original_budget = runner.budgets["B"]
     asking = DiscussionMessage(
@@ -292,7 +301,7 @@ def test_generate_bonus_reply_records_message_and_costs_no_budget():
 
 def test_generate_bonus_reply_records_decline_placeholder_when_agent_declines():
     runner = make_runner()
-    runner.agents["B"] = ScriptedAgent([TurnOutput(has_something_to_say=False)])
+    runner.agents["B"] = ScriptedAgent([_LegacyTurnOutput(has_something_to_say=False)])
     asking = DiscussionMessage(
         day_number=1, speaker="A", message="Where were you?", addressed_to="B"
     )
@@ -309,7 +318,7 @@ def test_generate_bonus_reply_does_not_chain_further_bonus_replies():
     runner = make_runner()
     runner.agents["B"] = ScriptedAgent(
         [
-            TurnOutput(
+            _LegacyTurnOutput(
                 has_something_to_say=True,
                 message="What about you, A?",
                 addressed_to="A",
@@ -329,10 +338,10 @@ def test_generate_bonus_reply_does_not_chain_further_bonus_replies():
 def test_advance_auto_plays_ai_turns_then_pauses_for_player():
     runner = make_runner()
     runner.agents["A"] = ScriptedAgent(
-        [TurnOutput(has_something_to_say=True, message="I'm scared.")]
+        [_LegacyTurnOutput(has_something_to_say=True, message="I'm scared.")]
     )
     runner.agents["B"] = ScriptedAgent(
-        [TurnOutput(has_something_to_say=True, message="Me too.")]
+        [_LegacyTurnOutput(has_something_to_say=True, message="Me too.")]
     )
     runner.queue = ["A", "B", "Dana"]
 
@@ -383,7 +392,7 @@ def test_advance_pauses_for_player_when_addressed_by_ai():
     runner = make_runner()
     runner.agents["A"] = ScriptedAgent(
         [
-            TurnOutput(
+            _LegacyTurnOutput(
                 has_something_to_say=True,
                 message="Dana, where were you last night?",
                 addressed_to="Dana",
@@ -402,7 +411,7 @@ def test_advance_pauses_for_player_when_addressed_by_ai():
 def test_advance_player_answer_to_question_costs_no_budget_and_resumes_queue():
     runner = make_runner()
     runner.agents["B"] = ScriptedAgent(
-        [TurnOutput(has_something_to_say=True, message="I agree with Dana.")]
+        [_LegacyTurnOutput(has_something_to_say=True, message="I agree with Dana.")]
     )
     runner.awaiting_reply_from = "Dana"
     runner.queue = ["B"]
@@ -426,7 +435,7 @@ def test_advance_player_answer_addressing_someone_new_gets_bonus_reply():
     runner = make_runner()
     runner.address_resolver = StaticResolver("B")
     runner.agents["B"] = ScriptedAgent(
-        [TurnOutput(has_something_to_say=True, message="I was home.")]
+        [_LegacyTurnOutput(has_something_to_say=True, message="I was home.")]
     )
     runner.awaiting_reply_from = "Dana"
     runner.queue = []
@@ -442,7 +451,7 @@ def test_advance_player_answer_addressing_someone_who_turns_it_back_pauses_for_a
     runner.address_resolver = StaticResolver("A")
     runner.agents["A"] = ScriptedAgent(
         [
-            TurnOutput(
+            _LegacyTurnOutput(
                 has_something_to_say=True,
                 message="You're the only one who'd know.",
                 addressed_to="Dana",
@@ -502,7 +511,7 @@ def test_advance_completes_when_only_one_participant_remains_active_instead_of_r
         DiscussionMessage(day_number=1, speaker="A", message="Only me left.")
     )
     runner.agents["A"] = ScriptedAgent(
-        [TurnOutput(has_something_to_say=True, message="Should not be asked again.")]
+        [_LegacyTurnOutput(has_something_to_say=True, message="Should not be asked again.")]
     )
     runner.queue = []
 
@@ -526,10 +535,10 @@ def test_advance_defers_sole_remaining_queue_entry_when_others_are_still_active(
         DiscussionMessage(day_number=1, speaker="B", message="B's bonus reply.")
     )
     runner.agents["B"] = ScriptedAgent(
-        [TurnOutput(has_something_to_say=True, message="B should not repeat.")]
+        [_LegacyTurnOutput(has_something_to_say=True, message="B should not repeat.")]
     )
-    runner.agents["A"] = ScriptedAgent([TurnOutput(has_something_to_say=False)])
-    runner.agents["C"] = ScriptedAgent([TurnOutput(has_something_to_say=False)])
+    runner.agents["A"] = ScriptedAgent([_LegacyTurnOutput(has_something_to_say=False)])
+    runner.agents["C"] = ScriptedAgent([_LegacyTurnOutput(has_something_to_say=False)])
     runner.queue = ["B"]
 
     events = list(advance(runner))
@@ -543,7 +552,7 @@ def test_advance_ai_addressing_another_ai_does_not_pause_for_player():
     runner = make_runner()
     runner.agents["A"] = ScriptedAgent(
         [
-            TurnOutput(
+            _LegacyTurnOutput(
                 has_something_to_say=True,
                 message="B, explain yourself.",
                 addressed_to="B",
@@ -551,7 +560,7 @@ def test_advance_ai_addressing_another_ai_does_not_pause_for_player():
         ]
     )
     runner.agents["B"] = ScriptedAgent(
-        [TurnOutput(has_something_to_say=True, message="I have nothing to hide.")]
+        [_LegacyTurnOutput(has_something_to_say=True, message="I have nothing to hide.")]
     )
     runner.queue = ["A", "Dana"]
 
@@ -566,7 +575,7 @@ def test_advance_bonus_reply_addressing_player_pauses_for_answer():
     runner = make_runner()
     runner.agents["A"] = ScriptedAgent(
         [
-            TurnOutput(
+            _LegacyTurnOutput(
                 has_something_to_say=True,
                 message="B, where were you?",
                 addressed_to="B",
@@ -575,7 +584,7 @@ def test_advance_bonus_reply_addressing_player_pauses_for_answer():
     )
     runner.agents["B"] = ScriptedAgent(
         [
-            TurnOutput(
+            _LegacyTurnOutput(
                 has_something_to_say=True,
                 message="Why don't you ask Dana instead?",
                 addressed_to="Dana",
@@ -597,7 +606,7 @@ def test_advance_defers_players_queued_turn_after_answering_direct_question():
     runner = make_runner()
     runner.agents["A"] = ScriptedAgent(
         [
-            TurnOutput(
+            _LegacyTurnOutput(
                 has_something_to_say=True,
                 message="Dana, where were you last night?",
                 addressed_to="Dana",
@@ -605,7 +614,7 @@ def test_advance_defers_players_queued_turn_after_answering_direct_question():
         ]
     )
     runner.agents["B"] = ScriptedAgent(
-        [TurnOutput(has_something_to_say=True, message="I agree with Dana.")]
+        [_LegacyTurnOutput(has_something_to_say=True, message="I agree with Dana.")]
     )
     runner.queue = ["A", "Dana", "B"]
 
@@ -625,10 +634,10 @@ def test_advance_defers_players_queued_turn_after_answering_direct_question():
 
 def test_advance_defers_ai_queued_turn_after_bonus_reply():
     runner = make_runner()
-    decline = TurnOutput(has_something_to_say=False)
+    decline = _LegacyTurnOutput(has_something_to_say=False)
     runner.agents["A"] = ScriptedAgent(
         [
-            TurnOutput(
+            _LegacyTurnOutput(
                 has_something_to_say=True,
                 message="B, explain yourself.",
                 addressed_to="B",
@@ -638,13 +647,13 @@ def test_advance_defers_ai_queued_turn_after_bonus_reply():
     )
     runner.agents["B"] = ScriptedAgent(
         [
-            TurnOutput(has_something_to_say=True, message="I have nothing to hide."),
-            TurnOutput(has_something_to_say=True, message="Anyway, moving on."),
+            _LegacyTurnOutput(has_something_to_say=True, message="I have nothing to hide."),
+            _LegacyTurnOutput(has_something_to_say=True, message="Anyway, moving on."),
             decline,
         ]
     )
     runner.agents["C"] = ScriptedAgent(
-        [TurnOutput(has_something_to_say=True, message="Interesting."), decline]
+        [_LegacyTurnOutput(has_something_to_say=True, message="Interesting."), decline]
     )
     runner.queue = ["A", "B", "C"]
 
@@ -662,7 +671,7 @@ def test_advance_player_bonus_reply_addressing_player_pauses_for_answer():
     runner = make_runner()
     runner.agents["A"] = ScriptedAgent(
         [
-            TurnOutput(
+            _LegacyTurnOutput(
                 has_something_to_say=True,
                 message="You're the only one who'd know.",
                 addressed_to="Dana",
@@ -683,7 +692,7 @@ def test_advance_player_bonus_reply_addressing_player_pauses_for_answer():
 def test_advance_records_decline_placeholder_and_completes_when_addressed_ai_declines():
     runner = make_runner()
     runner.address_resolver = StaticResolver("A")
-    runner.agents["A"] = ScriptedAgent([TurnOutput(has_something_to_say=False)])
+    runner.agents["A"] = ScriptedAgent([_LegacyTurnOutput(has_something_to_say=False)])
     runner.budgets = {"Dana": 1, "A": 1, "B": 0, "C": 0, "E": 0, "F": 0}
     runner.queue = ["Dana"]
 
@@ -698,7 +707,7 @@ def test_advance_records_decline_placeholder_and_completes_when_addressed_ai_dec
 
 def test_advance_ai_pass_costs_budget_but_gives_another_chance():
     runner = make_runner()
-    runner.agents["A"] = ScriptedAgent([TurnOutput(has_something_to_say=False)])
+    runner.agents["A"] = ScriptedAgent([_LegacyTurnOutput(has_something_to_say=False)])
     runner.queue = ["A", "Dana"]
     starting_budget = runner.budgets["A"]
 
@@ -719,7 +728,7 @@ def test_advance_bonus_reply_addressing_a_third_villager_also_gets_a_bonus_reply
     runner = make_runner()
     runner.agents["A"] = ScriptedAgent(
         [
-            TurnOutput(
+            _LegacyTurnOutput(
                 has_something_to_say=True,
                 message="B, where were you?",
                 addressed_to="B",
@@ -728,7 +737,7 @@ def test_advance_bonus_reply_addressing_a_third_villager_also_gets_a_bonus_reply
     )
     runner.agents["B"] = ScriptedAgent(
         [
-            TurnOutput(
+            _LegacyTurnOutput(
                 has_something_to_say=True,
                 message="Ask C, not me.",
                 addressed_to="C",
@@ -736,7 +745,7 @@ def test_advance_bonus_reply_addressing_a_third_villager_also_gets_a_bonus_reply
         ]
     )
     runner.agents["C"] = ScriptedAgent(
-        [TurnOutput(has_something_to_say=True, message="Fine, I'll answer.")]
+        [_LegacyTurnOutput(has_something_to_say=True, message="Fine, I'll answer.")]
     )
     runner.queue = ["A", "Dana"]
 
@@ -754,17 +763,17 @@ def test_advance_bonus_reply_chain_stops_on_repeat_to_avoid_ping_pong():
     runner = make_runner()
     runner.agents["A"] = ScriptedAgent(
         [
-            TurnOutput(
+            _LegacyTurnOutput(
                 has_something_to_say=True,
                 message="B, where were you?",
                 addressed_to="B",
             ),
-            TurnOutput(has_something_to_say=False),
+            _LegacyTurnOutput(has_something_to_say=False),
         ]
     )
     runner.agents["B"] = ScriptedAgent(
         [
-            TurnOutput(
+            _LegacyTurnOutput(
                 has_something_to_say=True,
                 message="Why don't you tell us, A?",
                 addressed_to="A",
@@ -782,7 +791,7 @@ def test_advance_bonus_reply_chain_stops_on_repeat_to_avoid_ping_pong():
 def test_advance_ai_pass_is_permanent_once_budget_is_exhausted():
     runner = make_runner()
     runner.budgets["A"] = 1
-    runner.agents["A"] = ScriptedAgent([TurnOutput(has_something_to_say=False)])
+    runner.agents["A"] = ScriptedAgent([_LegacyTurnOutput(has_something_to_say=False)])
     runner.queue = ["A", "Dana"]
 
     events = list(advance(runner))
@@ -791,3 +800,168 @@ def test_advance_ai_pass_is_permanent_once_budget_is_exhausted():
     assert runner.budgets["A"] == 0
     assert "A" in runner.passed
     assert events[-1] == AdvanceStatus.WAITING_FOR_TURN
+
+
+def make_discussion_state() -> GameState:
+    villagers = [
+        Villager(name="Dana", player_type="user"),
+        Villager(name="A", player_type="villager"),
+        Villager(name="B", player_type="villager"),
+    ]
+    return GameState(player_name="Dana", day_number=1, villagers=villagers)
+
+
+def _crew_result(*pydantic_outputs):
+    return SimpleNamespace(
+        tasks_output=[SimpleNamespace(pydantic=p) for p in pydantic_outputs]
+    )
+
+
+def _stub_agent() -> Agent:
+    """A minimal real Agent -- Task/Crew construction validates that `agent`
+    fields are actual Agent instances, so a plain object() won't do, even
+    though Crew.akickoff is mocked in these tests."""
+    return Agent(role="Stub", goal="stub", backstory="stub")
+
+
+def test_turn_output_has_no_addressed_to_field():
+    assert "addressed_to" not in TurnOutput.model_fields
+
+
+def test_record_message_appends_to_state_discussion_and_returns_it():
+    state = make_discussion_state()
+    msg = _record_message(state, "A", "hello", addressed_to="B")
+    assert state.discussion == [msg]
+    assert msg.speaker == "A"
+    assert msg.message == "hello"
+    assert msg.addressed_to == "B"
+    assert msg.day_number == 1
+
+
+def test_resolve_target_rejects_self_and_unknown_names():
+    state = make_discussion_state()
+    assert _resolve_target(None, state, exclude="A") is None
+    assert _resolve_target("A", state, exclude="A") is None
+    assert _resolve_target("Ghost", state, exclude="A") is None
+    assert _resolve_target("B", state, exclude="A") == "B"
+
+
+async def test_run_ai_turn_returns_none_on_scheduled_decline():
+    state = make_discussion_state()
+    with patch(
+        "the_village.discussion.Crew.akickoff",
+        new=AsyncMock(return_value=_crew_result(TurnOutput(has_something_to_say=False), None)),
+    ):
+        message = await _run_ai_turn(
+            speaker=_stub_agent(), analyst=_stub_agent(), state=state, name="A", addressed_by=None
+        )
+    assert message is None
+    assert state.discussion == []
+
+
+async def test_run_ai_turn_records_decline_placeholder_when_owed_a_reply():
+    state = make_discussion_state()
+    asking = _record_message(state, "B", "Where were you?", addressed_to="A")
+    with patch(
+        "the_village.discussion.Crew.akickoff",
+        new=AsyncMock(return_value=_crew_result(TurnOutput(has_something_to_say=False), None)),
+    ):
+        message = await _run_ai_turn(
+            speaker=_stub_agent(), analyst=_stub_agent(), state=state, name="A", addressed_by=asking
+        )
+    assert message.speaker == "A"
+    assert message.message == DECLINED_TO_RESPOND
+    assert message.addressed_to is None
+
+
+async def test_run_ai_turn_records_message_and_resolved_address():
+    state = make_discussion_state()
+    with patch(
+        "the_village.discussion.Crew.akickoff",
+        new=AsyncMock(
+            return_value=_crew_result(
+                TurnOutput(has_something_to_say=True, message="I saw B leave."),
+                AddressResolution(addressed_to="B"),
+            )
+        ),
+    ):
+        message = await _run_ai_turn(
+            speaker=_stub_agent(), analyst=_stub_agent(), state=state, name="A", addressed_by=None
+        )
+    assert message.message == "I saw B leave."
+    assert message.addressed_to == "B"
+    assert state.discussion == [message]
+
+
+async def test_run_ai_turn_discards_addressed_to_from_the_analyst_on_decline():
+    """Even if the analyst task somehow returns an address for a decline (it
+    still runs -- see the spec's resolved decision to keep one uniform
+    two-task Crew shape), a decline's recorded message must not carry it."""
+    state = make_discussion_state()
+    with patch(
+        "the_village.discussion.Crew.akickoff",
+        new=AsyncMock(
+            return_value=_crew_result(
+                TurnOutput(has_something_to_say=False), AddressResolution(addressed_to="B")
+            )
+        ),
+    ):
+        message = await _run_ai_turn(
+            speaker=_stub_agent(), analyst=_stub_agent(), state=state, name="A", addressed_by=None
+        )
+    assert message is None
+
+
+async def test_run_player_turn_returns_none_on_scheduled_pass():
+    # SessionBridge.resolve_input() is a no-op until wait_for_input() has a
+    # pending future (see test_bridge.py), so the task must reach its await
+    # point (a sleep(0) yield) before we resolve it -- calling resolve_input
+    # first would hang forever.
+    state = make_discussion_state()
+    bridge = SessionBridge()
+    task = asyncio.create_task(
+        _run_player_turn(
+            analyst=_stub_agent(), state=state, bridge=bridge, name="Dana", addressed_by=None
+        )
+    )
+    await asyncio.sleep(0)
+    bridge.resolve_input(PlayerInput(message=None))
+    message = await task
+    assert message is None
+    assert state.discussion == []
+
+
+async def test_run_player_turn_records_decline_placeholder_when_owed_a_reply():
+    state = make_discussion_state()
+    asking = _record_message(state, "A", "Where were you?", addressed_to="Dana")
+    bridge = SessionBridge()
+    task = asyncio.create_task(
+        _run_player_turn(
+            analyst=_stub_agent(), state=state, bridge=bridge, name="Dana", addressed_by=asking
+        )
+    )
+    await asyncio.sleep(0)
+    bridge.resolve_input(PlayerInput(message=None))
+    message = await task
+    assert message.message == DECLINED_TO_RESPOND
+    assert message.addressed_to is None
+
+
+async def test_run_player_turn_resolves_address_via_the_analyst():
+    state = make_discussion_state()
+    bridge = SessionBridge()
+    with patch(
+        "the_village.discussion.Crew.akickoff",
+        new=AsyncMock(return_value=_crew_result(AddressResolution(addressed_to="B"))),
+    ):
+        task = asyncio.create_task(
+            _run_player_turn(
+                analyst=_stub_agent(), state=state, bridge=bridge, name="Dana", addressed_by=None
+            )
+        )
+        await asyncio.sleep(0)
+        bridge.resolve_input(PlayerInput(message="B, where were you?"))
+        message = await task
+    assert message.speaker == "Dana"
+    assert message.message == "B, where were you?"
+    assert message.addressed_to == "B"

@@ -6,9 +6,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Iterator
 
-from crewai import Agent
+from crewai import Agent, Crew, Process, Task
 from pydantic import BaseModel, Field
 
+from the_village.bridge import SessionBridge
 from the_village.state import WEEKDAYS, DiscussionMessage, GameState, Villager
 
 logger = logging.getLogger(__name__)
@@ -142,10 +143,8 @@ def _active_participants(runner: DiscussionRunner) -> list[str]:
     ]
 
 
-def _last_speaker_today(runner: DiscussionRunner) -> str | None:
-    today_messages = [
-        m for m in runner.state.discussion if m.day_number == runner.state.day_number
-    ]
+def _last_speaker_today(state: GameState) -> str | None:
+    today_messages = [m for m in state.discussion if m.day_number == state.day_number]
     return today_messages[-1].speaker if today_messages else None
 
 
@@ -176,16 +175,14 @@ def _avoid_immediate_repeat(
 def _build_round(runner: DiscussionRunner) -> list[str]:
     order = _active_participants(runner)
     runner.rng.shuffle(order)
-    _avoid_immediate_repeat(order, _last_speaker_today(runner), runner.rng)
+    _avoid_immediate_repeat(order, _last_speaker_today(runner.state), runner.rng)
     return order
 
 
-def _resolve_target(
-    candidate: str | None, runner: DiscussionRunner, exclude: str
-) -> str | None:
+def _resolve_target(candidate: str | None, state: GameState, exclude: str) -> str | None:
     if not candidate or candidate == exclude:
         return None
-    if candidate not in runner.budgets:
+    if candidate not in _living_participant_names(state):
         return None
     return candidate
 
@@ -194,33 +191,14 @@ class TurnOutput(BaseModel):
     has_something_to_say: bool = Field(
         description=(
             "Whether you have something to say right now. False means you'll "
-            "sit this turn out — you may still be asked again later, but only "
-            "a limited number of times, so don't decline lightly."
+            "sit this turn out."
         )
     )
     message: str | None = Field(
         default=None,
         description=(
             "What you say, if you have something to say. Keep it to one or "
-            "two sentences — brief, like real spoken dialogue."
-        ),
-    )
-    addressed_to: str | None = Field(
-        default=None,
-        description=(
-            "The name of the living villager you are asking something of or "
-            "accusing right now, if any -- someone you need a response from. "
-            "Acknowledging or replying to someone earlier in your message "
-            "doesn't count on its own; what matters is who your actual "
-            "question or demand, if you have one, is aimed at. Leave unset if "
-            "you're not asking anything of anyone in particular, including "
-            "when you're posing a question to the whole group rather than one "
-            "person. For example, if you're replying to someone who just "
-            "asked you something, and you say \"I was just trying to "
-            "listen, Don. But I noticed Hattie seemed anxious,\" that's "
-            "answering Don, not addressing him -- leave this unset (or "
-            "name Hattie only if you're actually asking her something, "
-            "which you aren't here)."
+            "two sentences -- brief, like real spoken dialogue."
         ),
     )
 
@@ -285,15 +263,59 @@ def _build_prompt(
     return "\n".join(parts)
 
 
+class _LegacyTurnOutput(BaseModel):
+    """`TurnOutput` for the old `DiscussionRunner`/`advance()` mechanism only.
+
+    That mechanism resolves `addressed_to` inline as part of the speaker's
+    own turn, unlike the new turn-`Crew` machinery below (`_run_ai_turn`),
+    which resolves it via a separate analyst `Task`. `TurnOutput` itself
+    dropped this field once the analyst step took over that job, so this
+    keeps the old mechanism working, unchanged, until Task 4 deletes it.
+    """
+
+    has_something_to_say: bool = Field(
+        description=(
+            "Whether you have something to say right now. False means you'll "
+            "sit this turn out — you may still be asked again later, but only "
+            "a limited number of times, so don't decline lightly."
+        )
+    )
+    message: str | None = Field(
+        default=None,
+        description=(
+            "What you say, if you have something to say. Keep it to one or "
+            "two sentences — brief, like real spoken dialogue."
+        ),
+    )
+    addressed_to: str | None = Field(
+        default=None,
+        description=(
+            "The name of the living villager you are asking something of or "
+            "accusing right now, if any -- someone you need a response from. "
+            "Acknowledging or replying to someone earlier in your message "
+            "doesn't count on its own; what matters is who your actual "
+            "question or demand, if you have one, is aimed at. Leave unset if "
+            "you're not asking anything of anyone in particular, including "
+            "when you're posing a question to the whole group rather than one "
+            "person. For example, if you're replying to someone who just "
+            "asked you something, and you say \"I was just trying to "
+            "listen, Don. But I noticed Hattie seemed anxious,\" that's "
+            "answering Don, not addressing him -- leave this unset (or "
+            "name Hattie only if you're actually asking her something, "
+            "which you aren't here)."
+        ),
+    )
+
+
 def _ask_agent(
     agent: Agent,
     state: GameState,
     addressed_by: DiscussionMessage | None,
     budget: int,
-) -> TurnOutput:
+) -> _LegacyTurnOutput:
     prompt = _build_prompt(state, addressed_by, budget)
-    output = agent.kickoff(prompt, response_format=TurnOutput)
-    return output.pydantic or TurnOutput(has_something_to_say=False)
+    output = agent.kickoff(prompt, response_format=_LegacyTurnOutput)
+    return output.pydantic or _LegacyTurnOutput(has_something_to_say=False)
 
 
 def _infer_player_target(runner: DiscussionRunner, message: str) -> str | None:
@@ -353,7 +375,7 @@ def _generate_bonus_reply(
             speaker=msg.addressed_to,
             message=output.message,
             addressed_to=_resolve_target(
-                output.addressed_to, runner, exclude=msg.addressed_to
+                output.addressed_to, runner.state, exclude=msg.addressed_to
             ),
         )
     runner.state.discussion.append(reply)
@@ -406,7 +428,7 @@ def advance(
         runner.awaiting_reply_from = None
         if player_input and not player_pass:
             addressed_to = _resolve_target(
-                _infer_player_target(runner, player_input), runner, exclude=player
+                _infer_player_target(runner, player_input), runner.state, exclude=player
             )
             msg = DiscussionMessage(
                 day_number=state.day_number,
@@ -435,7 +457,7 @@ def advance(
                 runner.passed.add(player)
         else:
             addressed_to = _resolve_target(
-                _infer_player_target(runner, player_input), runner, exclude=player
+                _infer_player_target(runner, player_input), runner.state, exclude=player
             )
             msg = DiscussionMessage(
                 day_number=state.day_number,
@@ -465,7 +487,7 @@ def _run_ai_turns(
             if not active:
                 yield AdvanceStatus.COMPLETE
                 return
-            if len(active) == 1 and active[0] == _last_speaker_today(runner):
+            if len(active) == 1 and active[0] == _last_speaker_today(runner.state):
                 # The lone active participant would just be repeating
                 # themselves with no one else able to join — end instead.
                 yield AdvanceStatus.COMPLETE
@@ -473,7 +495,7 @@ def _run_ai_turns(
             runner.queue = _build_round(runner)
 
         unresolved = _avoid_immediate_repeat(
-            runner.queue, _last_speaker_today(runner), runner.rng
+            runner.queue, _last_speaker_today(runner.state), runner.rng
         )
         if unresolved:
             # The only entry left in this round's queue is the last speaker,
@@ -500,7 +522,7 @@ def _run_ai_turns(
                 runner.passed.add(next_name)
             continue
 
-        addressed_to = _resolve_target(output.addressed_to, runner, exclude=next_name)
+        addressed_to = _resolve_target(output.addressed_to, runner.state, exclude=next_name)
         msg = DiscussionMessage(
             day_number=state.day_number,
             speaker=next_name,
@@ -518,3 +540,141 @@ def _run_ai_turns(
             paused = yield from _run_bonus_reply(runner, msg)
             if paused:
                 return
+
+
+def _record_message(
+    state: GameState, speaker: str, message: str, addressed_to: str | None
+) -> DiscussionMessage:
+    msg = DiscussionMessage(
+        day_number=state.day_number,
+        speaker=speaker,
+        message=message,
+        addressed_to=addressed_to,
+    )
+    state.discussion.append(msg)
+    return msg
+
+
+def _build_speak_prompt(state: GameState, addressed_by: DiscussionMessage | None) -> str:
+    living_names = _living_participant_names(state)
+    parts = [
+        "Known facts:",
+        _format_deaths(state),
+        "",
+        f"Living villagers: {', '.join(living_names)}, including "
+        f"{state.player_name} (the human player).",
+        "",
+        "Discussion so far:",
+        _format_history(state),
+        "",
+    ]
+    if addressed_by is not None:
+        parts.append(
+            f'{addressed_by.speaker} just said to you: "{addressed_by.message}" '
+            "Respond directly to this."
+        )
+    else:
+        parts.append(
+            "It's your turn. Decide whether you have something to say -- a "
+            "statement, question, or accusation. If you have nothing to add, "
+            "say so."
+        )
+    return "\n".join(parts)
+
+
+def _build_analyze_prompt() -> str:
+    return (
+        "Determine who, if anyone, the message you were just given as "
+        "context is directed at. If the speaker had nothing to say, there "
+        "is nothing to analyze -- leave addressed_to unset."
+    )
+
+
+def _build_player_analyze_prompt(state: GameState, message: str) -> str:
+    candidates = [n for n in _living_participant_names(state) if n != state.player_name]
+    return "\n".join(
+        [
+            "Known facts:",
+            _format_deaths(state),
+            "",
+            f"Living villagers: {', '.join(candidates)}.",
+            "",
+            "Discussion so far:",
+            _format_history(state),
+            "",
+            f'{state.player_name} just said: "{message}"',
+            "Who, if anyone, is this message directed at? A name that's "
+            "merely mentioned doesn't count -- only someone actually being "
+            "spoken to.",
+        ]
+    )
+
+
+async def _run_ai_turn(
+    speaker: Agent,
+    analyst: Agent,
+    state: GameState,
+    name: str,
+    addressed_by: DiscussionMessage | None,
+) -> DiscussionMessage | None:
+    speak_task = Task(
+        description=_build_speak_prompt(state, addressed_by),
+        agent=speaker,
+        expected_output="A TurnOutput saying whether you have something to say.",
+        output_pydantic=TurnOutput,
+    )
+    analyze_task = Task(
+        description=_build_analyze_prompt(),
+        agent=analyst,
+        expected_output="An AddressResolution naming who, if anyone, was addressed.",
+        output_pydantic=AddressResolution,
+        context=[speak_task],
+    )
+    crew = Crew(
+        agents=[speaker, analyst], tasks=[speak_task, analyze_task], process=Process.sequential
+    )
+    result = await crew.akickoff()
+    turn = result.tasks_output[0].pydantic or TurnOutput(has_something_to_say=False)
+
+    if not turn.has_something_to_say or not turn.message:
+        if addressed_by is None:
+            return None
+        return _record_message(state, name, DECLINED_TO_RESPOND, addressed_to=None)
+
+    resolution = result.tasks_output[1].pydantic or AddressResolution(addressed_to=None)
+    addressed_to = _resolve_target(resolution.addressed_to, state, exclude=name)
+    return _record_message(state, name, turn.message, addressed_to)
+
+
+async def _resolve_player_address(
+    analyst: Agent, state: GameState, message: str, exclude: str
+) -> str | None:
+    task = Task(
+        description=_build_player_analyze_prompt(state, message),
+        agent=analyst,
+        expected_output="An AddressResolution naming who, if anyone, was addressed.",
+        output_pydantic=AddressResolution,
+    )
+    crew = Crew(agents=[analyst], tasks=[task])
+    result = await crew.akickoff()
+    resolution = result.tasks_output[0].pydantic or AddressResolution(addressed_to=None)
+    return _resolve_target(resolution.addressed_to, state, exclude=exclude)
+
+
+async def _run_player_turn(
+    analyst: Agent,
+    state: GameState,
+    bridge: SessionBridge,
+    name: str,
+    addressed_by: DiscussionMessage | None,
+) -> DiscussionMessage | None:
+    player_input = await bridge.wait_for_input()
+    if player_input.message is None:
+        if addressed_by is None:
+            return None
+        return _record_message(state, name, DECLINED_TO_RESPOND, addressed_to=None)
+
+    addressed_to = await _resolve_player_address(
+        analyst, state, player_input.message, exclude=name
+    )
+    return _record_message(state, name, player_input.message, addressed_to)
