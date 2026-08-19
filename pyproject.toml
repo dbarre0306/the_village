@@ -21,6 +21,7 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 
 [tool.crewai]
 type = "flow"
@@ -29,4 +30,5 @@ project_id = "981d9c72-8027-4962-b017-a879533e5883"
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "pytest-asyncio>=0.24.0",
 ]
