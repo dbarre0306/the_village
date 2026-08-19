@@ -10,7 +10,7 @@ this, reasoning that turn-taking bookkeeping (budgets, pass tracking, bonus
 replies) didn't fit a `Crew`'s `Process`, and that `Flow` steps run to
 completion in one `kickoff()` with no way to pause for a Gradio request.
 
-This design replaces that approach. The goal now is explicitly to *use*
+This design replaces that approach. The goal now is explicitly to _use_
 `Crew`s and a `Flow` for the discussion mechanism, as a deliberate exercise
 in the framework's real orchestration primitives rather than working around
 them — while keeping the scope bounded to what today's design covers:
@@ -31,7 +31,7 @@ Explicitly out of scope:
 
 - Lynch voting (`voting.py`) is untouched. It continues to be invoked
   directly by `ui.py`, exactly as it works today, outside of any `Flow`.
-- The day 2+ discussion *loop* (running this whole mechanism again on a
+- The day 2+ discussion _loop_ (running this whole mechanism again on a
   later day) — this design covers a single day's two-round discussion; nothing
   here blocks reusing it for later days.
 - Cleaning up an abandoned background task if a player closes their browser
@@ -99,12 +99,12 @@ Built once per day's discussion, reused across every turn:
   `player_type`, a werewolf's backstory includes their packmate's name).
 - One shared Conversation Analyst `Agent` (existing backstory/prompt,
   unchanged) — the one agent that determines who, if anyone, a message
-  addresses.
+  addresses. If more than one player is addressed, randomly select one.
 
 A single utterance is a `Crew` with `process=Process.sequential`:
 
 - **AI speaker** (villager or werewolf): `Crew(agents=[speaker, analyst],
-  tasks=[speak_task, analyze_task])`. `speak_task` asks the speaker for a
+tasks=[speak_task, analyze_task])`. `speak_task` asks the speaker for a
   `TurnOutput` (has something to say? if so, what?). `analyze_task`
   automatically receives `speak_task`'s output as context (native
   sequential chaining — no manual prompt-stitching needed) and returns
@@ -120,9 +120,9 @@ Concurrency, below) — never `crew.kickoff()` or `crew.kickoff_async()`.
 When a speaker declines (`has_something_to_say=False`), `analyze_task`
 still runs — its prompt handles "there's nothing to analyze" by leaving
 `addressed_to` unset. This costs one redundant LLM call per decline in
-exchange for a single uniform two-task shape for every AI turn; worth
-revisiting later if that cost matters, but not a reason to special-case the
-`Crew`'s task list now.
+exchange for a single uniform two-task shape for every AI turn. Decision:
+leave it this way — no conditional task, no special-casing the `Crew`'s
+task list to skip analysis on a decline.
 
 ## `DiscussionFlow`
 
@@ -132,7 +132,7 @@ below) and a reference to the day's `GameState`. Runs exactly two rounds.
 Each round:
 
 1. Build the round order: every living participant (AI + player), shuffled.
-   Apply the existing "avoid immediate repeat" swap against the *previous*
+   Apply the existing "avoid immediate repeat" swap against the _previous_
    utterance's speaker (tracked across the whole day, not reset between
    rounds — so round 2 doesn't open with whoever closed round 1).
 2. Walk the order. For each name: run their turn-Crew (via the player-input
@@ -143,7 +143,7 @@ Each round:
 3. If the message resolved an `addressed_to`, resolve the bonus-reply chain
    before continuing the main order: run a turn-Crew for whoever was
    addressed (or, if that's the player, pause for their reply the same way
-   a scheduled player turn does), and repeat if *that* reply itself
+   a scheduled player turn does), and repeat if _that_ reply itself
    addresses someone new — guarded by the same `chain: frozenset[str]`
    cycle-tracking the current design uses, so a chain terminates instead of
    ping-ponging forever.
@@ -200,7 +200,7 @@ only after this task completes, driven by `ui.py` exactly as today.
 ## Async execution & the Gradio bridge
 
 One object, built fresh per session and threaded through both `VillageFlow`
-and `DiscussionFlow`, reused for *every* pause point (the death-announcement
+and `DiscussionFlow`, reused for _every_ pause point (the death-announcement
 gate, each scheduled player turn, each player bonus-reply):
 
 ```python
@@ -258,11 +258,11 @@ one person playing at once:
   concurrent workloads. Every turn-`Crew` call in this design uses
   `akickoff()`.
 - **Dropping the shared `concurrency_id`.** Gradio's docs confirm
-  `concurrency_id`/`concurrency_limit` is a pool shared *globally across all
-  users* of that id, not scoped per session. Today's code sets
+  `concurrency_id`/`concurrency_limit` is a pool shared _globally across all
+  users_ of that id, not scoped per session. Today's code sets
   `concurrency_id="discussion_turn"` on the begin/send/submit/pass
   handlers — meaning, right now, only one discussion-turn handler call can
-  run at a time across *every* concurrent player, an existing bug this
+  run at a time across _every_ concurrent player, an existing bug this
   redesign fixes rather than carries forward. Replacement: each handler
   checks whether this session's `bridge.pending_input` is already set/
   pending before acting, and no-ops otherwise (mirroring the existing
@@ -287,6 +287,26 @@ one person playing at once:
   stream, not how it's rendered.
 - Voting wiring (`begin_voting`, `cast_player_vote`, `cast_player_abstain`)
   is untouched.
+
+## `main.py` — CLI entry points
+
+`kickoff()` and `plot()` (used by `crewai run`/`crewai test` per
+`AGENTS.md`) are updated alongside `VillageFlow`, not left behind as
+Gradio-only:
+
+- `plot()` is unaffected — it introspects the step graph without executing
+  it, independent of how steps run.
+- `kickoff()` becomes `async def`, driven via `asyncio.run(...)`. It builds
+  a `SessionBridge` backed by an auto-play consumer instead of a Gradio
+  session: a background task drains `bridge.outbox` (printing each message,
+  same spirit as today's `model_dump_json` dump at the end) and, the moment
+  `bridge.pending_input` is set, immediately resolves it with an empty/
+  passing `PlayerInput()`. This lets `VillageFlow` run to completion
+  unattended — every pause point (the death-announcement gate, every
+  player turn) auto-passes — so `crewai run` stays a working smoke test of
+  the full setup → night → two-round-discussion pipeline without requiring
+  a live Gradio session. Real interactive play remains exclusively through
+  `ui.py`, where a live `pending_input` is resolved by actual clicks.
 
 ## Error Handling
 
@@ -331,13 +351,6 @@ one person playing at once:
 - Manual pass in the browser with two browser sessions open concurrently:
   confirm one session's discussion doesn't block or interleave with the
   other's.
-
-## Open Questions
-
-- Should the redundant `analyze_task` call on a decline (see Agents &
-  the turn-Crew) be optimized away now via a conditional task, or left as
-  documented, simple, slightly wasteful behavior for this pass?
-- `main.py`'s current `kickoff()`/`plot()` CLI entry points call
-  `VillageFlow` synchronously for local testing outside Gradio — these need
-  an async-compatible replacement (or an `asyncio.run()` wrapper) once
-  `VillageFlow` itself becomes async-native.
+- `main.py`'s `kickoff()`: with the auto-play `SessionBridge`, a full run
+  completes without hanging and produces a `GameState` with two rounds'
+  worth of (all-decline) `DiscussionMessage`s.
