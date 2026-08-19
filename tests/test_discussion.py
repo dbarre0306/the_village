@@ -10,6 +10,7 @@ from the_village.discussion import (
     INITIAL_BUDGET,
     AddressResolution,
     AdvanceStatus,
+    DiscussionFlow,
     DiscussionRunner,
     TurnOutput,
     _active_participants,
@@ -28,7 +29,7 @@ from the_village.discussion import (
     advance,
     start_discussion,
 )
-from the_village.bridge import PlayerInput, SessionBridge
+from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
 from the_village.state import Death, DiscussionMessage, GameState, Villager
 
 
@@ -965,3 +966,140 @@ async def test_run_player_turn_resolves_address_via_the_analyst():
     assert message.speaker == "Dana"
     assert message.message == "B, where were you?"
     assert message.addressed_to == "B"
+
+
+def make_discussion_flow_state() -> GameState:
+    villagers = [
+        Villager(name="Dana", player_type="user"),
+        Villager(name="A", player_type="villager"),
+        Villager(name="B", player_type="villager"),
+        Villager(name="C", player_type="werewolf", is_pack_leader=True),
+        Villager(name="D", player_type="werewolf"),
+    ]
+    return GameState(player_name="Dana", day_number=1, villagers=villagers)
+
+
+def _decline_result():
+    return _crew_result(TurnOutput(has_something_to_say=False), None)
+
+
+async def test_discussion_flow_runs_two_rounds_where_everyone_gets_a_turn():
+    bridge = SessionBridge()
+
+    async def auto_pass(*_args, **_kwargs):
+        return PlayerInput(message=None)
+
+    with (
+        patch("the_village.discussion.Crew.akickoff", new=AsyncMock(return_value=_decline_result())),
+        patch.object(SessionBridge, "wait_for_input", auto_pass),
+    ):
+        flow = DiscussionFlow(bridge=bridge, rng=random.Random(1))
+        transcript = await flow.kickoff_async(inputs=make_discussion_flow_state().model_dump())
+
+    # Everyone declines every turn in this test, so no DiscussionMessages are
+    # recorded -- what's under test is that the flow runs to completion
+    # (doesn't hang) across two full rounds without error.
+    assert transcript == []
+
+
+async def test_discussion_flow_pushes_agents_onto_the_bridge():
+    bridge = SessionBridge()
+
+    async def auto_pass(*_args, **_kwargs):
+        return PlayerInput(message=None)
+
+    with (
+        patch("the_village.discussion.Crew.akickoff", new=AsyncMock(return_value=_decline_result())),
+        patch.object(SessionBridge, "wait_for_input", auto_pass),
+    ):
+        flow = DiscussionFlow(bridge=bridge, rng=random.Random(1))
+        await flow.kickoff_async(inputs=make_discussion_flow_state().model_dump())
+
+    assert set(bridge.agents.keys()) == {"A", "B", "C", "D"}
+
+
+class NoShuffleRandom:
+    """A `random.Random` stand-in whose `shuffle` is a no-op, so a round's
+    order is exactly `_living_participant_names`' insertion order -- lets a
+    test assert on *which* participant produces which scripted response
+    without depending on a real shuffle's output for a given seed."""
+
+    def shuffle(self, _seq):
+        pass
+
+    def randrange(self, start, _stop):
+        return start
+
+
+async def test_discussion_flow_resolves_a_bonus_reply_chain():
+    bridge = SessionBridge()
+    # make_discussion_flow_state()'s villagers list is [Dana, A, B, C, D];
+    # with no shuffling, round order is exactly that -- Dana first (the
+    # player, auto-passes below), then A, whose scripted response addresses
+    # B; B's own scripted decline stops the chain there.
+    state = make_discussion_flow_state()
+
+    speak_and_address_b = _crew_result(
+        TurnOutput(has_something_to_say=True, message="B, where were you?"),
+        AddressResolution(addressed_to="B"),
+    )
+    responses = iter([speak_and_address_b] + [_decline_result()] * 20)
+
+    async def scripted_akickoff(*_args, **_kwargs):
+        return next(responses)
+
+    async def auto_pass(*_args, **_kwargs):
+        return PlayerInput(message=None)
+
+    with (
+        patch("the_village.discussion.Crew.akickoff", new=scripted_akickoff),
+        patch.object(SessionBridge, "wait_for_input", auto_pass),
+    ):
+        flow = DiscussionFlow(bridge=bridge, rng=NoShuffleRandom())
+        transcript = await flow.kickoff_async(inputs=state.model_dump())
+
+    addressed_messages = [m for m in transcript if m.message == "B, where were you?"]
+    assert len(addressed_messages) == 1
+    assert addressed_messages[0].speaker == "A"
+    assert addressed_messages[0].addressed_to == "B"
+    decline_replies = [
+        m for m in transcript if m.speaker == "B" and m.message == DECLINED_TO_RESPOND
+    ]
+    assert len(decline_replies) == 1
+
+
+async def test_discussion_flow_pauses_for_player_and_resumes():
+    bridge = SessionBridge()
+    state = make_discussion_flow_state()
+
+    async def scripted_akickoff(*_args, **_kwargs):
+        return _decline_result()
+
+    with patch("the_village.discussion.Crew.akickoff", new=scripted_akickoff):
+        flow = DiscussionFlow(bridge=bridge, rng=random.Random(1))
+        task = asyncio.create_task(flow.kickoff_async(inputs=state.model_dump()))
+
+        # Drain the outbox for the whole run, answering every player-turn
+        # pause immediately. The flow asks the player once per round (two
+        # rounds total), so more than one pause is expected here -- race
+        # each outbox.get() against the flow task itself so a final
+        # completion with nothing left in the outbox doesn't leave this
+        # loop blocked on a get() that will never resolve.
+        seen_waiting_for_turn = False
+        while not task.done():
+            get_item = asyncio.ensure_future(bridge.outbox.get())
+            done, _pending = await asyncio.wait(
+                {task, get_item}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if get_item not in done:
+                get_item.cancel()
+                break
+            item = get_item.result()
+            if item == FlowStatus.WAITING_FOR_TURN:
+                seen_waiting_for_turn = True
+                bridge.resolve_input(PlayerInput(message=None))
+        assert seen_waiting_for_turn
+
+        transcript = await task
+
+    assert isinstance(transcript, list)

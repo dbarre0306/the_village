@@ -7,9 +7,10 @@ from enum import Enum
 from typing import Iterator
 
 from crewai import Agent, Crew, Process, Task
+from crewai.flow import Flow, start
 from pydantic import BaseModel, Field
 
-from the_village.bridge import SessionBridge
+from the_village.bridge import FlowStatus, SessionBridge
 from the_village.state import WEEKDAYS, DiscussionMessage, GameState, Villager
 
 logger = logging.getLogger(__name__)
@@ -678,3 +679,73 @@ async def _run_player_turn(
         analyst, state, player_input.message, exclude=name
     )
     return _record_message(state, name, player_input.message, addressed_to)
+
+
+class DiscussionFlow(Flow[GameState]):
+    def __init__(self, bridge: SessionBridge, rng: random.Random | None = None):
+        super().__init__()
+        self.bridge = bridge
+        self.rng = rng or random.Random()
+        self._speaker_agents: dict[str, Agent] = {}
+        self._analyst: Agent = _build_address_resolver()
+
+    @start()
+    async def run_rounds(self) -> list[DiscussionMessage]:
+        living_ai = [
+            v
+            for v in self.state.villagers
+            if v.is_alive and v.player_type in ("villager", "werewolf")
+        ]
+        self._speaker_agents = {
+            v.name: _build_agent(v, self.state.villagers) for v in living_ai
+        }
+        self.bridge.agents = self._speaker_agents
+
+        for _ in range(2):
+            await self._run_round()
+
+        return self.state.discussion
+
+    async def _run_round(self) -> None:
+        order = _living_participant_names(self.state)
+        self.rng.shuffle(order)
+        while order:
+            if _avoid_immediate_repeat(order, _last_speaker_today(self.state), self.rng):
+                # The only entry left in this round would repeat the last
+                # speaker and no one else is available to swap in -- skip
+                # them for this round rather than force a repeat; round two
+                # covers everyone again regardless.
+                order.pop(0)
+                continue
+            name = order.pop(0)
+            message = await self._run_turn(name, addressed_by=None)
+            if message is not None:
+                await self.bridge.outbox.put(message)
+                await self._resolve_address_chain(message)
+
+    async def _run_turn(
+        self, name: str, addressed_by: DiscussionMessage | None
+    ) -> DiscussionMessage | None:
+        if name == self.state.player_name:
+            status = FlowStatus.WAITING_FOR_ANSWER if addressed_by else FlowStatus.WAITING_FOR_TURN
+            await self.bridge.outbox.put(status)
+            return await _run_player_turn(
+                self._analyst, self.state, self.bridge, name, addressed_by
+            )
+        return await _run_ai_turn(
+            self._speaker_agents[name], self._analyst, self.state, name, addressed_by
+        )
+
+    async def _resolve_address_chain(
+        self, message: DiscussionMessage, chain: frozenset[str] = frozenset()
+    ) -> None:
+        if message.addressed_to is None:
+            return
+        target = message.addressed_to
+        reply = await self._run_turn(target, addressed_by=message)
+        if reply is None:
+            return
+        await self.bridge.outbox.put(reply)
+        chain = chain | {message.speaker, target}
+        if reply.addressed_to is not None and reply.addressed_to not in chain:
+            await self._resolve_address_chain(reply, chain)
