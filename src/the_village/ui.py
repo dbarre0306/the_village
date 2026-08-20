@@ -670,24 +670,28 @@ def build_app() -> gr.Blocks:
             fn=begin_discussion,
             inputs=[session_bridge, game_state],
             outputs=discussion_outputs,
+            concurrency_limit=None,
         )
 
         send_button.click(
             fn=send_discussion_turn,
             inputs=[session_bridge, game_state, discussion_textbox],
             outputs=discussion_outputs,
+            concurrency_limit=None,
         )
 
         discussion_textbox.submit(
             fn=send_discussion_turn,
             inputs=[session_bridge, game_state, discussion_textbox],
             outputs=discussion_outputs,
+            concurrency_limit=None,
         )
 
         pass_button.click(
             fn=pass_discussion_turn,
             inputs=[session_bridge, game_state],
             outputs=discussion_outputs,
+            concurrency_limit=None,
         )
 
         begin_voting_button.click(
