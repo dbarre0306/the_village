@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
 
 from crewai import Agent
+
+logger = logging.getLogger(__name__)
 
 
 class FlowStatus(str, Enum):
@@ -67,4 +70,5 @@ async def run_flow(coro, bridge: SessionBridge) -> None:
         await coro
     except Exception as exc:  # noqa: BLE001 -- deliberately broad: anything
         # from here must reach the player via the outbox, not vanish.
+        logger.exception("Background flow failed")
         await bridge.outbox.put(FlowFailed(detail=str(exc)))
