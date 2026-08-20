@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import asyncio
+import logging
 
 from crewai.flow import Flow, listen, start
 
@@ -8,6 +9,8 @@ from the_village.discussion import DiscussionFlow
 from the_village.night import resolve_night_one
 from the_village.roster import build_initial_roster
 from the_village.state import GameState
+
+logger = logging.getLogger(__name__)
 
 
 class VillageFlow(Flow[GameState]):
@@ -32,10 +35,17 @@ class VillageFlow(Flow[GameState]):
 
     @listen(announce_death)
     async def run_discussion(self):
+        logger.debug("VillageFlow.run_discussion: flow=%s bridge=%s entering", id(self), id(self.bridge))
         transcript = await DiscussionFlow(bridge=self.bridge).kickoff_async(
             inputs=self.state.model_dump()
         )
         self.state.discussion = transcript
+        logger.debug(
+            "VillageFlow.run_discussion: flow=%s bridge=%s discussion flow returned, transcript len=%s",
+            id(self),
+            id(self.bridge),
+            len(transcript),
+        )
         await self.bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
 
 

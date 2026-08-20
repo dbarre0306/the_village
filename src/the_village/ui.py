@@ -356,6 +356,7 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
     try:
         while True:
             item = await bridge.outbox.get()
+            logger.debug("_stream_bridge: bridge=%s got item=%r", id(bridge), item)
             if isinstance(item, FlowFailed):
                 raise gr.Error("Something went wrong, please try again.")
             if isinstance(item, DiscussionMessage):

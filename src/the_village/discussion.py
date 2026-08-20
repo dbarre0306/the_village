@@ -114,6 +114,14 @@ def _record_message(
         addressed_to=addressed_to,
     )
     state.discussion.append(msg)
+    logger.debug(
+        "_record_message: state=%s day=%s speaker=%s addressed_to=%s message=%r",
+        id(state),
+        state.day_number,
+        speaker,
+        addressed_to,
+        message,
+    )
     return msg
 
 
@@ -252,6 +260,12 @@ class DiscussionFlow(Flow[GameState]):
 
     @start()
     async def run_rounds(self) -> list[DiscussionMessage]:
+        logger.debug(
+            "DiscussionFlow.run_rounds: flow=%s bridge=%s day=%s",
+            id(self),
+            id(self.bridge),
+            self.state.day_number,
+        )
         living_ai = [
             v
             for v in self.state.villagers
@@ -262,7 +276,8 @@ class DiscussionFlow(Flow[GameState]):
         }
         self.bridge.agents = self._speaker_agents
 
-        for _ in range(2):
+        for round_number in range(2):
+            logger.debug("DiscussionFlow.run_rounds: flow=%s starting round %s", id(self), round_number)
             await self._run_round()
 
         return self.state.discussion
@@ -270,6 +285,7 @@ class DiscussionFlow(Flow[GameState]):
     async def _run_round(self) -> None:
         order = _living_participant_names(self.state)
         self.rng.shuffle(order)
+        logger.debug("DiscussionFlow._run_round: flow=%s order=%s", id(self), order)
         while order:
             if _avoid_immediate_repeat(order, _last_speaker_today(self.state), self.rng):
                 # The only entry left in this round would repeat the last
@@ -281,6 +297,13 @@ class DiscussionFlow(Flow[GameState]):
             name = order.pop(0)
             message = await self._run_turn(name, addressed_by=None)
             if message is not None:
+                logger.debug(
+                    "DiscussionFlow._run_round: flow=%s putting message=%s speaker=%s day=%s",
+                    id(self),
+                    id(message),
+                    message.speaker,
+                    message.day_number,
+                )
                 await self.bridge.outbox.put(message)
                 await self._resolve_address_chain(message)
 
@@ -300,12 +323,26 @@ class DiscussionFlow(Flow[GameState]):
     async def _resolve_address_chain(
         self, message: DiscussionMessage, chain: frozenset[str] = frozenset()
     ) -> None:
+        logger.debug(
+            "DiscussionFlow._resolve_address_chain: flow=%s speaker=%s addressed_to=%s chain=%s",
+            id(self),
+            message.speaker,
+            message.addressed_to,
+            chain,
+        )
         if message.addressed_to is None:
             return
         target = message.addressed_to
         reply = await self._run_turn(target, addressed_by=message)
         if reply is None:
             return
+        logger.debug(
+            "DiscussionFlow._resolve_address_chain: flow=%s putting reply=%s speaker=%s day=%s",
+            id(self),
+            id(reply),
+            reply.speaker,
+            reply.day_number,
+        )
         await self.bridge.outbox.put(reply)
         chain = chain | {message.speaker, target}
         if reply.addressed_to is not None and reply.addressed_to not in chain:
