@@ -26,7 +26,7 @@ crewai install
 - Modify `src/the_village/config/agents.yaml` to define your agents
 - Modify `src/the_village/config/tasks.yaml` to define your tasks
 - Modify `src/the_village/crew.py` to add your own logic, tools and specific args
-- Modify `src/the_village/main.py` to add custom inputs for your agents and tasks
+- Modify `src/the_village/village_flow.py` to add custom inputs for your agents and tasks
 
 ## Running the Project
 

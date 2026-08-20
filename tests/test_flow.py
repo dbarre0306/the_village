@@ -2,7 +2,7 @@
 import asyncio
 
 from the_village.bridge import PlayerInput, SessionBridge
-from the_village.main import VillageFlow
+from the_village.village_flow import VillageFlow
 
 
 async def test_village_flow_produces_valid_night_one_result_and_pauses_for_discussion():

@@ -10,9 +10,9 @@ dependencies = [
 ]
 
 [project.scripts]
-kickoff = "the_village.main:kickoff"
-run_crew = "the_village.main:kickoff"
-plot = "the_village.main:plot"
+kickoff = "the_village.village_flow:kickoff"
+run_crew = "the_village.village_flow:kickoff"
+plot = "the_village.village_flow:plot"
 app = "the_village.ui:main"
 
 [build-system]

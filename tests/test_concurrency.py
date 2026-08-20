@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
 from the_village.discussion import AddressResolution, TurnOutput
-from the_village.main import VillageFlow
+from the_village.village_flow import VillageFlow
 
 
 def _decline_result():

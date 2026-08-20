@@ -4,7 +4,7 @@ import logging
 import gradio as gr
 
 from the_village.bridge import FlowFailed, FlowStatus, PlayerInput, SessionBridge, run_flow
-from the_village.main import VillageFlow
+from the_village.village_flow import VillageFlow
 from the_village.state import WEEKDAYS, DiscussionMessage, GameState
 from the_village.voting import VoteOutcome, cast_votes
 
