@@ -5,15 +5,15 @@ from crewai import Agent
 from the_village.state import Villager
 
 
-def build_villager_agent(villager: Villager) -> Agent:
+def _build_villager_agent(villager: Villager) -> Agent:
     role_knowledge = (
         "You are an ordinary villager. You do not know who the werewolves "
         "are, and you genuinely want to find out. You pay attention to "
         "who seems evasive, inconsistent, or too eager to point fingers, "
         "and you're willing to voice suspicion, ask pointed questions, and "
         "press others for answers. You never lie or make things up unless "
-        "you are afraid for your own well-being (everyone seems to think you "
-        "are a werewolf)."
+        "you are afraid for your own well-being, e.g. everyone seems to think "
+        "you are a werewolf."
     )
     goal = (
         "Work out who is responsible for the killing by questioning and "

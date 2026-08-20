@@ -7,8 +7,8 @@ from crewai import Agent, Crew, Process, Task
 from crewai.flow import Flow, start
 from pydantic import BaseModel, Field
 
-from the_village.agents.agent_factory import build_agent
-from the_village.agents.conversation_analyst import build_conversation_analyst_agent
+from the_village.agents import build_agent
+from the_village.agents import build_conversation_analyst_agent
 from the_village.bridge import FlowStatus, SessionBridge
 from the_village.state import WEEKDAYS, DiscussionMessage, GameState
 

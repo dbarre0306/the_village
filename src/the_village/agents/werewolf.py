@@ -5,7 +5,7 @@ from crewai import Agent
 from the_village.state import Villager
 
 
-def build_werewolf_agent(villager: Villager, all_villagers: list[Villager]) -> Agent:
+def _build_werewolf_agent(villager: Villager, all_villagers: list[Villager]) -> Agent:
     packmate = next(
         v.name
         for v in all_villagers
