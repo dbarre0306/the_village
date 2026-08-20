@@ -359,6 +359,29 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
             if isinstance(item, FlowFailed):
                 raise gr.Error("Something went wrong, please try again.")
             if isinstance(item, DiscussionMessage):
+                # Accumulate into this session's own GameState as messages
+                # arrive so the transcript renders live -- the background
+                # DiscussionFlow appends to a *copy* of this state (hydrated
+                # from a model_dump()), so without this the transcript panel
+                # stays blank until the whole discussion finishes.
+                state.discussion.append(item)
+                # Pace AI turns to reading speed with a "typing" placeholder;
+                # the player's own message (already visible to them as they
+                # typed it) shows immediately with no delay.
+                if item.speaker != state.player_name:
+                    pending_transcript = format_discussion_transcript(
+                        state, pending_speaker=item.speaker
+                    )
+                    yield (
+                        bridge,
+                        pending_transcript,
+                        gr.update(value=""),
+                        gr.update(visible=False),
+                        gr.update(),
+                        gr.update(),
+                        gr.update(),
+                    )
+                    await asyncio.sleep(SPEAKER_THINKING_DELAY_SECONDS)
                 transcript = format_discussion_transcript(state)
                 yield (
                     bridge,
@@ -369,7 +392,6 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                     gr.update(),
                     gr.update(),
                 )
-                await asyncio.sleep(SPEAKER_THINKING_DELAY_SECONDS)
             elif item == FlowStatus.WAITING_FOR_TURN or item == FlowStatus.WAITING_FOR_ANSWER:
                 yield (
                     bridge,

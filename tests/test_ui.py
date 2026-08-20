@@ -162,6 +162,109 @@ async def test_begin_discussion_raises_gr_error_on_flow_failed():
     waiter.cancel()
 
 
+def _discussion_state() -> GameState:
+    return GameState(
+        player_name="Dana",
+        day_number=1,
+        villagers=[
+            Villager(name="Dana", player_type="user"),
+            Villager(name="A", player_type="villager"),
+        ],
+    )
+
+
+async def test_streamed_discussion_message_appears_in_rendered_transcript(monkeypatch):
+    # Regression test for the discussion transcript never rendering: the
+    # background DiscussionFlow appends to its OWN GameState (hydrated from
+    # a model_dump() of this one), so _stream_bridge must accumulate
+    # streamed messages into *this* state itself for the transcript to
+    # ever show anything before the whole discussion finishes.
+    #
+    # Zero out the pacing delay rather than monkeypatching asyncio.sleep
+    # itself -- asyncio.sleep is also what the test below uses to yield
+    # control to the concurrently-running waiter task, and a stub that
+    # doesn't actually suspend (unlike real sleep(0)) breaks that
+    # cooperative handoff in ways that are very confusing to debug.
+    monkeypatch.setattr(ui, "SPEAKER_THINKING_DELAY_SECONDS", 0)
+
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
+    await bridge.outbox.put(
+        DiscussionMessage(day_number=1, speaker="A", message="I saw something strange.")
+    )
+    await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
+
+    state = _discussion_state()
+    outputs = [update async for update in begin_discussion(bridge, state)]
+    transcripts = [update[1] for update in outputs if isinstance(update[1], str)]
+
+    assert any("I saw something strange." in t for t in transcripts)
+    assert len(state.discussion) == 1
+    assert state.discussion[0].message == "I saw something strange."
+    waiter.cancel()
+
+
+async def test_ai_turn_shows_pending_placeholder_before_revealing_message(monkeypatch):
+    sleep_calls = []
+    real_sleep = asyncio.sleep
+
+    async def spy_sleep(seconds):
+        sleep_calls.append(seconds)
+        await real_sleep(0)  # still a real checkpoint, just instant
+
+    monkeypatch.setattr(ui.asyncio, "sleep", spy_sleep)
+
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await real_sleep(0)
+    await bridge.outbox.put(DiscussionMessage(day_number=1, speaker="A", message="hi there"))
+    await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
+
+    state = _discussion_state()
+    outputs = [update async for update in begin_discussion(bridge, state)]
+    transcripts = [update[1] for update in outputs if isinstance(update[1], str)]
+
+    pending_index = next(i for i, t in enumerate(transcripts) if "typing-indicator" in t)
+    assert "hi there" not in transcripts[pending_index]
+    assert "A:</span>" in transcripts[pending_index]
+    assert "hi there" in transcripts[pending_index + 1]
+    assert sleep_calls == [ui.SPEAKER_THINKING_DELAY_SECONDS]
+    waiter.cancel()
+
+
+async def test_player_message_shows_immediately_without_placeholder_or_sleep(monkeypatch):
+    sleep_calls = []
+    real_sleep = asyncio.sleep
+
+    async def spy_sleep(seconds):
+        sleep_calls.append(seconds)
+        await real_sleep(0)
+
+    monkeypatch.setattr(ui.asyncio, "sleep", spy_sleep)
+
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await real_sleep(0)
+    # The player's own message is pushed onto the outbox exactly the same
+    # way an AI turn is (discussion.py's _run_round doesn't distinguish),
+    # so this exercises the same _stream_bridge path with speaker ==
+    # state.player_name.
+    await bridge.outbox.put(DiscussionMessage(day_number=1, speaker="Dana", message="It wasn't me!"))
+    await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
+
+    state = _discussion_state()
+    outputs = [
+        update async for update in send_discussion_turn(bridge, state, "It wasn't me!")
+    ]
+    transcripts = [update[1] for update in outputs if isinstance(update[1], str)]
+
+    assert not any("typing-indicator" in t for t in transcripts)
+    assert any("It wasn't me!" in t for t in transcripts)
+    assert sleep_calls == []
+    waiter.cancel()
+
+
 def test_format_discussion_transcript_with_no_messages():
     state = GameState(player_name="Dana")
     assert format_discussion_transcript(state) == ""
