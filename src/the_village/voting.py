@@ -5,7 +5,7 @@ import logging
 from crewai import Agent
 from pydantic import BaseModel, Field
 
-from the_village.discussion import (
+from the_village.discussion.discussion import (
     _format_deaths,
     _format_history,
     _living_participant_names,

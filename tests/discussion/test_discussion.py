@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 from crewai import Agent
 
-from the_village.discussion import (
+from the_village.discussion.discussion import (
     DECLINED_TO_RESPOND,
     AddressResolution,
     DiscussionFlow,
@@ -98,7 +98,7 @@ def test_resolve_target_rejects_self_and_unknown_names():
 async def test_run_ai_turn_returns_none_on_scheduled_decline():
     state = make_discussion_state()
     with patch(
-        "the_village.discussion.Crew.akickoff",
+        "the_village.discussion.discussion.Crew.akickoff",
         new=AsyncMock(return_value=_crew_result(TurnOutput(has_something_to_say=False), None)),
     ):
         message = await _run_ai_turn(
@@ -112,7 +112,7 @@ async def test_run_ai_turn_records_decline_placeholder_when_owed_a_reply():
     state = make_discussion_state()
     asking = _record_message(state, "B", "Where were you?", addressed_to="A")
     with patch(
-        "the_village.discussion.Crew.akickoff",
+        "the_village.discussion.discussion.Crew.akickoff",
         new=AsyncMock(return_value=_crew_result(TurnOutput(has_something_to_say=False), None)),
     ):
         message = await _run_ai_turn(
@@ -126,7 +126,7 @@ async def test_run_ai_turn_records_decline_placeholder_when_owed_a_reply():
 async def test_run_ai_turn_records_message_and_resolved_address():
     state = make_discussion_state()
     with patch(
-        "the_village.discussion.Crew.akickoff",
+        "the_village.discussion.discussion.Crew.akickoff",
         new=AsyncMock(
             return_value=_crew_result(
                 TurnOutput(has_something_to_say=True, message="I saw B leave."),
@@ -148,7 +148,7 @@ async def test_run_ai_turn_discards_addressed_to_from_the_analyst_on_decline():
     two-task Crew shape), a decline's recorded message must not carry it."""
     state = make_discussion_state()
     with patch(
-        "the_village.discussion.Crew.akickoff",
+        "the_village.discussion.discussion.Crew.akickoff",
         new=AsyncMock(
             return_value=_crew_result(
                 TurnOutput(has_something_to_say=False), AddressResolution(addressed_to="B")
@@ -200,7 +200,7 @@ async def test_run_player_turn_resolves_address_via_the_analyst():
     state = make_discussion_state()
     bridge = SessionBridge()
     with patch(
-        "the_village.discussion.Crew.akickoff",
+        "the_village.discussion.discussion.Crew.akickoff",
         new=AsyncMock(return_value=_crew_result(AddressResolution(addressed_to="B"))),
     ):
         task = asyncio.create_task(
@@ -238,7 +238,7 @@ async def test_discussion_flow_runs_two_rounds_where_everyone_gets_a_turn():
         return PlayerInput(message=None)
 
     with (
-        patch("the_village.discussion.Crew.akickoff", new=AsyncMock(return_value=_decline_result())),
+        patch("the_village.discussion.discussion.Crew.akickoff", new=AsyncMock(return_value=_decline_result())),
         patch.object(SessionBridge, "wait_for_input", auto_pass),
     ):
         flow = DiscussionFlow(bridge=bridge, rng=random.Random(1))
@@ -257,7 +257,7 @@ async def test_discussion_flow_pushes_agents_onto_the_bridge():
         return PlayerInput(message=None)
 
     with (
-        patch("the_village.discussion.Crew.akickoff", new=AsyncMock(return_value=_decline_result())),
+        patch("the_village.discussion.discussion.Crew.akickoff", new=AsyncMock(return_value=_decline_result())),
         patch.object(SessionBridge, "wait_for_input", auto_pass),
     ):
         flow = DiscussionFlow(bridge=bridge, rng=random.Random(1))
@@ -300,7 +300,7 @@ async def test_discussion_flow_resolves_a_bonus_reply_chain():
         return PlayerInput(message=None)
 
     with (
-        patch("the_village.discussion.Crew.akickoff", new=scripted_akickoff),
+        patch("the_village.discussion.discussion.Crew.akickoff", new=scripted_akickoff),
         patch.object(SessionBridge, "wait_for_input", auto_pass),
     ):
         flow = DiscussionFlow(bridge=bridge, rng=NoShuffleRandom())
@@ -323,7 +323,7 @@ async def test_discussion_flow_pauses_for_player_and_resumes():
     async def scripted_akickoff(*_args, **_kwargs):
         return _decline_result()
 
-    with patch("the_village.discussion.Crew.akickoff", new=scripted_akickoff):
+    with patch("the_village.discussion.discussion.Crew.akickoff", new=scripted_akickoff):
         flow = DiscussionFlow(bridge=bridge, rng=random.Random(1))
         task = asyncio.create_task(flow.kickoff_async(inputs=state.model_dump()))
 

@@ -5,7 +5,7 @@ import logging
 from crewai.flow import Flow, listen, start
 
 from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
-from the_village.discussion import DiscussionFlow
+from the_village.discussion.discussion import DiscussionFlow
 from the_village.night import resolve_night_one
 from the_village.roster import build_initial_roster
 from the_village.state import GameState
