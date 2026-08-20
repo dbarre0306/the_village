@@ -7,8 +7,10 @@ from crewai import Agent, Crew, Process, Task
 from crewai.flow import Flow, start
 from pydantic import BaseModel, Field
 
+from the_village.agents.agent_factory import build_agent
+from the_village.agents.conversation_analyst import build_conversation_analyst_agent
 from the_village.bridge import FlowStatus, SessionBridge
-from the_village.state import WEEKDAYS, DiscussionMessage, GameState, Villager
+from the_village.state import WEEKDAYS, DiscussionMessage, GameState
 
 logger = logging.getLogger(__name__)
 
@@ -20,85 +22,6 @@ class AddressResolution(BaseModel):
             "to, if any — e.g. asking them a question or accusing them. Leave "
             "unset if the message isn't addressing anyone in particular."
         ),
-    )
-
-
-def _build_address_resolver() -> Agent:
-    return Agent(
-        role="Conversation Analyst",
-        goal=(
-            "Determine who, if anyone, a speaker's message is directed at "
-            "within a group conversation."
-        ),
-        backstory=(
-            "You silently observe a group conversation and judge who a given "
-            "message is aimed at, if anyone. Watch for vocative cues -- a "
-            "name set off by a comma, or a name immediately followed by a "
-            "question or accusation -- and don't confuse those with a name "
-            "that's merely mentioned in passing, e.g. as part of a story or "
-            "background detail. A message can mention one person early on "
-            "and then actually address someone else (or the same person) "
-            "later; when a message has several clauses, the real address "
-            "usually lives in whichever clause asks a question or makes a "
-            "demand, often the last one. For example, in \"I saw Kestrel "
-            "last night. Kestrel said she was going to meet Alice later. "
-            "Alice, did you meet with her?\" -- Kestrel is only mentioned, "
-            "while Alice is who's actually being addressed, because she's "
-            "the one being asked a direct question. You never speak "
-            "yourself; you only report who was addressed."
-        ),
-    )
-
-
-def _build_agent(villager: Villager, all_villagers: list[Villager]) -> Agent:
-    if villager.player_type == "werewolf":
-        packmate = next(
-            v.name
-            for v in all_villagers
-            if v.player_type == "werewolf" and v.name != villager.name
-        )
-        role_knowledge = (
-            f"You are secretly a werewolf. You are deceptive and cunning. "
-            "Your fellow werewolf is {packmate} — "
-            "you know this, no one else does. You want someone else blamed for "
-            "the killing, so you actively steer suspicion toward other "
-            "villagers — voicing doubts about their behavior, questioning "
-            "their alibi, or agreeing with and amplifying accusations others "
-            "raise — all without revealing yourself or your packmate."
-        )
-        goal = (
-            "Blend in as an innocent villager while steering the group's "
-            "suspicion toward someone else, without revealing that you're a "
-            "werewolf."
-        )
-    else:
-        role_knowledge = (
-            "You are an ordinary villager. You do not know who the werewolves "
-            "are, and you genuinely want to find out. You pay attention to "
-            "who seems evasive, inconsistent, or too eager to point fingers, "
-            "and you're willing to voice suspicion, ask pointed questions, and "
-            "press others for answers. You never lie or make things up unless "
-            "you are afraid for your own well-being (everyone seems to think you "
-            "are a werewolf)."
-        )
-        goal = (
-            "Work out who is responsible for the killing by questioning and "
-            "scrutinizing the other villagers, while reacting honestly from "
-            "your own perspective."
-        )
-    backstory = (
-        f"You are {villager.name}, a resident of a small village playing a game "
-        f"of suspicion and survival after a neighbor was found dead. {role_knowledge} "
-        "You react like a real person would — with shock, grief, anger, or "
-        "suspicion as the moment calls for. You never invent facts, alibis, or "
-        "claims that aren't grounded in what you actually know or what has "
-        "already been said. You speak the way people actually do in a tense "
-        "group conversation: briefly. One or two sentences, never a speech."
-    )
-    return Agent(
-        role=f"Villager {villager.name}",
-        goal=goal,
-        backstory=backstory,
     )
 
 
@@ -325,7 +248,7 @@ class DiscussionFlow(Flow[GameState]):
         self.bridge = bridge
         self.rng = rng or random.Random()
         self._speaker_agents: dict[str, Agent] = {}
-        self._analyst: Agent = _build_address_resolver()
+        self._analyst: Agent = build_conversation_analyst_agent()
 
     @start()
     async def run_rounds(self) -> list[DiscussionMessage]:
@@ -335,7 +258,7 @@ class DiscussionFlow(Flow[GameState]):
             if v.is_alive and v.player_type in ("villager", "werewolf")
         ]
         self._speaker_agents = {
-            v.name: _build_agent(v, self.state.villagers) for v in living_ai
+            v.name: build_agent(v, self.state.villagers) for v in living_ai
         }
         self.bridge.agents = self._speaker_agents
 
