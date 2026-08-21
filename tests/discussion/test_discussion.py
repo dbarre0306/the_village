@@ -73,6 +73,10 @@ def _stub_agent() -> Agent:
     return Agent(role="Stub", goal="stub", backstory="stub")
 
 
+def _stub_agents(names: list[str]) -> dict[str, Agent]:
+    return {name: _stub_agent() for name in names}
+
+
 def test_turn_output_has_no_addressed_to_field():
     assert "addressed_to" not in TurnOutput.model_fields
 
@@ -242,7 +246,11 @@ async def test_discussion_runner_runs_two_rounds_where_everyone_gets_a_turn():
         patch.object(SessionBridge, "wait_for_input", auto_pass),
     ):
         runner = DiscussionRunner(
-            state=make_discussion_runner_state(), bridge=bridge, rng=random.Random(1)
+            state=make_discussion_runner_state(),
+            bridge=bridge,
+            speaker_agents=_stub_agents(["A", "B", "C", "D"]),
+            analyst=_stub_agent(),
+            rng=random.Random(1),
         )
         transcript = await runner.run()
 
@@ -250,24 +258,6 @@ async def test_discussion_runner_runs_two_rounds_where_everyone_gets_a_turn():
     # recorded -- what's under test is that the runner runs to completion
     # (doesn't hang) across two full rounds without error.
     assert transcript == []
-
-
-async def test_discussion_runner_pushes_agents_onto_the_bridge():
-    bridge = SessionBridge()
-
-    async def auto_pass(*_args, **_kwargs):
-        return PlayerInput(message=None)
-
-    with (
-        patch("the_village.discussion.discussion.Crew.akickoff", new=AsyncMock(return_value=_decline_result())),
-        patch.object(SessionBridge, "wait_for_input", auto_pass),
-    ):
-        runner = DiscussionRunner(
-            state=make_discussion_runner_state(), bridge=bridge, rng=random.Random(1)
-        )
-        await runner.run()
-
-    assert set(bridge.agents.keys()) == {"A", "B", "C", "D"}
 
 
 class NoShuffleRandom:
@@ -307,7 +297,13 @@ async def test_discussion_runner_resolves_a_bonus_reply_chain():
         patch("the_village.discussion.discussion.Crew.akickoff", new=scripted_akickoff),
         patch.object(SessionBridge, "wait_for_input", auto_pass),
     ):
-        runner = DiscussionRunner(state=state, bridge=bridge, rng=NoShuffleRandom())
+        runner = DiscussionRunner(
+            state=state,
+            bridge=bridge,
+            speaker_agents=_stub_agents(["A", "B", "C", "D"]),
+            analyst=_stub_agent(),
+            rng=NoShuffleRandom(),
+        )
         transcript = await runner.run()
 
     addressed_messages = [m for m in transcript if m.message == "B, where were you?"]
@@ -328,7 +324,13 @@ async def test_discussion_runner_pauses_for_player_and_resumes():
         return _decline_result()
 
     with patch("the_village.discussion.discussion.Crew.akickoff", new=scripted_akickoff):
-        runner = DiscussionRunner(state=state, bridge=bridge, rng=random.Random(1))
+        runner = DiscussionRunner(
+            state=state,
+            bridge=bridge,
+            speaker_agents=_stub_agents(["A", "B", "C", "D"]),
+            analyst=_stub_agent(),
+            rng=random.Random(1),
+        )
         task = asyncio.create_task(runner.run())
 
         # Drain the outbox for the whole run, answering every player-turn

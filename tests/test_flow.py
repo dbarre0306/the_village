@@ -45,3 +45,28 @@ async def test_village_flow_produces_valid_night_one_result_and_pauses_for_discu
     player = next(v for v in state.villagers if v.player_type == "user")
     assert player.name == "Dana"
     assert player.is_alive is True
+
+
+async def test_village_flow_builds_speaker_agents_onto_the_bridge():
+    bridge = SessionBridge()
+    flow = VillageFlow(bridge=bridge)
+    task = asyncio.create_task(flow.kickoff_async(inputs={"player_name": "Dana"}))
+
+    from the_village.state import Death
+
+    for _ in range(50):
+        item = await bridge.outbox.get()
+        if isinstance(item, Death):
+            bridge.resolve_input(PlayerInput())
+            break
+
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    ai_names = {
+        v.name for v in flow.state.villagers if v.player_type in ("villager", "werewolf")
+    }
+    assert set(bridge.agents.keys()) == ai_names

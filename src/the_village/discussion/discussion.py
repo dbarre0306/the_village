@@ -6,8 +6,6 @@ import random
 from crewai import Agent, Crew, Process, Task
 from pydantic import BaseModel, Field
 
-from the_village.agents import build_agent
-from the_village.agents import build_conversation_analyst_agent
 from the_village.bridge import FlowStatus, SessionBridge
 from the_village.state import WEEKDAYS, DiscussionMessage, GameState
 
@@ -254,13 +252,15 @@ class DiscussionRunner:
         self,
         state: GameState,
         bridge: SessionBridge,
+        speaker_agents: dict[str, Agent],
+        analyst: Agent,
         rng: random.Random | None = None,
     ):
         self.state = state
         self.bridge = bridge
         self.rng = rng or random.Random()
-        self._speaker_agents: dict[str, Agent] = {}
-        self._analyst: Agent = build_conversation_analyst_agent()
+        self._speaker_agents = speaker_agents
+        self._analyst = analyst
 
     async def run(self) -> list[DiscussionMessage]:
         logger.debug(
@@ -269,16 +269,6 @@ class DiscussionRunner:
             id(self.bridge),
             self.state.day_number,
         )
-        living_ai = [
-            v
-            for v in self.state.villagers
-            if v.is_alive and v.player_type in ("villager", "werewolf")
-        ]
-        self._speaker_agents = {
-            v.name: build_agent(v, self.state.villagers) for v in living_ai
-        }
-        self.bridge.agents = self._speaker_agents
-
         for round_number in range(2):
             logger.debug("DiscussionRunner.run: runner=%s starting round %s", id(self), round_number)
             await self._run_round()
