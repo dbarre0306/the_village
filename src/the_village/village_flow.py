@@ -27,14 +27,11 @@ class VillageFlow(Flow[GameState]):
         roster_state = build_initial_roster(self.state.player_name)
         self.state.day_number = roster_state.day_number
         self.state.players = roster_state.players
-
-    @listen(setup_game)
-    async def build_agents(self):
         self._speaker_agents = self._build_ai_agents()
         self._analyst = build_conversation_analyst_agent()
         self.bridge.agents = self._speaker_agents
 
-    @listen(build_agents)
+    @listen(setup_game)
     async def run_night_one(self):
         resolve_night_one(self.state)
 
