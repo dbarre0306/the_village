@@ -11,7 +11,7 @@ async def test_village_flow_produces_valid_night_one_result_and_pauses_for_discu
     task = asyncio.create_task(flow.kickoff_async(inputs={"player_name": "Dana"}))
 
     # Drain until the death-announcement pause, then unblock it. We don't
-    # drive a full discussion round here (that's DiscussionFlow's own test
+    # drive a full discussion round here (that's DiscussionRunner's own test
     # suite in test_discussion.py) -- just confirm VillageFlow reaches and
     # respects the gate, then cancel rather than run a real discussion.
     from the_village.state import Death

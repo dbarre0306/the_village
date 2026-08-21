@@ -4,7 +4,6 @@ import logging
 import random
 
 from crewai import Agent, Crew, Process, Task
-from crewai.flow import Flow, start
 from pydantic import BaseModel, Field
 
 from the_village.agents import build_agent
@@ -250,18 +249,22 @@ async def _run_player_turn(
     return _record_message(state, name, player_input.message, addressed_to)
 
 
-class DiscussionFlow(Flow[GameState]):
-    def __init__(self, bridge: SessionBridge, rng: random.Random | None = None):
-        super().__init__()
+class DiscussionRunner:
+    def __init__(
+        self,
+        state: GameState,
+        bridge: SessionBridge,
+        rng: random.Random | None = None,
+    ):
+        self.state = state
         self.bridge = bridge
         self.rng = rng or random.Random()
         self._speaker_agents: dict[str, Agent] = {}
         self._analyst: Agent = build_conversation_analyst_agent()
 
-    @start()
-    async def run_rounds(self) -> list[DiscussionMessage]:
+    async def run(self) -> list[DiscussionMessage]:
         logger.debug(
-            "DiscussionFlow.run_rounds: flow=%s bridge=%s day=%s",
+            "DiscussionRunner.run: runner=%s bridge=%s day=%s",
             id(self),
             id(self.bridge),
             self.state.day_number,
@@ -277,7 +280,7 @@ class DiscussionFlow(Flow[GameState]):
         self.bridge.agents = self._speaker_agents
 
         for round_number in range(2):
-            logger.debug("DiscussionFlow.run_rounds: flow=%s starting round %s", id(self), round_number)
+            logger.debug("DiscussionRunner.run: runner=%s starting round %s", id(self), round_number)
             await self._run_round()
 
         return self.state.discussion
@@ -285,7 +288,7 @@ class DiscussionFlow(Flow[GameState]):
     async def _run_round(self) -> None:
         order = _living_participant_names(self.state)
         self.rng.shuffle(order)
-        logger.debug("DiscussionFlow._run_round: flow=%s order=%s", id(self), order)
+        logger.debug("DiscussionRunner._run_round: runner=%s order=%s", id(self), order)
         while order:
             if _avoid_immediate_repeat(order, _last_speaker_today(self.state), self.rng):
                 # The only entry left in this round would repeat the last
@@ -298,7 +301,7 @@ class DiscussionFlow(Flow[GameState]):
             message = await self._run_turn(name, addressed_by=None)
             if message is not None:
                 logger.debug(
-                    "DiscussionFlow._run_round: flow=%s putting message=%s speaker=%s day=%s",
+                    "DiscussionRunner._run_round: runner=%s putting message=%s speaker=%s day=%s",
                     id(self),
                     id(message),
                     message.speaker,
@@ -324,7 +327,7 @@ class DiscussionFlow(Flow[GameState]):
         self, message: DiscussionMessage, chain: frozenset[str] = frozenset()
     ) -> None:
         logger.debug(
-            "DiscussionFlow._resolve_address_chain: flow=%s speaker=%s addressed_to=%s chain=%s",
+            "DiscussionRunner._resolve_address_chain: runner=%s speaker=%s addressed_to=%s chain=%s",
             id(self),
             message.speaker,
             message.addressed_to,
@@ -337,7 +340,7 @@ class DiscussionFlow(Flow[GameState]):
         if reply is None:
             return
         logger.debug(
-            "DiscussionFlow._resolve_address_chain: flow=%s putting reply=%s speaker=%s day=%s",
+            "DiscussionRunner._resolve_address_chain: runner=%s putting reply=%s speaker=%s day=%s",
             id(self),
             id(reply),
             reply.speaker,

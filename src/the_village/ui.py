@@ -360,12 +360,10 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
             if isinstance(item, FlowFailed):
                 raise gr.Error("Something went wrong, please try again.")
             if isinstance(item, DiscussionMessage):
-                # Accumulate into this session's own GameState as messages
-                # arrive so the transcript renders live -- the background
-                # DiscussionFlow appends to a *copy* of this state (hydrated
-                # from a model_dump()), so without this the transcript panel
-                # stays blank until the whole discussion finishes.
-                state.discussion.append(item)
+                # DiscussionRunner appends directly to this same GameState
+                # (it's handed the live object, not a copy), so `item` is
+                # already the last entry in state.discussion by the time it
+                # shows up here -- nothing to add, just render.
                 # Pace AI turns to reading speed with a "typing" placeholder;
                 # the player's own message (already visible to them as they
                 # typed it) shows immediately with no delay.

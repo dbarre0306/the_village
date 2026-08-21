@@ -8,7 +8,7 @@ from crewai import Agent
 from the_village.discussion.discussion import (
     DECLINED_TO_RESPOND,
     AddressResolution,
-    DiscussionFlow,
+    DiscussionRunner,
     TurnOutput,
     _format_deaths,
     _format_history,
@@ -216,7 +216,7 @@ async def test_run_player_turn_resolves_address_via_the_analyst():
     assert message.addressed_to == "B"
 
 
-def make_discussion_flow_state() -> GameState:
+def make_discussion_runner_state() -> GameState:
     villagers = [
         Villager(name="Dana", player_type="user"),
         Villager(name="A", player_type="villager"),
@@ -231,7 +231,7 @@ def _decline_result():
     return _crew_result(TurnOutput(has_something_to_say=False), None)
 
 
-async def test_discussion_flow_runs_two_rounds_where_everyone_gets_a_turn():
+async def test_discussion_runner_runs_two_rounds_where_everyone_gets_a_turn():
     bridge = SessionBridge()
 
     async def auto_pass(*_args, **_kwargs):
@@ -241,16 +241,18 @@ async def test_discussion_flow_runs_two_rounds_where_everyone_gets_a_turn():
         patch("the_village.discussion.discussion.Crew.akickoff", new=AsyncMock(return_value=_decline_result())),
         patch.object(SessionBridge, "wait_for_input", auto_pass),
     ):
-        flow = DiscussionFlow(bridge=bridge, rng=random.Random(1))
-        transcript = await flow.kickoff_async(inputs=make_discussion_flow_state().model_dump())
+        runner = DiscussionRunner(
+            state=make_discussion_runner_state(), bridge=bridge, rng=random.Random(1)
+        )
+        transcript = await runner.run()
 
     # Everyone declines every turn in this test, so no DiscussionMessages are
-    # recorded -- what's under test is that the flow runs to completion
+    # recorded -- what's under test is that the runner runs to completion
     # (doesn't hang) across two full rounds without error.
     assert transcript == []
 
 
-async def test_discussion_flow_pushes_agents_onto_the_bridge():
+async def test_discussion_runner_pushes_agents_onto_the_bridge():
     bridge = SessionBridge()
 
     async def auto_pass(*_args, **_kwargs):
@@ -260,8 +262,10 @@ async def test_discussion_flow_pushes_agents_onto_the_bridge():
         patch("the_village.discussion.discussion.Crew.akickoff", new=AsyncMock(return_value=_decline_result())),
         patch.object(SessionBridge, "wait_for_input", auto_pass),
     ):
-        flow = DiscussionFlow(bridge=bridge, rng=random.Random(1))
-        await flow.kickoff_async(inputs=make_discussion_flow_state().model_dump())
+        runner = DiscussionRunner(
+            state=make_discussion_runner_state(), bridge=bridge, rng=random.Random(1)
+        )
+        await runner.run()
 
     assert set(bridge.agents.keys()) == {"A", "B", "C", "D"}
 
@@ -279,13 +283,13 @@ class NoShuffleRandom:
         return start
 
 
-async def test_discussion_flow_resolves_a_bonus_reply_chain():
+async def test_discussion_runner_resolves_a_bonus_reply_chain():
     bridge = SessionBridge()
-    # make_discussion_flow_state()'s villagers list is [Dana, A, B, C, D];
+    # make_discussion_runner_state()'s villagers list is [Dana, A, B, C, D];
     # with no shuffling, round order is exactly that -- Dana first (the
     # player, auto-passes below), then A, whose scripted response addresses
     # B; B's own scripted decline stops the chain there.
-    state = make_discussion_flow_state()
+    state = make_discussion_runner_state()
 
     speak_and_address_b = _crew_result(
         TurnOutput(has_something_to_say=True, message="B, where were you?"),
@@ -303,8 +307,8 @@ async def test_discussion_flow_resolves_a_bonus_reply_chain():
         patch("the_village.discussion.discussion.Crew.akickoff", new=scripted_akickoff),
         patch.object(SessionBridge, "wait_for_input", auto_pass),
     ):
-        flow = DiscussionFlow(bridge=bridge, rng=NoShuffleRandom())
-        transcript = await flow.kickoff_async(inputs=state.model_dump())
+        runner = DiscussionRunner(state=state, bridge=bridge, rng=NoShuffleRandom())
+        transcript = await runner.run()
 
     addressed_messages = [m for m in transcript if m.message == "B, where were you?"]
     assert len(addressed_messages) == 1
@@ -316,21 +320,21 @@ async def test_discussion_flow_resolves_a_bonus_reply_chain():
     assert len(decline_replies) == 1
 
 
-async def test_discussion_flow_pauses_for_player_and_resumes():
+async def test_discussion_runner_pauses_for_player_and_resumes():
     bridge = SessionBridge()
-    state = make_discussion_flow_state()
+    state = make_discussion_runner_state()
 
     async def scripted_akickoff(*_args, **_kwargs):
         return _decline_result()
 
     with patch("the_village.discussion.discussion.Crew.akickoff", new=scripted_akickoff):
-        flow = DiscussionFlow(bridge=bridge, rng=random.Random(1))
-        task = asyncio.create_task(flow.kickoff_async(inputs=state.model_dump()))
+        runner = DiscussionRunner(state=state, bridge=bridge, rng=random.Random(1))
+        task = asyncio.create_task(runner.run())
 
         # Drain the outbox for the whole run, answering every player-turn
-        # pause immediately. The flow asks the player once per round (two
+        # pause immediately. The runner asks the player once per round (two
         # rounds total), so more than one pause is expected here -- race
-        # each outbox.get() against the flow task itself so a final
+        # each outbox.get() against the runner task itself so a final
         # completion with nothing left in the outbox doesn't leave this
         # loop blocked on a get() that will never resolve.
         seen_waiting_for_turn = False
