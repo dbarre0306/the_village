@@ -55,18 +55,20 @@ def _weekday(day_number: int) -> str:
 
 
 def _format_deaths(state: GameState) -> str:
-    if not state.deaths:
+    dead_days = [day for day in state.days if day.player_killed]
+    if not dead_days:
         return "(No one has died yet.)"
     return "\n".join(
-        f"{death.name} was found dead on {_weekday(death.day_number)}."
-        for death in state.deaths
+        f"{day.player_killed} was found dead on {_weekday(day.day_number)}."
+        for day in dead_days
     )
 
 
 def _format_history(state: GameState) -> str:
-    if not state.discussion:
+    messages = [message for day in state.days for message in day.discussion]
+    if not messages:
         return "(No discussion has happened yet.)"
-    return "\n".join(f"{m.speaker}: {m.message}" for m in state.discussion)
+    return "\n".join(f"{m.speaker}: {m.message}" for m in messages)
 
 
 def _living_participant_names(state: GameState) -> list[str]:
@@ -80,12 +82,11 @@ def _record_message(
     state: GameState, speaker: str, message: str, addressed_to: str | None
 ) -> DiscussionMessage:
     msg = DiscussionMessage(
-        day_number=state.day_number,
         speaker=speaker,
         message=message,
         addressed_to=addressed_to,
     )
-    state.discussion.append(msg)
+    state.current_day.discussion.append(msg)
     logger.debug(
         "_record_message: state=%s day=%s speaker=%s addressed_to=%s message=%r",
         id(state),
@@ -245,7 +246,7 @@ class DiscussionRunner:
             self.state.day_number,
         )
         await self._run_rounds()
-        return self.state.discussion
+        return self.state.current_day.discussion
 
 
     async def _run_rounds(self):
@@ -269,7 +270,7 @@ class DiscussionRunner:
                     id(self),
                     id(message),
                     message.speaker,
-                    message.day_number,
+                    self.state.day_number,
                 )
                 await self.bridge.outbox.put(message)
                 await self._resolve_address_chain(message)
@@ -345,7 +346,7 @@ class DiscussionRunner:
             id(self),
             id(reply),
             reply.speaker,
-            reply.day_number,
+            self.state.day_number,
         )
         await self.bridge.outbox.put(reply)
         chain = chain | {message.speaker, target}

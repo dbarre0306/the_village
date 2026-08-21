@@ -18,7 +18,7 @@ from the_village.discussion.discussion import (
     _run_player_turn,
 )
 from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
-from the_village.state import Death, DiscussionMessage, GameState, Player
+from the_village.state import Day, DiscussionMessage, GameState, Player
 
 
 def test_format_deaths_with_no_deaths():
@@ -27,7 +27,7 @@ def test_format_deaths_with_no_deaths():
 
 
 def test_format_deaths_lists_each_death():
-    state = GameState(player_name="Dana", deaths=[Death(name="D", day_number=2)])
+    state = GameState(player_name="Dana", days=[Day(day_number=2, player_killed="D")])
     assert _format_deaths(state) == "D was found dead on Monday."
 
 
@@ -39,9 +39,9 @@ def test_format_history_with_no_messages():
 def test_format_history_includes_prior_days_in_order():
     state = GameState(
         player_name="Dana",
-        discussion=[
-            DiscussionMessage(day_number=1, speaker="A", message="yesterday's message"),
-            DiscussionMessage(day_number=2, speaker="B", message="today's message"),
+        days=[
+            Day(day_number=1, discussion=[DiscussionMessage(speaker="A", message="yesterday's message")]),
+            Day(day_number=2, discussion=[DiscussionMessage(speaker="B", message="today's message")]),
         ],
     )
     assert (
@@ -56,7 +56,7 @@ def make_discussion_state() -> GameState:
         Player(name="A", player_type="villager"),
         Player(name="B", player_type="villager"),
     ]
-    return GameState(player_name="Dana", day_number=1, players=players)
+    return GameState(player_name="Dana", players=players)
 
 
 def _crew_result(*pydantic_outputs):
@@ -80,14 +80,14 @@ def test_turn_output_has_no_addressed_to_field():
     assert "addressed_to" not in TurnOutput.model_fields
 
 
-def test_record_message_appends_to_state_discussion_and_returns_it():
+def test_record_message_appends_to_current_day_and_returns_it():
     state = make_discussion_state()
     msg = _record_message(state, "A", "hello", addressed_to="B")
-    assert state.discussion == [msg]
+    assert state.current_day.discussion == [msg]
     assert msg.speaker == "A"
     assert msg.message == "hello"
     assert msg.addressed_to == "B"
-    assert msg.day_number == 1
+    assert state.current_day.day_number == 1
 
 
 def test_resolve_target_rejects_self_and_unknown_names():
@@ -108,7 +108,7 @@ async def test_run_ai_turn_returns_none_on_scheduled_decline():
             speaker=_stub_agent(), analyst=_stub_agent(), state=state, name="A", addressed_by=None
         )
     assert message is None
-    assert state.discussion == []
+    assert state.current_day.discussion == []
 
 
 async def test_run_ai_turn_records_decline_placeholder_when_owed_a_reply():
@@ -142,7 +142,7 @@ async def test_run_ai_turn_records_message_and_resolved_address():
         )
     assert message.message == "I saw B leave."
     assert message.addressed_to == "B"
-    assert state.discussion == [message]
+    assert state.current_day.discussion == [message]
 
 
 async def test_run_ai_turn_discards_addressed_to_from_the_analyst_on_decline():
@@ -180,7 +180,7 @@ async def test_run_player_turn_returns_none_on_scheduled_pass():
     bridge.resolve_input(PlayerInput(message=None))
     message = await task
     assert message is None
-    assert state.discussion == []
+    assert state.current_day.discussion == []
 
 
 async def test_run_player_turn_records_decline_placeholder_when_owed_a_reply():
@@ -227,7 +227,7 @@ def make_discussion_runner_state() -> GameState:
         Player(name="C", player_type="werewolf", is_pack_leader=True),
         Player(name="D", player_type="werewolf"),
     ]
-    return GameState(player_name="Dana", day_number=1, players=players)
+    return GameState(player_name="Dana", players=players)
 
 
 def _decline_result():
