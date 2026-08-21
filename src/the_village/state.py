@@ -1,6 +1,10 @@
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import BaseModel
+
+USER: Final = "user"
+VILLAGER: Final = "villager"
+WEREWOLF: Final = "werewolf"
 
 PlayerType = Literal["user", "villager", "werewolf"]
 
@@ -53,3 +57,7 @@ class GameState(BaseModel):
     discussion: list[DiscussionMessage] = []
     votes: list[VoteRecord] = []
     lynchings: list[Lynching] = []
+
+    def ai_villagers(self) -> list[str]:
+        return filter(lambda player: player.player_type in (VILLAGER, WEREWOLF), self.villagers)
+    

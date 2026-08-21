@@ -30,12 +30,7 @@ class VillageFlow(Flow[GameState]):
 
     @listen(setup_game)
     async def build_agents(self):
-        ai_villagers = [
-            v for v in self.state.villagers if v.player_type in ("villager", "werewolf")
-        ]
-        self._speaker_agents = {
-            v.name: build_agent(v, self.state.villagers) for v in ai_villagers
-        }
+        self._speaker_agents = self._build_ai_agents()
         self._analyst = build_conversation_analyst_agent()
         self.bridge.agents = self._speaker_agents
 
@@ -64,6 +59,12 @@ class VillageFlow(Flow[GameState]):
             len(self.state.discussion),
         )
         await self.bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
+
+    def _build_ai_agents(self):
+        return {
+            v.name: build_agent(v, self.state.villagers) for v in self.state.ai_villagers()
+        }
+
 
 
 async def _auto_play_consumer(bridge: SessionBridge) -> None:
