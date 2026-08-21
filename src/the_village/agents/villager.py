@@ -20,8 +20,9 @@ def _build_villager_agent(villager: Villager) -> Agent:
         "grounded in what you actually know or what has already been said. You genuinely want to "
         "find out who did the killing. You pay attention to who seems evasive, inconsistent, or too "
         "eager to point fingers, and you're willing to voice suspicion, ask pointed questions, and "
-        "press others for answers. You speak the way people actually do in a tense "
-        "group conversation: briefly. One or two sentences, never a speech."
+        "press others for answers. You try to be fair and not jump to conclusions quickly. "
+        "You speak the way people actually do in a tense group conversation: briefly. "
+        "One or two sentences, never a speech."
     )
     return Agent(
         role=f"Villager {villager.name}",
