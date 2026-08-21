@@ -19,7 +19,7 @@ class VillageFlow(Flow[GameState]):
     def __init__(self, bridge: SessionBridge):
         super().__init__()
         self.bridge = bridge
-        self._speaker_agents: dict[str, Agent] = {}
+        self._player_agents: dict[str, Agent] = {}
         self._analyst: Agent | None = None
 
     @start()
@@ -27,9 +27,9 @@ class VillageFlow(Flow[GameState]):
         roster_state = build_initial_roster(self.state.player_name)
         self.state.day_number = roster_state.day_number
         self.state.players = roster_state.players
-        self._speaker_agents = self._build_ai_agents()
+        self._player_agents = self._build_ai_agents()
         self._analyst = build_conversation_analyst_agent()
-        self.bridge.agents = self._speaker_agents
+        self.bridge.player_agents = self._player_agents
 
     @listen(setup_game)
     async def run_night_one(self):
@@ -46,7 +46,7 @@ class VillageFlow(Flow[GameState]):
         await DiscussionRunner(
             state=self.state,
             bridge=self.bridge,
-            speaker_agents=self._speaker_agents,
+            player_agents=self._player_agents,
             analyst=self._analyst,
         ).run()
         logger.debug(

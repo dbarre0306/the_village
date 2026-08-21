@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import logging
 import random
+from typing import Final
 
 from crewai import Agent, Crew, Process, Task
+from instructor import llm_validator
 from pydantic import BaseModel, Field
 
 from the_village.bridge import FlowStatus, SessionBridge
 from the_village.state import WEEKDAYS, DiscussionMessage, GameState
 
 logger = logging.getLogger(__name__)
+
+NUMBER_OF_ROUNDS: Final = 2
 
 class AddressResolution(BaseModel):
     addressed_to: str | None = Field(
@@ -20,35 +24,6 @@ class AddressResolution(BaseModel):
             "unset if the message isn't addressing anyone in particular."
         ),
     )
-
-
-def _last_speaker_today(state: GameState) -> str | None:
-    today_messages = [m for m in state.discussion if m.day_number == state.day_number]
-    return today_messages[-1].speaker if today_messages else None
-
-
-def _avoid_immediate_repeat(
-    order: list[str], last_speaker: str | None, rng: random.Random
-) -> bool:
-    """Reorder `order` in place so its front entry never repeats `last_speaker`.
-
-    A bonus/direct reply lets someone speak out of turn while still sitting
-    later in the round queue. Without this check, resuming the queue right
-    after such a reply can immediately re-select that same person — this
-    is called both when a round is built and every time the queue is about
-    to hand out a turn, so a mid-round repeat gets deferred too.
-
-    Returns True if `order` has no one else to swap in (its only entry is
-    `last_speaker`), so the caller must decide what to do instead of handing
-    out a turn.
-    """
-    if last_speaker is None or not order or order[0] != last_speaker:
-        return False
-    if len(order) == 1:
-        return True
-    swap_index = rng.randrange(1, len(order))
-    order[0], order[swap_index] = order[swap_index], order[0]
-    return False
 
 
 def _resolve_target(candidate: str | None, state: GameState, exclude: str) -> str | None:
@@ -252,14 +227,14 @@ class DiscussionRunner:
         self,
         state: GameState,
         bridge: SessionBridge,
-        speaker_agents: dict[str, Agent],
+        player_agents: dict[str, Agent],
         analyst: Agent,
         rng: random.Random | None = None,
     ):
         self.state = state
         self.bridge = bridge
         self.rng = rng or random.Random()
-        self._speaker_agents = speaker_agents
+        self._player_agents = player_agents
         self._analyst = analyst
 
     async def run(self) -> list[DiscussionMessage]:
@@ -269,26 +244,25 @@ class DiscussionRunner:
             id(self.bridge),
             self.state.day_number,
         )
-        for round_number in range(2):
-            logger.debug("DiscussionRunner.run: runner=%s starting round %s", id(self), round_number)
-            await self._run_round()
-
+        await self._run_rounds()
         return self.state.discussion
 
-    async def _run_round(self) -> None:
-        order = _living_participant_names(self.state)
-        self.rng.shuffle(order)
-        logger.debug("DiscussionRunner._run_round: runner=%s order=%s", id(self), order)
-        while order:
-            if _avoid_immediate_repeat(order, _last_speaker_today(self.state), self.rng):
-                # The only entry left in this round would repeat the last
-                # speaker and no one else is available to swap in -- skip
-                # them for this round rather than force a repeat; round two
-                # covers everyone again regardless.
-                order.pop(0)
-                continue
-            name = order.pop(0)
-            message = await self._run_turn(name, addressed_by=None)
+
+    async def _run_rounds(self):
+        last_player_to_speak = None
+        for round_number in range(NUMBER_OF_ROUNDS):
+            logger.debug("DiscussionRunner.run: runner=%s starting round %s", id(self), round_number)
+            last_player_to_speak = await self._run_round(last_player_to_speak)
+
+
+    async def _run_round(self, last_player_to_speak: str|None) -> None:
+        living_players = self._living_player_names()
+        self._shuffle_players(living_players, last_player_to_speak)
+
+        logger.debug("DiscussionRunner._run_round: runner=%s living_players=%s", id(self), living_players)
+
+        for player in living_players:
+            message = await self._give_player_a_turn_to_speak(player, addressed_by=None)
             if message is not None:
                 logger.debug(
                     "DiscussionRunner._run_round: runner=%s putting message=%s speaker=%s day=%s",
@@ -300,17 +274,54 @@ class DiscussionRunner:
                 await self.bridge.outbox.put(message)
                 await self._resolve_address_chain(message)
 
-    async def _run_turn(
+    
+    def _living_player_names(self) -> list[str]:
+        return [player.name for player in self.state.players if player.is_alive]
+
+
+    def _shuffle_players(self, living_players, last_player_to_speak) -> list[str]:
+        if (self._is_only_one_player_remaining_and_spoke_last(living_players, last_player_to_speak)): 
+            return []
+        self.rng.shuffle(living_players)
+
+        # If a player was the last to speak in a previous round, that player
+        # must not be the player to speak in this round.
+        if (living_players[0] == last_player_to_speak):
+            self._swap_first_player_with_another_player(living_players)
+        
+        return living_players
+
+
+    def _swap_first_player_with_another_player(self, living_players):
+        swap_index = self.rng.randrange(1, len(living_players))
+        living_players[0], living_players[swap_index] = living_players[swap_index], living_players[0]
+
+
+    @staticmethod
+    def _is_only_one_player_remaining_and_spoke_last(living_players: list[str], last_player_to_speak: str):
+        return len(living_players) == 1 and living_players[0] == last_player_to_speak
+
+
+    async def _give_player_a_turn_to_speak(
         self, name: str, addressed_by: DiscussionMessage | None
     ) -> DiscussionMessage | None:
-        if name == self.state.player_name:
-            status = FlowStatus.WAITING_FOR_ANSWER if addressed_by else FlowStatus.WAITING_FOR_TURN
-            await self.bridge.outbox.put(status)
-            return await _run_player_turn(
-                self._analyst, self.state, self.bridge, name, addressed_by
+        if self._is_human_player(name):
+            return await self._give_human_player_a_turn_to_speak(addressed_by)
+        else:
+            return await _run_ai_turn(
+                self._player_agents[name], self._analyst, self.state, name, addressed_by
             )
-        return await _run_ai_turn(
-            self._speaker_agents[name], self._analyst, self.state, name, addressed_by
+
+
+    def _is_human_player(self, name: str) -> bool:
+        return name == self.state.player_name
+
+
+    async def _give_human_player_a_turn_to_speak(self, addressed_by: DiscussionMessage | None) -> DiscussionMessage | None:
+        status = FlowStatus.WAITING_FOR_ANSWER if addressed_by else FlowStatus.WAITING_FOR_TURN
+        await self.bridge.outbox.put(status)
+        return await _run_player_turn(
+            self._analyst, self.state, self.bridge, self.state.player_name, addressed_by
         )
 
     async def _resolve_address_chain(
@@ -326,7 +337,7 @@ class DiscussionRunner:
         if message.addressed_to is None:
             return
         target = message.addressed_to
-        reply = await self._run_turn(target, addressed_by=message)
+        reply = await self._give_player_a_turn_to_speak(target, addressed_by=message)
         if reply is None:
             return
         logger.debug(

@@ -12,7 +12,6 @@ from the_village.discussion.discussion import (
     TurnOutput,
     _format_deaths,
     _format_history,
-    _last_speaker_today,
     _record_message,
     _resolve_target,
     _run_ai_turn,
@@ -248,7 +247,7 @@ async def test_discussion_runner_runs_two_rounds_where_everyone_gets_a_turn():
         runner = DiscussionRunner(
             state=make_discussion_runner_state(),
             bridge=bridge,
-            speaker_agents=_stub_agents(["A", "B", "C", "D"]),
+            player_agents=_stub_agents(["A", "B", "C", "D"]),
             analyst=_stub_agent(),
             rng=random.Random(1),
         )
@@ -300,7 +299,7 @@ async def test_discussion_runner_resolves_a_bonus_reply_chain():
         runner = DiscussionRunner(
             state=state,
             bridge=bridge,
-            speaker_agents=_stub_agents(["A", "B", "C", "D"]),
+            player_agents=_stub_agents(["A", "B", "C", "D"]),
             analyst=_stub_agent(),
             rng=NoShuffleRandom(),
         )
@@ -327,7 +326,7 @@ async def test_discussion_runner_pauses_for_player_and_resumes():
         runner = DiscussionRunner(
             state=state,
             bridge=bridge,
-            speaker_agents=_stub_agents(["A", "B", "C", "D"]),
+            player_agents=_stub_agents(["A", "B", "C", "D"]),
             analyst=_stub_agent(),
             rng=random.Random(1),
         )

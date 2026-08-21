@@ -524,7 +524,7 @@ def cast_player_vote(state: GameState, bridge: SessionBridge, target: str | None
         gr.update(),
     )
     try:
-        outcome = cast_votes(state, bridge.agents, player_vote=target)
+        outcome = cast_votes(state, bridge.player_agents, player_vote=target)
     except gr.Error:
         raise
     except Exception as exc:

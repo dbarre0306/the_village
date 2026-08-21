@@ -36,7 +36,7 @@ class SessionBridge:
     outbox: asyncio.Queue = field(default_factory=asyncio.Queue)
     pending_input: asyncio.Future[PlayerInput] | None = None
     task: asyncio.Task | None = None
-    agents: dict[str, Agent] = field(default_factory=dict)
+    player_agents: dict[str, Agent] = field(default_factory=dict)
 
     async def wait_for_input(self) -> PlayerInput:
         self.pending_input = asyncio.get_event_loop().create_future()

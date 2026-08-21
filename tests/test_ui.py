@@ -510,7 +510,7 @@ def test_cast_player_vote_hides_controls_before_blocking_call():
             Player(name="A", player_type="villager"),
         ],
     )
-    bridge = SessionBridge(agents={"A": ScriptedVoteAgent(None)})
+    bridge = SessionBridge(player_agents={"A": ScriptedVoteAgent(None)})
 
     events = cast_player_vote(state, bridge, "A")
     first_event = next(events)
@@ -529,7 +529,7 @@ def test_cast_player_vote_reveals_outcome_and_updates_panels():
             Player(name="A", player_type="villager"),
         ],
     )
-    bridge = SessionBridge(agents={"A": ScriptedVoteAgent(None)})
+    bridge = SessionBridge(player_agents={"A": ScriptedVoteAgent(None)})
 
     events = list(cast_player_vote(state, bridge, "A"))
     _, status_update, alive_panel_value, lynched_panel_value = events[-1]
@@ -556,7 +556,7 @@ def test_cast_player_vote_wraps_unexpected_errors_as_gr_error():
         def kickoff(self, *args, **kwargs):
             raise RuntimeError("boom")
 
-    bridge = SessionBridge(agents={"A": BoomAgent()})
+    bridge = SessionBridge(player_agents={"A": BoomAgent()})
 
     events = cast_player_vote(state, bridge, "A")
     next(events)  # first yield: hides the ballot before the blocking call
@@ -580,7 +580,7 @@ def test_cast_player_abstain_records_no_target():
             Player(name="A", player_type="villager"),
         ],
     )
-    bridge = SessionBridge(agents={"A": ScriptedVoteAgent(None)})
+    bridge = SessionBridge(player_agents={"A": ScriptedVoteAgent(None)})
 
     list(cast_player_abstain(state, bridge))
 
