@@ -1,4 +1,4 @@
-from the_village.state import WEEKDAYS, Death, DiscussionMessage, GameState, Lynching, Player, VoteRecord
+from the_village.state import WEEKDAYS, Day, DiscussionMessage, GameState, Player, VoteRecord
 
 
 def test_player_defaults():
@@ -7,28 +7,21 @@ def test_player_defaults():
     assert player.is_alive is True
 
 
-def test_death_fields():
-    death = Death(name="Alice", day_number=2)
-    assert death.name == "Alice"
-    assert death.day_number == 2
-
-
-def test_game_state_defaults():
-    state = GameState()
-    assert state.player_name == ""
-    assert state.day_number == 1
-    assert state.players == []
-    assert state.deaths == []
-
-
 def test_weekdays_starts_on_sunday():
     assert WEEKDAYS[0] == "Sunday"
     assert len(WEEKDAYS) == 7
 
 
+def test_day_defaults():
+    day = Day(day_number=1)
+    assert day.player_killed is None
+    assert day.discussion == []
+    assert day.votes == []
+    assert day.player_lynched is None
+
+
 def test_discussion_message_fields():
-    message = DiscussionMessage(day_number=1, speaker="Alice", message="hello")
-    assert message.day_number == 1
+    message = DiscussionMessage(speaker="Alice", message="hello")
     assert message.speaker == "Alice"
     assert message.message == "hello"
     assert message.addressed_to is None
@@ -36,7 +29,6 @@ def test_discussion_message_fields():
 
 def test_discussion_message_addressed_to():
     message = DiscussionMessage(
-        day_number=1,
         speaker="Alice",
         message="Bram, where were you?",
         addressed_to="Bram",
@@ -44,28 +36,45 @@ def test_discussion_message_addressed_to():
     assert message.addressed_to == "Bram"
 
 
-def test_game_state_discussion_defaults_to_empty_list():
-    state = GameState()
-    assert state.discussion == []
-
-
 def test_vote_record_defaults_to_abstain():
-    vote = VoteRecord(day_number=2, voter="Alice")
+    vote = VoteRecord(voter="Alice")
     assert vote.target is None
 
 
 def test_vote_record_with_target():
-    vote = VoteRecord(day_number=2, voter="Alice", target="Bruce")
+    vote = VoteRecord(voter="Alice", target="Bruce")
     assert vote.target == "Bruce"
 
 
-def test_lynching_fields():
-    lynching = Lynching(name="Bruce", day_number=2)
-    assert lynching.name == "Bruce"
-    assert lynching.day_number == 2
-
-
-def test_game_state_votes_and_lynchings_default_to_empty_list():
+def test_game_state_defaults():
     state = GameState()
-    assert state.votes == []
-    assert state.lynchings == []
+    assert state.player_name == ""
+    assert state.players == []
+    assert state.days == [Day(day_number=1)]
+
+
+def test_game_state_day_number_property_reads_the_last_day():
+    state = GameState(days=[Day(day_number=1), Day(day_number=2, player_killed="Bruce")])
+    assert state.day_number == 2
+
+
+def test_game_state_current_day_property_returns_the_last_day():
+    state = GameState(days=[Day(day_number=1), Day(day_number=2, player_killed="Bruce")])
+    assert state.current_day == Day(day_number=2, player_killed="Bruce")
+
+
+def test_advance_day_appends_a_new_day_and_returns_it():
+    state = GameState()
+    new_day = state.advance_day(player_killed="Bruce")
+
+    assert new_day == Day(day_number=2, player_killed="Bruce")
+    assert state.days == [Day(day_number=1), Day(day_number=2, player_killed="Bruce")]
+    assert state.current_day == new_day
+
+
+def test_advance_day_with_no_death():
+    state = GameState()
+    new_day = state.advance_day()
+
+    assert new_day.player_killed is None
+    assert state.day_number == 2

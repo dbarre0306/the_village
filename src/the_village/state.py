@@ -1,6 +1,6 @@
 from typing import Final, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 USER: Final = "user"
 VILLAGER: Final = "villager"
@@ -26,38 +26,42 @@ class Player(BaseModel):
     is_alive: bool = True
 
 
-class Death(BaseModel):
-    name: str
-    day_number: int
-
-
 class DiscussionMessage(BaseModel):
-    day_number: int
     speaker: str
     message: str
     addressed_to: str | None = None
 
 
 class VoteRecord(BaseModel):
-    day_number: int
     voter: str
     target: str | None = None
 
 
-class Lynching(BaseModel):
-    name: str
+class Day(BaseModel):
     day_number: int
+    player_killed: str | None = None
+    discussion: list[DiscussionMessage] = []
+    votes: list[VoteRecord] = []
+    player_lynched: str | None = None
 
 
 class GameState(BaseModel):
     player_name: str = ""
-    day_number: int = 1
     players: list[Player] = []
-    deaths: list[Death] = []
-    discussion: list[DiscussionMessage] = []
-    votes: list[VoteRecord] = []
-    lynchings: list[Lynching] = []
+    days: list[Day] = Field(default_factory=lambda: [Day(day_number=1)])
 
     def ai_players(self) -> list[str]:
         return filter(lambda player: player.player_type in (VILLAGER, WEREWOLF), self.players)
-    
+
+    @property
+    def day_number(self) -> int:
+        return self.days[-1].day_number
+
+    @property
+    def current_day(self) -> Day:
+        return self.days[-1]
+
+    def advance_day(self, player_killed: str | None = None) -> Day:
+        new_day = Day(day_number=self.day_number + 1, player_killed=player_killed)
+        self.days.append(new_day)
+        return new_day
