@@ -25,12 +25,12 @@ class PlayerInput:
 class SessionBridge:
     """The sole channel between a session's background Flow task and Gradio.
 
-    `outbox` carries Flow -> UI updates (DiscussionMessage | Death |
-    FlowStatus); `pending_input` carries the one UI -> Flow value a paused
-    Flow step is waiting on. Reused for every pause point across the whole
-    session (the death-announcement gate, every discussion turn) rather than
-    built fresh per pause, so ui.py has one bridge per session to hold in
-    `gr.State`.
+    `outbox` carries Flow -> UI updates (DiscussionMessage | str | FlowStatus
+    -- the death announcement is a bare str, the victim's name);
+    `pending_input` carries the one UI -> Flow value a paused Flow step is
+    waiting on. Reused for every pause point across the whole session (the
+    death-announcement gate, every discussion turn) rather than built fresh
+    per pause, so ui.py has one bridge per session to hold in `gr.State`.
     """
 
     outbox: asyncio.Queue = field(default_factory=asyncio.Queue)

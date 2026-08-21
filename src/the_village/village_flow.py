@@ -25,7 +25,7 @@ class VillageFlow(Flow[GameState]):
     @start()
     async def setup_game(self):
         roster_state = build_initial_roster(self.state.player_name)
-        self.state.day_number = roster_state.day_number
+        self.state.days = roster_state.days
         self.state.players = roster_state.players
         self._player_agents = self._build_ai_agents()
         self._analyst = build_conversation_analyst_agent()
@@ -37,7 +37,7 @@ class VillageFlow(Flow[GameState]):
 
     @listen(run_night_one)
     async def announce_death(self):
-        await self.bridge.outbox.put(self.state.deaths[-1])
+        await self.bridge.outbox.put(self.state.current_day.player_killed)
         await self.bridge.wait_for_input()
 
     @listen(announce_death)
@@ -53,7 +53,7 @@ class VillageFlow(Flow[GameState]):
             "VillageFlow.run_discussion: flow=%s bridge=%s discussion runner returned, transcript len=%s",
             id(self),
             id(self.bridge),
-            len(self.state.discussion),
+            len(self.state.current_day.discussion),
         )
         await self.bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
 

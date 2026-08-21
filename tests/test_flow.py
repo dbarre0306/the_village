@@ -10,20 +10,12 @@ async def test_village_flow_produces_valid_night_one_result_and_pauses_for_discu
     flow = VillageFlow(bridge=bridge)
     task = asyncio.create_task(flow.kickoff_async(inputs={"player_name": "Dana"}))
 
-    # Drain until the death-announcement pause, then unblock it. We don't
-    # drive a full discussion round here (that's DiscussionRunner's own test
-    # suite in test_discussion.py) -- just confirm VillageFlow reaches and
-    # respects the gate, then cancel rather than run a real discussion.
-    from the_village.state import Death
-
-    saw_death = False
-    for _ in range(50):
-        item = await bridge.outbox.get()
-        if isinstance(item, Death):
-            saw_death = True
-            bridge.resolve_input(PlayerInput())
-            break
-    assert saw_death
+    # announce_death() puts the victim's name (a bare str) on the outbox as
+    # the very first item -- nothing else is queued before it, since
+    # run_discussion() (which queues DiscussionMessage/FlowStatus items)
+    # only starts after this pause is resolved.
+    player_killed = await bridge.outbox.get()
+    bridge.resolve_input(PlayerInput())
 
     task.cancel()
     try:
@@ -33,12 +25,10 @@ async def test_village_flow_produces_valid_night_one_result_and_pauses_for_discu
 
     state = flow.state
     assert len(state.players) == 7
-    assert len(state.deaths) == 1
+    assert state.day_number == 2
+    assert state.current_day.player_killed == player_killed
 
-    death = state.deaths[0]
-    assert death.day_number == 2
-
-    killed = next(v for v in state.players if v.name == death.name)
+    killed = next(v for v in state.players if v.name == player_killed)
     assert killed.player_type == "villager"
     assert killed.is_alive is False
 
@@ -52,13 +42,8 @@ async def test_village_flow_builds_player_agents_onto_the_bridge():
     flow = VillageFlow(bridge=bridge)
     task = asyncio.create_task(flow.kickoff_async(inputs={"player_name": "Dana"}))
 
-    from the_village.state import Death
-
-    for _ in range(50):
-        item = await bridge.outbox.get()
-        if isinstance(item, Death):
-            bridge.resolve_input(PlayerInput())
-            break
+    await bridge.outbox.get()
+    bridge.resolve_input(PlayerInput())
 
     task.cancel()
     try:
