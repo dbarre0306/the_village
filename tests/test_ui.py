@@ -6,7 +6,7 @@ import pytest
 
 from the_village import ui
 from the_village.bridge import FlowFailed, FlowStatus, PlayerInput, SessionBridge
-from the_village.state import DiscussionMessage, Death, GameState, Lynching, VoteRecord, Villager
+from the_village.state import DiscussionMessage, Death, GameState, Lynching, Player, VoteRecord
 from the_village.ui import (
     begin_discussion,
     cast_player_abstain,
@@ -25,14 +25,14 @@ from the_village.voting import VoteChoice, VoteOutcome
 
 
 def make_state_with_one_death() -> GameState:
-    villagers = [
-        Villager(name="Dana", player_type="user"),
-        Villager(name="A", player_type="villager", is_alive=False),
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager", is_alive=False),
     ]
     return GameState(
         player_name="Dana",
         day_number=2,
-        villagers=villagers,
+        players=players,
         deaths=[Death(name="A", day_number=2)],
     )
 
@@ -166,9 +166,9 @@ def _discussion_state() -> GameState:
     return GameState(
         player_name="Dana",
         day_number=1,
-        villagers=[
-            Villager(name="Dana", player_type="user"),
-            Villager(name="A", player_type="villager"),
+        players=[
+            Player(name="Dana", player_type="user"),
+            Player(name="A", player_type="villager"),
         ],
     )
 
@@ -282,9 +282,9 @@ def test_format_discussion_transcript_with_no_messages():
 def test_format_discussion_transcript_lists_messages():
     state = GameState(
         player_name="Dana",
-        villagers=[
-            Villager(name="Dana", player_type="user"),
-            Villager(name="A", player_type="villager"),
+        players=[
+            Player(name="Dana", player_type="user"),
+            Player(name="A", player_type="villager"),
         ],
         discussion=[DiscussionMessage(day_number=1, speaker="A", message="hello")],
     )
@@ -296,9 +296,9 @@ def test_format_discussion_transcript_lists_messages():
 def test_format_discussion_transcript_with_pending_speaker_hides_its_message():
     state = GameState(
         player_name="Dana",
-        villagers=[
-            Villager(name="Dana", player_type="user"),
-            Villager(name="A", player_type="villager"),
+        players=[
+            Player(name="Dana", player_type="user"),
+            Player(name="A", player_type="villager"),
         ],
         discussion=[DiscussionMessage(day_number=1, speaker="A", message="hello")],
     )
@@ -311,9 +311,9 @@ def test_format_discussion_transcript_with_pending_speaker_hides_its_message():
 def test_format_discussion_transcript_with_pending_speaker_keeps_prior_messages():
     state = GameState(
         player_name="Dana",
-        villagers=[
-            Villager(name="Dana", player_type="user"),
-            Villager(name="A", player_type="villager"),
+        players=[
+            Player(name="Dana", player_type="user"),
+            Player(name="A", player_type="villager"),
         ],
         discussion=[
             DiscussionMessage(day_number=1, speaker="A", message="first"),
@@ -335,14 +335,14 @@ def test_format_lynched_panel_with_no_lynchings():
 
 
 def test_format_lynched_panel_with_a_lynching():
-    villagers = [
-        Villager(name="Dana", player_type="user"),
-        Villager(name="A", player_type="villager", is_alive=False),
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager", is_alive=False),
     ]
     state = GameState(
         player_name="Dana",
         day_number=2,
-        villagers=villagers,
+        players=players,
         lynchings=[Lynching(name="A", day_number=2)],
     )
     assert (
@@ -353,20 +353,20 @@ def test_format_lynched_panel_with_a_lynching():
 
 
 def test_vote_candidate_names_excludes_player_and_dead():
-    villagers = [
-        Villager(name="Dana", player_type="user"),
-        Villager(name="A", player_type="villager"),
-        Villager(name="B", player_type="villager", is_alive=False),
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager"),
+        Player(name="B", player_type="villager", is_alive=False),
     ]
-    state = GameState(player_name="Dana", villagers=villagers)
+    state = GameState(player_name="Dana", players=players)
     assert ui._vote_candidate_names(state) == ["A"]
 
 
 def test_vote_button_updates_labels_living_candidates_and_hides_extra_slots():
-    villagers = [Villager(name="Dana", player_type="user")] + [
-        Villager(name=n, player_type="villager") for n in ["A", "B"]
+    players = [Player(name="Dana", player_type="user")] + [
+        Player(name=n, player_type="villager") for n in ["A", "B"]
     ]
-    state = GameState(player_name="Dana", villagers=villagers)
+    state = GameState(player_name="Dana", players=players)
 
     updates = ui._vote_button_updates(state)
 
@@ -383,9 +383,9 @@ def test_vote_button_updates_labels_living_candidates_and_hides_extra_slots():
 def test_begin_voting_shows_vote_controls_and_hides_begin_button():
     state = GameState(
         player_name="Dana",
-        villagers=[
-            Villager(name="Dana", player_type="user"),
-            Villager(name="A", player_type="villager"),
+        players=[
+            Player(name="Dana", player_type="user"),
+            Player(name="A", player_type="villager"),
         ],
     )
 
@@ -428,19 +428,19 @@ class ScriptedVoteAgent:
 def test_colored_name_wraps_name_in_speaker_color_span():
     state = GameState(
         player_name="Dana",
-        villagers=[
-            Villager(name="Dana", player_type="user"),
-            Villager(name="A", player_type="villager"),
+        players=[
+            Player(name="Dana", player_type="user"),
+            Player(name="A", player_type="villager"),
         ],
     )
     assert ui._colored_name("A", state) == '<span style="color: var(--speaker-1)">A</span>'
 
 
 def test_format_vote_result_lists_breakdown_and_lynch_outcome():
-    villagers = [
-        Villager(name="Dana", player_type="user"),
-        Villager(name="A", player_type="villager"),
-        Villager(name="B", player_type="villager"),
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager"),
+        Player(name="B", player_type="villager"),
     ]
     outcome = VoteOutcome(
         day_number=2,
@@ -451,7 +451,7 @@ def test_format_vote_result_lists_breakdown_and_lynch_outcome():
         tally={"A": 1},
         lynched="A",
     )
-    state = GameState(player_name="Dana", day_number=2, villagers=villagers)
+    state = GameState(player_name="Dana", day_number=2, players=players)
 
     result = format_vote_result(state, outcome)
 
@@ -505,9 +505,9 @@ def test_cast_player_vote_hides_controls_before_blocking_call():
     state = GameState(
         player_name="Dana",
         day_number=2,
-        villagers=[
-            Villager(name="Dana", player_type="user"),
-            Villager(name="A", player_type="villager"),
+        players=[
+            Player(name="Dana", player_type="user"),
+            Player(name="A", player_type="villager"),
         ],
     )
     bridge = SessionBridge(agents={"A": ScriptedVoteAgent(None)})
@@ -524,9 +524,9 @@ def test_cast_player_vote_reveals_outcome_and_updates_panels():
     state = GameState(
         player_name="Dana",
         day_number=2,
-        villagers=[
-            Villager(name="Dana", player_type="user"),
-            Villager(name="A", player_type="villager"),
+        players=[
+            Player(name="Dana", player_type="user"),
+            Player(name="A", player_type="villager"),
         ],
     )
     bridge = SessionBridge(agents={"A": ScriptedVoteAgent(None)})
@@ -546,9 +546,9 @@ def test_cast_player_vote_wraps_unexpected_errors_as_gr_error():
     state = GameState(
         player_name="Dana",
         day_number=2,
-        villagers=[
-            Villager(name="Dana", player_type="user"),
-            Villager(name="A", player_type="villager"),
+        players=[
+            Player(name="Dana", player_type="user"),
+            Player(name="A", player_type="villager"),
         ],
     )
 
@@ -575,9 +575,9 @@ def test_cast_player_abstain_records_no_target():
     state = GameState(
         player_name="Dana",
         day_number=2,
-        villagers=[
-            Villager(name="Dana", player_type="user"),
-            Villager(name="A", player_type="villager"),
+        players=[
+            Player(name="Dana", player_type="user"),
+            Player(name="A", player_type="villager"),
         ],
     )
     bridge = SessionBridge(agents={"A": ScriptedVoteAgent(None)})

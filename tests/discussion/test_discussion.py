@@ -19,7 +19,7 @@ from the_village.discussion.discussion import (
     _run_player_turn,
 )
 from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
-from the_village.state import Death, DiscussionMessage, GameState, Villager
+from the_village.state import Death, DiscussionMessage, GameState, Player
 
 
 def test_format_deaths_with_no_deaths():
@@ -52,12 +52,12 @@ def test_format_history_includes_prior_days_in_order():
 
 
 def make_discussion_state() -> GameState:
-    villagers = [
-        Villager(name="Dana", player_type="user"),
-        Villager(name="A", player_type="villager"),
-        Villager(name="B", player_type="villager"),
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager"),
+        Player(name="B", player_type="villager"),
     ]
-    return GameState(player_name="Dana", day_number=1, villagers=villagers)
+    return GameState(player_name="Dana", day_number=1, players=players)
 
 
 def _crew_result(*pydantic_outputs):
@@ -221,14 +221,14 @@ async def test_run_player_turn_resolves_address_via_the_analyst():
 
 
 def make_discussion_runner_state() -> GameState:
-    villagers = [
-        Villager(name="Dana", player_type="user"),
-        Villager(name="A", player_type="villager"),
-        Villager(name="B", player_type="villager"),
-        Villager(name="C", player_type="werewolf", is_pack_leader=True),
-        Villager(name="D", player_type="werewolf"),
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager"),
+        Player(name="B", player_type="villager"),
+        Player(name="C", player_type="werewolf", is_pack_leader=True),
+        Player(name="D", player_type="werewolf"),
     ]
-    return GameState(player_name="Dana", day_number=1, villagers=villagers)
+    return GameState(player_name="Dana", day_number=1, players=players)
 
 
 def _decline_result():

@@ -26,7 +26,7 @@ class VillageFlow(Flow[GameState]):
     async def setup_game(self):
         roster_state = build_initial_roster(self.state.player_name)
         self.state.day_number = roster_state.day_number
-        self.state.villagers = roster_state.villagers
+        self.state.players = roster_state.players
 
     @listen(setup_game)
     async def build_agents(self):
@@ -62,7 +62,8 @@ class VillageFlow(Flow[GameState]):
 
     def _build_ai_agents(self):
         return {
-            v.name: build_agent(v, self.state.villagers) for v in self.state.ai_villagers()
+            player.name: build_agent(player, self.state.players)
+            for player in self.state.ai_players()
         }
 
 

@@ -9,7 +9,7 @@ def resolve_night_one(
     rng = rng or random.Random()
 
     eligible = [
-        v for v in state.villagers if v.player_type == "villager" and v.is_alive
+        v for v in state.players if v.player_type == "villager" and v.is_alive
     ]
     victim = rng.choice(eligible)
     victim.is_alive = False

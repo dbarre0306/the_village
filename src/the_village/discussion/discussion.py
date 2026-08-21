@@ -95,7 +95,7 @@ def _format_history(state: GameState) -> str:
 
 
 def _living_participant_names(state: GameState) -> list[str]:
-    return [v.name for v in state.villagers if v.is_alive]
+    return [v.name for v in state.players if v.is_alive]
 
 
 DECLINED_TO_RESPOND = "[declined to respond]"

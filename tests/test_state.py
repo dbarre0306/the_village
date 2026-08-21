@@ -1,10 +1,10 @@
-from the_village.state import WEEKDAYS, Death, DiscussionMessage, GameState, Lynching, VoteRecord, Villager
+from the_village.state import WEEKDAYS, Death, DiscussionMessage, GameState, Lynching, Player, VoteRecord
 
 
-def test_villager_defaults():
-    villager = Villager(name="Alice", player_type="villager")
-    assert villager.is_pack_leader is False
-    assert villager.is_alive is True
+def test_player_defaults():
+    player = Player(name="Alice", player_type="villager")
+    assert player.is_pack_leader is False
+    assert player.is_alive is True
 
 
 def test_death_fields():
@@ -17,7 +17,7 @@ def test_game_state_defaults():
     state = GameState()
     assert state.player_name == ""
     assert state.day_number == 1
-    assert state.villagers == []
+    assert state.players == []
     assert state.deaths == []
 
 

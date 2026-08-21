@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from crewai import Agent
 
-from the_village.state import Villager
+from the_village.state import Player
 
 
-def _build_werewolf_agent(villager: Villager, all_villagers: list[Villager]) -> Agent:
+def _build_werewolf_agent(player: Player, all_players: list[Player]) -> Agent:
     packmate = next(
-        v.name
-        for v in all_villagers
-        if v.player_type == "werewolf" and v.name != villager.name
+        p.name
+        for p in all_players
+        if p.player_type == "werewolf" and p.name != player.name
     )
     goal = (
         "Blend in as an innocent villager while steering the group's "
@@ -17,7 +17,7 @@ def _build_werewolf_agent(villager: Villager, all_villagers: list[Villager]) -> 
         "werewolf."
     )
     backstory = (
-        f"Your name is {villager.name}. You are secretly a werewolf. You are deceptive and cunning. "
+        f"Your name is {player.name}. You are secretly a werewolf. You are deceptive and cunning. "
         f"Your fellow werewolf is {packmate} — you know this, no one else does. You want someone else "
         "blamed for the killing, so you actively steer suspicion toward other villagers — voicing "
         "doubts about their behavior, questioning their alibi, or agreeing with and amplifying accusations "
@@ -26,7 +26,7 @@ def _build_werewolf_agent(villager: Villager, all_villagers: list[Villager]) -> 
         "sentences, never a speech."
     )
     return Agent(
-        role=f"Villager {villager.name}",
+        role=f"Villager {player.name}",
         goal=goal,
         backstory=backstory,
     )

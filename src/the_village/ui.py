@@ -221,7 +221,7 @@ def _autofocus_js() -> str:
 
 
 def _speaker_color_index(name: str, state: GameState) -> int:
-    roster_names = [villager.name for villager in state.villagers]
+    roster_names = [player.name for player in state.players]
     if name not in roster_names:
         return 0
     return roster_names.index(name) % len(SPEAKER_COLORS)
@@ -279,9 +279,9 @@ def format_lynched_panel(state: GameState) -> str:
 
 def _vote_candidate_names(state: GameState) -> list[str]:
     return [
-        villager.name
-        for villager in state.villagers
-        if villager.is_alive and villager.name != state.player_name
+        player.name
+        for player in state.players
+        if player.is_alive and player.name != state.player_name
     ]
 
 
@@ -305,15 +305,15 @@ def _vote_button_updates(state: GameState) -> list:
 
 
 def format_alive_panel(state: GameState) -> str:
-    alive = [villager for villager in state.villagers if villager.is_alive]
+    alive = [player for player in state.players if player.is_alive]
     if not alive:
         return f'<div class="{CHIP_LIST_CLASS}">No one is left.</div>'
     chips = "".join(
         f'<span class="{VILLAGER_CHIP_CLASS}" '
-        f'style="color: var(--speaker-{_speaker_color_index(villager.name, state)})">'
-        f'{villager.name}{" (me)" if villager.name == state.player_name else ""}'
+        f'style="color: var(--speaker-{_speaker_color_index(player.name, state)})">'
+        f'{player.name}{" (me)" if player.name == state.player_name else ""}'
         f"</span>"
-        for villager in alive
+        for player in alive
     )
     return f'<div class="{CHIP_LIST_CLASS}">{chips}</div>'
 

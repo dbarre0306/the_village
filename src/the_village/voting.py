@@ -111,8 +111,8 @@ def cast_votes(
             lynched = top_targets[0]
 
     if lynched is not None:
-        villager = next(v for v in state.villagers if v.name == lynched)
-        villager.is_alive = False
+        player = next(p for p in state.players if p.name == lynched)
+        player.is_alive = False
         state.lynchings.append(Lynching(name=lynched, day_number=state.day_number))
 
     return VoteOutcome(

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from crewai import Agent
 
-from the_village.state import Villager
+from the_village.state import Player
 
 
-def _build_villager_agent(villager: Villager) -> Agent:
+def _build_villager_agent(villager: Player) -> Agent:
     goal = (
         "Work out who is responsible for the killing by questioning and "
         "scrutinizing the other villagers, while reacting honestly from "

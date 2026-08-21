@@ -4,20 +4,20 @@ import pytest
 
 from the_village.night import resolve_night_one
 from the_village.roster import build_initial_roster
-from the_village.state import GameState, Villager
+from the_village.state import GameState, Player
 
 
 def make_state() -> GameState:
-    villagers = [
-        Villager(name="Dana", player_type="user"),
-        Villager(name="A", player_type="villager"),
-        Villager(name="B", player_type="villager"),
-        Villager(name="C", player_type="villager"),
-        Villager(name="D", player_type="villager"),
-        Villager(name="E", player_type="werewolf", is_pack_leader=True),
-        Villager(name="F", player_type="werewolf"),
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager"),
+        Player(name="B", player_type="villager"),
+        Player(name="C", player_type="villager"),
+        Player(name="D", player_type="villager"),
+        Player(name="E", player_type="werewolf", is_pack_leader=True),
+        Player(name="F", player_type="werewolf"),
     ]
-    return GameState(player_name="Dana", day_number=1, villagers=villagers)
+    return GameState(player_name="Dana", day_number=1, players=players)
 
 
 def test_kills_a_non_player_non_werewolf_villager():
@@ -34,7 +34,7 @@ def test_killed_villager_marked_not_alive():
     resolve_night_one(state, random.Random(1))
 
     killed_name = state.deaths[0].name
-    killed = next(v for v in state.villagers if v.name == killed_name)
+    killed = next(v for v in state.players if v.name == killed_name)
     assert killed.is_alive is False
 
 
@@ -42,8 +42,8 @@ def test_player_and_werewolves_survive_night_one():
     state = make_state()
     resolve_night_one(state, random.Random(1))
 
-    player = next(v for v in state.villagers if v.player_type == "user")
-    werewolves = [v for v in state.villagers if v.player_type == "werewolf"]
+    player = next(v for v in state.players if v.player_type == "user")
+    werewolves = [v for v in state.players if v.player_type == "werewolf"]
     assert player.is_alive is True
     assert all(w.is_alive for w in werewolves)
 
@@ -62,4 +62,4 @@ def test_player_is_never_killed_and_stays_alive_across_seeds(seed):
     resolve_night_one(state, random.Random(seed))
 
     assert state.deaths[0].name != "Alice"
-    assert state.villagers[0].is_alive is True
+    assert state.players[0].is_alive is True

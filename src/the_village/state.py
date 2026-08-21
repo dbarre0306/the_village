@@ -19,7 +19,7 @@ WEEKDAYS = [
 ]
 
 
-class Villager(BaseModel):
+class Player(BaseModel):
     name: str
     player_type: PlayerType
     is_pack_leader: bool = False
@@ -52,12 +52,12 @@ class Lynching(BaseModel):
 class GameState(BaseModel):
     player_name: str = ""
     day_number: int = 1
-    villagers: list[Villager] = []
+    players: list[Player] = []
     deaths: list[Death] = []
     discussion: list[DiscussionMessage] = []
     votes: list[VoteRecord] = []
     lynchings: list[Lynching] = []
 
-    def ai_villagers(self) -> list[str]:
-        return filter(lambda player: player.player_type in (VILLAGER, WEREWOLF), self.villagers)
+    def ai_players(self) -> list[str]:
+        return filter(lambda player: player.player_type in (VILLAGER, WEREWOLF), self.players)
     

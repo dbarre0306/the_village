@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from the_village.state import DiscussionMessage, GameState, Lynching, Villager
+from the_village.state import DiscussionMessage, GameState, Lynching, Player
 from the_village.voting import (
     VoteChoice,
     VoteOutcome,
@@ -84,14 +84,14 @@ class ScriptedVoteAgent:
 
 
 def make_voting_state(day_number: int = 2) -> GameState:
-    villagers = [
-        Villager(name="Dana", player_type="user"),
-        Villager(name="A", player_type="villager"),
-        Villager(name="B", player_type="villager"),
-        Villager(name="C", player_type="villager"),
-        Villager(name="E", player_type="werewolf"),
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager"),
+        Player(name="B", player_type="villager"),
+        Player(name="C", player_type="villager"),
+        Player(name="E", player_type="werewolf"),
     ]
-    return GameState(player_name="Dana", day_number=day_number, villagers=villagers)
+    return GameState(player_name="Dana", day_number=day_number, players=players)
 
 
 def test_majority_vote_lynches_the_top_target():
@@ -107,7 +107,7 @@ def test_majority_vote_lynches_the_top_target():
 
     assert outcome.lynched == "B"
     assert outcome.tally == {"B": 4}
-    b = next(v for v in state.villagers if v.name == "B")
+    b = next(v for v in state.players if v.name == "B")
     assert b.is_alive is False
     assert state.lynchings == [Lynching(name="B", day_number=2)]
 
@@ -128,7 +128,7 @@ def test_ai_votes_can_lynch_the_player():
     outcome = cast_votes(state, agents, player_vote=None)
 
     assert outcome.lynched == "Dana"
-    dana = next(v for v in state.villagers if v.name == "Dana")
+    dana = next(v for v in state.players if v.name == "Dana")
     assert dana.is_alive is False
     assert state.lynchings == [Lynching(name="Dana", day_number=2)]
 
@@ -147,7 +147,7 @@ def test_tie_results_in_no_lynch():
     # tally: A=2 (from C, E), B=2 (from Dana, A) -> tied for the top
     assert outcome.lynched is None
     assert state.lynchings == []
-    assert all(v.is_alive for v in state.villagers)
+    assert all(v.is_alive for v in state.players)
 
 
 def test_all_abstain_results_in_no_lynch():
@@ -176,12 +176,12 @@ def test_ai_self_vote_is_normalized_to_abstain():
 
 
 def test_dead_villagers_excluded_from_voting_and_targets():
-    villagers = [
-        Villager(name="Dana", player_type="user"),
-        Villager(name="A", player_type="villager", is_alive=False),
-        Villager(name="B", player_type="villager"),
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager", is_alive=False),
+        Player(name="B", player_type="villager"),
     ]
-    state = GameState(player_name="Dana", day_number=3, villagers=villagers)
+    state = GameState(player_name="Dana", day_number=3, players=players)
     agents = {"B": ScriptedVoteAgent("A")}
 
     outcome = cast_votes(state, agents, player_vote=None)
