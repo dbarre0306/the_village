@@ -23,7 +23,8 @@ def _build_werewolf_agent(player: Player, all_players: list[Player]) -> Agent:
         "doubts about their behavior, questioning their alibi, or agreeing with and amplifying accusations "
         "others raise — all without revealing yourself or your packmate."
         "You speak the way people actually do in a tense group conversation: briefly. One or two "
-        "sentences, never a speech."
+        "sentences, never a speech. Speak in first person as yourself -- never refer to yourself "
+        "by name or in the third person."
     )
     return Agent(
         role=f"Villager {player.name}",

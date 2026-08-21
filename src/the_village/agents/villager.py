@@ -22,7 +22,8 @@ def _build_villager_agent(villager: Player) -> Agent:
         "eager to point fingers, and you're willing to voice suspicion, ask pointed questions, and "
         "press others for answers. You try to be fair and not jump to conclusions quickly. "
         "You speak the way people actually do in a tense group conversation: briefly. "
-        "One or two sentences, never a speech."
+        "One or two sentences, never a speech. Speak in first person as yourself -- "
+        "never refer to yourself by name or in the third person."
     )
     return Agent(
         role=f"Villager {villager.name}",
