@@ -17,15 +17,15 @@ def make_state() -> GameState:
         Player(name="E", player_type="werewolf", is_pack_leader=True),
         Player(name="F", player_type="werewolf"),
     ]
-    return GameState(player_name="Dana", day_number=1, players=players)
+    return GameState(player_name="Dana", players=players)
 
 
 def test_kills_a_non_player_non_werewolf_villager():
     state = make_state()
     resolve_night_one(state, random.Random(1))
 
-    assert len(state.deaths) == 1
-    killed_name = state.deaths[0].name
+    assert len(state.days) == 2
+    killed_name = state.current_day.player_killed
     assert killed_name in {"A", "B", "C", "D"}
 
 
@@ -33,7 +33,7 @@ def test_killed_villager_marked_not_alive():
     state = make_state()
     resolve_night_one(state, random.Random(1))
 
-    killed_name = state.deaths[0].name
+    killed_name = state.current_day.player_killed
     killed = next(v for v in state.players if v.name == killed_name)
     assert killed.is_alive is False
 
@@ -53,7 +53,6 @@ def test_day_number_advances_to_two():
     resolve_night_one(state, random.Random(1))
 
     assert state.day_number == 2
-    assert state.deaths[0].day_number == 2
 
 
 @pytest.mark.parametrize("seed", range(50))
@@ -61,5 +60,5 @@ def test_player_is_never_killed_and_stays_alive_across_seeds(seed):
     state = build_initial_roster("Alice", random.Random(seed))
     resolve_night_one(state, random.Random(seed))
 
-    assert state.deaths[0].name != "Alice"
+    assert state.current_day.player_killed != "Alice"
     assert state.players[0].is_alive is True

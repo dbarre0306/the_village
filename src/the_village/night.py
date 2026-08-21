@@ -1,6 +1,6 @@
 import random
 
-from the_village.state import Death, GameState
+from the_village.state import GameState
 
 
 def resolve_night_one(
@@ -14,8 +14,6 @@ def resolve_night_one(
     victim = rng.choice(eligible)
     victim.is_alive = False
 
-    new_day = state.day_number + 1
-    state.deaths.append(Death(name=victim.name, day_number=new_day))
-    state.day_number = new_day
+    state.advance_day(player_killed=victim.name)
 
     return state
