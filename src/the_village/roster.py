@@ -39,4 +39,4 @@ def build_initial_roster(
         werewolf.player_type = "werewolf"
     rng.choice(werewolves).is_pack_leader = True
 
-    return GameState(player_name=player_name, day_number=1, players=players)
+    return GameState(player_name=player_name, players=players)
