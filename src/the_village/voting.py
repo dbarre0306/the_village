@@ -11,7 +11,7 @@ from the_village.discussion.discussion import (
     _living_participant_names,
     _weekday,
 )
-from the_village.state import GameState, Lynching, VoteRecord
+from the_village.state import GameState, VoteRecord
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +44,12 @@ def _resolve_target(
 
 
 def _format_lynchings(state: GameState) -> str:
-    if not state.lynchings:
+    lynched_days = [day for day in state.days if day.player_lynched]
+    if not lynched_days:
         return "(No one has been lynched yet.)"
     return "\n".join(
-        f"{lynching.name} was lynched by the village on {_weekday(lynching.day_number)}."
-        for lynching in state.lynchings
+        f"{day.player_lynched} was lynched by the village on {_weekday(day.day_number)}."
+        for day in lynched_days
     )
 
 
@@ -92,11 +93,9 @@ def cast_votes(
                 logger.warning(
                     "Discarding %s's invalid vote for %r", name, choice.target
                 )
-        votes.append(
-            VoteRecord(day_number=state.day_number, voter=name, target=target)
-        )
+        votes.append(VoteRecord(voter=name, target=target))
 
-    state.votes.extend(votes)
+    state.current_day.votes.extend(votes)
 
     tally: dict[str, int] = {}
     for vote in votes:
@@ -113,7 +112,7 @@ def cast_votes(
     if lynched is not None:
         player = next(p for p in state.players if p.name == lynched)
         player.is_alive = False
-        state.lynchings.append(Lynching(name=lynched, day_number=state.day_number))
+        state.current_day.player_lynched = lynched
 
     return VoteOutcome(
         day_number=state.day_number, votes=votes, tally=tally, lynched=lynched
