@@ -23,9 +23,6 @@ refactor — no migration format to preserve.
 ## Data Model
 
 ```python
-class Death(BaseModel):
-    name: str
-
 class DiscussionMessage(BaseModel):
     speaker: str
     message: str
@@ -35,15 +32,12 @@ class VoteRecord(BaseModel):
     voter: str
     target: str | None = None
 
-class Lynching(BaseModel):
-    name: str
-
 class Day(BaseModel):
     day_number: int
-    death: Death | None = None
+    player_killed: str | None = None
     discussion: list[DiscussionMessage] = []
     votes: list[VoteRecord] = []
-    lynching: Lynching | None = None
+    player_lynched: str | None = None
 
 class GameState(BaseModel):
     player_name: str = ""
@@ -61,28 +55,38 @@ class GameState(BaseModel):
     def current_day(self) -> Day:
         return self.days[-1]
 
-    def advance_day(self, death: Death | None = None) -> Day:
-        new_day = Day(day_number=self.day_number + 1, death=death)
+    def advance_day(self, player_killed: str | None = None) -> Day:
+        new_day = Day(day_number=self.day_number + 1, player_killed=player_killed)
         self.days.append(new_day)
         return new_day
-
-    def all_discussion(self) -> list[DiscussionMessage]:
-        return [message for day in self.days for message in day.discussion]
 ```
 
-`Death`, `DiscussionMessage`, `VoteRecord`, and `Lynching` drop their
-`day_number` field — each is only ever reached through its owning `Day`, so
-the field would just be a second copy of `Day.day_number`.
+`Death` and `Lynching` are dropped as classes entirely — each was already
+just a `name: str` wrapper once `day_number` came out (see below), and
+nothing in the codebase pattern-matches on them as distinct types (checked
+`bridge.py`/`ui.py`'s outbox consumers: only `DiscussionMessage` and
+`FlowFailed` are ever `isinstance`-checked there). `Day` just stores the
+player's name directly as `player_killed` / `player_lynched`.
+
+`DiscussionMessage` and `VoteRecord` drop their `day_number` field — each is
+only ever reached through its owning `Day`, so the field would just be a
+second copy of `Day.day_number`.
 
 `GameState.day_number` and `GameState.current_day` mean most existing
 read-only call sites (UI weekday labels, flow logging) don't change at all;
 they just now read a property instead of a field. `advance_day()` replaces
 the "compute new day number, stamp a `Death`, assign the counter" sequence
-that today lives inline in `night.py`. `all_discussion()` exists because
-two call sites (the discussion transcript formatter and
-`DiscussionRunner.run()`'s return value) need the full cross-day message
-list, not "today's" — a flatten is simpler than exposing day structure to
-callers that don't care about it.
+that today lives inline in `night.py`.
+
+No cross-day flatten helper (e.g. an `all_discussion()`) is added.
+`DiscussionRunner.run()` now returns only the current day's discussion —
+nothing downstream ever consumed a cross-day return value from it (see call
+site changes below). The two remaining places that render history across
+every day — `_format_history()` and `ui.py`'s transcript panel — walk
+`state.days` directly and pull `day.discussion` themselves; a
+discussion-only flatten wouldn't have served the transcript panel anyway,
+since that panel's day-by-day view also needs each day's `player_killed`,
+`votes`, and `player_lynched`, not just its messages.
 
 `VoteOutcome` (`voting.py`) is a separate, transient return model — not
 part of `GameState` — and keeps its own `day_number` field unchanged; this
@@ -95,27 +99,31 @@ design only touches `GameState`'s owned models.
 - **`night.py`** `resolve_night_one()`: replace the manual
   `new_day = state.day_number + 1` / `state.deaths.append(Death(name=...,
   day_number=new_day))` / `state.day_number = new_day` sequence with a
-  single `state.advance_day(death=Death(name=victim.name))` call.
+  single `state.advance_day(player_killed=victim.name)` call.
 - **`voting.py`**:
   - `_format_lynchings()` iterates `state.days`, formatting each day that
-    has a `lynching` using `day.day_number` and `day.lynching.name`
+    has a `player_lynched` using `day.day_number` and `day.player_lynched`
     (instead of filtering a flat `state.lynchings` list by stamped
     `day_number`).
   - `cast_votes()` builds `VoteRecord(voter=name, target=target)` (no
-    `day_number`) into `state.current_day.votes`, and
-    `Lynching(name=lynched)` assigned to `state.current_day.lynching`.
+    `day_number`) into `state.current_day.votes`, and assigns the winning
+    name directly: `state.current_day.player_lynched = lynched`.
   - `VoteOutcome` construction is unchanged (still reads `state.day_number`
     for its own field).
 - **`discussion/discussion.py`**:
   - `_format_deaths()` iterates `state.days`, formatting each day that has
-    a `death` using `day.day_number` and `day.death.name`.
+    a `player_killed` using `day.day_number` and `day.player_killed`.
   - `_format_history()` iterates `state.days` then each `day.discussion`
     entry, same join-by-speaker output as today.
   - `_record_message()` builds `DiscussionMessage(speaker=..., message=...,
     addressed_to=...)` (no `day_number`) and appends to
     `state.current_day.discussion`.
-  - `DiscussionRunner.run()` returns `self.state.all_discussion()` instead
-    of `self.state.discussion`.
+  - `DiscussionRunner.run()` returns `self.state.current_day.discussion`
+    instead of `self.state.discussion` — only today's transcript, not every
+    day's. Nothing downstream currently captures this return value (
+    `village_flow.py`'s `run_discussion()` calls `.run()` without assigning
+    it), so this is a genuine scope correction rather than a behavior-
+    preserving rename.
   - The two logging statements that currently read `message.day_number` /
     `reply.day_number` log `state.day_number` instead (the day being
     discussed, not a field on the message).
@@ -123,27 +131,38 @@ design only touches `GameState`'s owned models.
   - `setup_game()`'s `self.state.day_number = roster_state.day_number`
     becomes `self.state.days = roster_state.days`.
   - `announce_death()`'s `self.state.deaths[-1]` becomes
-    `self.state.current_day.death`.
+    `self.state.current_day.player_killed` — a bare `str` (the victim's
+    name) instead of a `Death` object. It's put on `bridge.outbox`
+    unchanged otherwise; nothing downstream reads it (`start_game()`'s
+    consumer only checks for `FlowFailed`, then re-renders panels from
+    `state`), so `bridge.py`'s outbox docstring (`DiscussionMessage | Death
+    | FlowStatus`) is updated to say `DiscussionMessage | str | FlowStatus`.
   - The debug log of `len(self.state.discussion)` becomes
-    `len(self.state.all_discussion())`.
+    `len(self.state.current_day.discussion)` — it logs how many messages
+    today's discussion run produced, matching `run_discussion()`'s own
+    scope now that `DiscussionRunner.run()` returns only today's
+    transcript.
 - **`ui.py`**:
   - `format_event_log()` and `format_deaths_panel()` iterate `state.days`,
-    reading `day.day_number` / `day.death` for each day that has one
-    (instead of iterating flat `state.deaths`).
+    reading `day.day_number` / `day.player_killed` for each day that has
+    one (instead of iterating flat `state.deaths`).
   - `format_lynched_panel()` iterates `state.days`, reading
-    `day.day_number` / `day.lynching`.
-  - `format_discussion_transcript()` uses `state.all_discussion()` in place
-    of `state.discussion`; the existing `[:-1]` "hide last message while
-    typing placeholder shows" slice is unchanged.
+    `day.day_number` / `day.player_lynched`.
+  - `format_discussion_transcript()` iterates `state.days`, flattening each
+    day's `discussion` in place of reading flat `state.discussion`; the
+    existing `[:-1]` "hide last message while typing placeholder shows"
+    slice is unchanged (still applied to the flattened result).
   - `begin_discussion()` and `begin_voting()` are unaffected — they read
     `state.day_number`, which continues to work via the property.
 - **Tests** (`test_state.py`, `test_night.py`, `test_roster.py`,
   `test_voting.py`, `test_ui.py`, `discussion/test_discussion.py`,
-  `test_flow.py`): every direct construction of `Death`,
-  `DiscussionMessage`, `VoteRecord`, or `Lynching` with an explicit
+  `test_flow.py`): every direct construction of the old `Death`,
+  `DiscussionMessage`, `VoteRecord`, or `Lynching` models with an explicit
   `day_number=...` kwarg, and every assertion against
   `state.deaths`/`state.discussion`/`state.votes`/`state.lynchings`, is
-  rewritten against `state.days` / `Day` / the new `GameState` helpers.
+  rewritten against `state.days` / `Day` / the new `GameState` helpers —
+  including replacing `Death(name=...)`/`Lynching(name=...)` construction
+  with plain strings assigned to `Day.player_killed`/`Day.player_lynched`.
 
 ## Out of scope
 
