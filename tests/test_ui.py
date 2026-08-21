@@ -6,7 +6,7 @@ import pytest
 
 from the_village import ui
 from the_village.bridge import FlowFailed, FlowStatus, PlayerInput, SessionBridge
-from the_village.state import DiscussionMessage, Death, GameState, Lynching, Player, VoteRecord
+from the_village.state import Day, DiscussionMessage, GameState, Player, VoteRecord
 from the_village.ui import (
     begin_discussion,
     cast_player_abstain,
@@ -31,14 +31,13 @@ def make_state_with_one_death() -> GameState:
     ]
     return GameState(
         player_name="Dana",
-        day_number=2,
         players=players,
-        deaths=[Death(name="A", day_number=2)],
+        days=[Day(day_number=2, player_killed="A")],
     )
 
 
 def test_format_event_log_with_no_deaths():
-    state = GameState(player_name="Dana", day_number=1)
+    state = GameState(player_name="Dana")
     assert format_event_log(state) == "<strong>Nothing has happened yet.</strong>"
 
 
@@ -53,7 +52,7 @@ def test_format_event_log_with_a_death():
 
 
 def test_format_deaths_panel_with_no_deaths():
-    state = GameState(player_name="Dana", day_number=1)
+    state = GameState(player_name="Dana")
     assert format_deaths_panel(state) == '<div class="chip-list">No one has been killed yet.</div>'
 
 
@@ -76,7 +75,7 @@ def test_format_alive_panel_marks_player_and_excludes_dead_villagers():
 
 
 def test_format_alive_panel_with_no_villagers():
-    state = GameState(player_name="Dana", day_number=1)
+    state = GameState(player_name="Dana")
     assert format_alive_panel(state) == '<div class="chip-list">No one is left.</div>'
 
 
@@ -102,7 +101,7 @@ async def test_begin_discussion_resolves_the_death_gate_and_streams_to_completio
     await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
 
     outputs = [
-        update async for update in begin_discussion(bridge, GameState(day_number=1))
+        update async for update in begin_discussion(bridge, GameState())
     ]
 
     assert await waiter == PlayerInput()
@@ -165,7 +164,6 @@ async def test_begin_discussion_raises_gr_error_on_flow_failed():
 def _discussion_state() -> GameState:
     return GameState(
         player_name="Dana",
-        day_number=1,
         players=[
             Player(name="Dana", player_type="user"),
             Player(name="A", player_type="villager"),
@@ -177,9 +175,9 @@ async def test_streamed_discussion_message_appears_in_rendered_transcript(monkey
     # Regression test for the discussion transcript never rendering: the
     # background DiscussionRunner appends messages to this same live
     # GameState (as it does in production -- see the append below), so
-    # _stream_bridge must render off of `state.discussion` as items stream
-    # in for the transcript to ever show anything before the whole
-    # discussion finishes.
+    # _stream_bridge must render off of `state.days` as items stream in for
+    # the transcript to ever show anything before the whole discussion
+    # finishes.
     #
     # Zero out the pacing delay rather than monkeypatching asyncio.sleep
     # itself -- asyncio.sleep is also what the test below uses to yield
@@ -193,10 +191,10 @@ async def test_streamed_discussion_message_appears_in_rendered_transcript(monkey
     await asyncio.sleep(0)
 
     state = _discussion_state()
-    message = DiscussionMessage(day_number=1, speaker="A", message="I saw something strange.")
-    # DiscussionRunner._record_message appends to state.discussion before
-    # putting the message on the outbox -- mirror that ordering here.
-    state.discussion.append(message)
+    message = DiscussionMessage(speaker="A", message="I saw something strange.")
+    # DiscussionRunner._record_message appends to state.current_day.discussion
+    # before putting the message on the outbox -- mirror that ordering here.
+    state.current_day.discussion.append(message)
     await bridge.outbox.put(message)
     await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
 
@@ -204,8 +202,8 @@ async def test_streamed_discussion_message_appears_in_rendered_transcript(monkey
     transcripts = [update[1] for update in outputs if isinstance(update[1], str)]
 
     assert any("I saw something strange." in t for t in transcripts)
-    assert len(state.discussion) == 1
-    assert state.discussion[0].message == "I saw something strange."
+    assert len(state.current_day.discussion) == 1
+    assert state.current_day.discussion[0].message == "I saw something strange."
     waiter.cancel()
 
 
@@ -224,8 +222,8 @@ async def test_ai_turn_shows_pending_placeholder_before_revealing_message(monkey
     await real_sleep(0)
 
     state = _discussion_state()
-    message = DiscussionMessage(day_number=1, speaker="A", message="hi there")
-    state.discussion.append(message)
+    message = DiscussionMessage(speaker="A", message="hi there")
+    state.current_day.discussion.append(message)
     await bridge.outbox.put(message)
     await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
 
@@ -258,8 +256,8 @@ async def test_player_message_shows_immediately_without_placeholder_or_sleep(mon
     # so this exercises the same _stream_bridge path with speaker ==
     # state.player_name.
     state = _discussion_state()
-    message = DiscussionMessage(day_number=1, speaker="Dana", message="It wasn't me!")
-    state.discussion.append(message)
+    message = DiscussionMessage(speaker="Dana", message="It wasn't me!")
+    state.current_day.discussion.append(message)
     await bridge.outbox.put(message)
     await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
 
@@ -286,7 +284,7 @@ def test_format_discussion_transcript_lists_messages():
             Player(name="Dana", player_type="user"),
             Player(name="A", player_type="villager"),
         ],
-        discussion=[DiscussionMessage(day_number=1, speaker="A", message="hello")],
+        days=[Day(day_number=1, discussion=[DiscussionMessage(speaker="A", message="hello")])],
     )
     transcript = format_discussion_transcript(state)
     assert "A:</span> hello" in transcript
@@ -300,7 +298,7 @@ def test_format_discussion_transcript_with_pending_speaker_hides_its_message():
             Player(name="Dana", player_type="user"),
             Player(name="A", player_type="villager"),
         ],
-        discussion=[DiscussionMessage(day_number=1, speaker="A", message="hello")],
+        days=[Day(day_number=1, discussion=[DiscussionMessage(speaker="A", message="hello")])],
     )
     transcript = format_discussion_transcript(state, pending_speaker="A")
     assert "hello" not in transcript
@@ -315,9 +313,14 @@ def test_format_discussion_transcript_with_pending_speaker_keeps_prior_messages(
             Player(name="Dana", player_type="user"),
             Player(name="A", player_type="villager"),
         ],
-        discussion=[
-            DiscussionMessage(day_number=1, speaker="A", message="first"),
-            DiscussionMessage(day_number=1, speaker="Dana", message="second"),
+        days=[
+            Day(
+                day_number=1,
+                discussion=[
+                    DiscussionMessage(speaker="A", message="first"),
+                    DiscussionMessage(speaker="Dana", message="second"),
+                ],
+            )
         ],
     )
     transcript = format_discussion_transcript(state, pending_speaker="Dana")
@@ -327,7 +330,7 @@ def test_format_discussion_transcript_with_pending_speaker_keeps_prior_messages(
 
 
 def test_format_lynched_panel_with_no_lynchings():
-    state = GameState(player_name="Dana", day_number=1)
+    state = GameState(player_name="Dana")
     assert (
         format_lynched_panel(state)
         == '<div class="chip-list">No one has been lynched yet.</div>'
@@ -341,9 +344,8 @@ def test_format_lynched_panel_with_a_lynching():
     ]
     state = GameState(
         player_name="Dana",
-        day_number=2,
         players=players,
-        lynchings=[Lynching(name="A", day_number=2)],
+        days=[Day(day_number=2, player_lynched="A")],
     )
     assert (
         format_lynched_panel(state)
@@ -445,13 +447,13 @@ def test_format_vote_result_lists_breakdown_and_lynch_outcome():
     outcome = VoteOutcome(
         day_number=2,
         votes=[
-            VoteRecord(day_number=2, voter="Dana", target="A"),
-            VoteRecord(day_number=2, voter="B", target=None),
+            VoteRecord(voter="Dana", target="A"),
+            VoteRecord(voter="B", target=None),
         ],
         tally={"A": 1},
         lynched="A",
     )
-    state = GameState(player_name="Dana", day_number=2, players=players)
+    state = GameState(player_name="Dana", players=players, days=[Day(day_number=2)])
 
     result = format_vote_result(state, outcome)
 
@@ -469,11 +471,11 @@ def test_format_vote_result_lists_breakdown_and_lynch_outcome():
 def test_format_vote_result_omits_tally_line_when_no_non_abstain_votes():
     outcome = VoteOutcome(
         day_number=2,
-        votes=[VoteRecord(day_number=2, voter="Dana", target=None)],
+        votes=[VoteRecord(voter="Dana", target=None)],
         tally={},
         lynched=None,
     )
-    state = GameState(player_name="Dana", day_number=2)
+    state = GameState(player_name="Dana", days=[Day(day_number=2)])
 
     result = format_vote_result(state, outcome)
 
@@ -485,7 +487,7 @@ def test_format_vote_result_omits_tally_line_when_no_non_abstain_votes():
 
 def test_format_vote_result_reports_tie():
     outcome = VoteOutcome(day_number=2, votes=[], tally={"A": 1, "B": 1}, lynched=None)
-    state = GameState(player_name="Dana", day_number=2)
+    state = GameState(player_name="Dana", days=[Day(day_number=2)])
 
     result = format_vote_result(state, outcome)
 
@@ -494,7 +496,7 @@ def test_format_vote_result_reports_tie():
 
 def test_format_vote_result_reports_no_votes():
     outcome = VoteOutcome(day_number=2, votes=[], tally={}, lynched=None)
-    state = GameState(player_name="Dana", day_number=2)
+    state = GameState(player_name="Dana", days=[Day(day_number=2)])
 
     result = format_vote_result(state, outcome)
 
@@ -504,11 +506,11 @@ def test_format_vote_result_reports_no_votes():
 def test_cast_player_vote_hides_controls_before_blocking_call():
     state = GameState(
         player_name="Dana",
-        day_number=2,
         players=[
             Player(name="Dana", player_type="user"),
             Player(name="A", player_type="villager"),
         ],
+        days=[Day(day_number=2)],
     )
     bridge = SessionBridge(player_agents={"A": ScriptedVoteAgent(None)})
 
@@ -523,11 +525,11 @@ def test_cast_player_vote_hides_controls_before_blocking_call():
 def test_cast_player_vote_reveals_outcome_and_updates_panels():
     state = GameState(
         player_name="Dana",
-        day_number=2,
         players=[
             Player(name="Dana", player_type="user"),
             Player(name="A", player_type="villager"),
         ],
+        days=[Day(day_number=2)],
     )
     bridge = SessionBridge(player_agents={"A": ScriptedVoteAgent(None)})
 
@@ -545,11 +547,11 @@ def test_cast_player_vote_reveals_outcome_and_updates_panels():
 def test_cast_player_vote_wraps_unexpected_errors_as_gr_error():
     state = GameState(
         player_name="Dana",
-        day_number=2,
         players=[
             Player(name="Dana", player_type="user"),
             Player(name="A", player_type="villager"),
         ],
+        days=[Day(day_number=2)],
     )
 
     class BoomAgent:
@@ -574,15 +576,15 @@ def test_cast_player_vote_wraps_unexpected_errors_as_gr_error():
 def test_cast_player_abstain_records_no_target():
     state = GameState(
         player_name="Dana",
-        day_number=2,
         players=[
             Player(name="Dana", player_type="user"),
             Player(name="A", player_type="villager"),
         ],
+        days=[Day(day_number=2)],
     )
     bridge = SessionBridge(player_agents={"A": ScriptedVoteAgent(None)})
 
     list(cast_player_abstain(state, bridge))
 
-    dana_record = next(v for v in state.votes if v.voter == "Dana")
+    dana_record = next(v for v in state.current_day.votes if v.voter == "Dana")
     assert dana_record.target is None

@@ -238,41 +238,44 @@ DEATH_MESSAGE_TEMPLATES = [
 
 
 def format_event_log(state: GameState) -> str:
-    if not state.deaths:
+    dead_days = [day for day in state.days if day.player_killed]
+    if not dead_days:
         return "<strong>Nothing has happened yet.</strong>"
     lines = [
         "<strong>"
-        f"{WEEKDAYS[(death.day_number - 1) % 7]} morning: "
+        f"{WEEKDAYS[(day.day_number - 1) % 7]} morning: "
         f'<span class="{DEATH_LINE_CLASS}">'
         + DEATH_MESSAGE_TEMPLATES[index % len(DEATH_MESSAGE_TEMPLATES)].format(
-            name=death.name
+            name=day.player_killed
         )
         + "</span></strong>"
-        for index, death in enumerate(state.deaths)
+        for index, day in enumerate(dead_days)
     ]
     return "\n\n".join(lines)
 
 
 def format_deaths_panel(state: GameState) -> str:
-    if not state.deaths:
+    dead_days = [day for day in state.days if day.player_killed]
+    if not dead_days:
         return f'<div class="{CHIP_LIST_CLASS}">No one has been killed yet.</div>'
     chips = "".join(
         f'<span class="{VILLAGER_CHIP_CLASS} dead" '
-        f'style="color: var(--speaker-{_speaker_color_index(death.name, state)})">'
-        f"{death.name}</span>"
-        for death in state.deaths
+        f'style="color: var(--speaker-{_speaker_color_index(day.player_killed, state)})">'
+        f"{day.player_killed}</span>"
+        for day in dead_days
     )
     return f'<div class="{CHIP_LIST_CLASS}">{chips}</div>'
 
 
 def format_lynched_panel(state: GameState) -> str:
-    if not state.lynchings:
+    lynched_days = [day for day in state.days if day.player_lynched]
+    if not lynched_days:
         return f'<div class="{CHIP_LIST_CLASS}">No one has been lynched yet.</div>'
     chips = "".join(
         f'<span class="{VILLAGER_CHIP_CLASS} dead" '
-        f'style="color: var(--speaker-{_speaker_color_index(lynching.name, state)})">'
-        f"{lynching.name}</span>"
-        for lynching in state.lynchings
+        f'style="color: var(--speaker-{_speaker_color_index(day.player_lynched, state)})">'
+        f"{day.player_lynched}</span>"
+        for day in lynched_days
     )
     return f'<div class="{CHIP_LIST_CLASS}">{chips}</div>'
 
@@ -334,9 +337,11 @@ def format_discussion_transcript(
     state: GameState, pending_speaker: str | None = None
 ) -> str:
     # `pending_speaker` hides the last message (already appended to
-    # state.discussion by the time this is called) and shows a "typing"
-    # placeholder for that speaker instead, so the reveal can be paced.
-    messages = state.discussion[:-1] if pending_speaker is not None else state.discussion
+    # state.current_day.discussion by the time this is called) and shows a
+    # "typing" placeholder for that speaker instead, so the reveal can be
+    # paced.
+    all_messages = [message for day in state.days for message in day.discussion]
+    messages = all_messages[:-1] if pending_speaker is not None else all_messages
     lines = [
         f"{_speaker_name_span(m.speaker, state)} {m.message}" for m in messages
     ]
