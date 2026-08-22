@@ -60,8 +60,8 @@ def test_build_vote_prompt_includes_full_multi_day_discussion_history():
     state = GameState(
         player_name="Dana",
         days=[
-            Day(day_number=1, discussion=[DiscussionMessage(speaker="A", message="yesterday's claim")]),
-            Day(day_number=2, discussion=[DiscussionMessage(speaker="B", message="today's claim")]),
+            Day(day_number=1, discussion=[DiscussionMessage(speaker="A", text="yesterday's claim")]),
+            Day(day_number=2, discussion=[DiscussionMessage(speaker="B", text="today's claim")]),
         ],
     )
     prompt = _build_vote_prompt(state, ["A", "B"])
@@ -224,8 +224,8 @@ def test_votes_recorded_onto_the_current_day():
 def test_prompt_passed_to_agents_includes_full_multi_day_discussion_history():
     state = make_voting_state()
     state.days = [
-        Day(day_number=1, discussion=[DiscussionMessage(speaker="A", message="yesterday's claim")]),
-        Day(day_number=2, discussion=[DiscussionMessage(speaker="B", message="today's claim")]),
+        Day(day_number=1, discussion=[DiscussionMessage(speaker="A", text="yesterday's claim")]),
+        Day(day_number=2, discussion=[DiscussionMessage(speaker="B", text="today's claim")]),
     ]
     captured = {}
 

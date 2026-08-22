@@ -348,7 +348,7 @@ def format_discussion_transcript(
     all_messages = [message for day in state.days for message in day.discussion]
     messages = all_messages if limit is None else all_messages[:limit]
     lines = [
-        f"{_speaker_name_span(m.speaker, state)} {m.message}" for m in messages
+        f"{_speaker_name_span(m.speaker, state)} {m.text}" for m in messages
     ]
     if pending_speaker is not None:
         lines.append(

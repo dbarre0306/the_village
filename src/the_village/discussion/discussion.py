@@ -68,7 +68,7 @@ def _format_history(state: GameState) -> str:
     messages = [message for day in state.days for message in day.discussion]
     if not messages:
         return "(No discussion has happened yet.)"
-    return "\n".join(f"{m.speaker}: {m.message}" for m in messages)
+    return "\n".join(f"{m.speaker}: {m.text}" for m in messages)
 
 
 def _living_participant_names(state: GameState) -> list[str]:
@@ -83,7 +83,7 @@ def _record_message(
 ) -> DiscussionMessage:
     msg = DiscussionMessage(
         speaker=speaker,
-        message=message,
+        text=message,
         addressed_to=addressed_to,
     )
     state.current_day.discussion.append(msg)
@@ -124,7 +124,7 @@ def _build_speak_prompt(state: GameState, addressed_by: DiscussionMessage | None
     ]
     if addressed_by is not None:
         parts.append(
-            f'{addressed_by.speaker} just said to you: "{addressed_by.message}" '
+            f'{addressed_by.speaker} just said to you: "{addressed_by.text}" '
             "Respond directly to this."
         )
     else:
@@ -334,7 +334,7 @@ class DiscussionRunner:
     @staticmethod
     def _index_of_last_speaker(messages) -> int:
         index = len(messages) - 1
-        while index >= 0 and messages[index].message == DECLINED_TO_RESPOND:
+        while index >= 0 and messages[index].text == DECLINED_TO_RESPOND:
             index -= 1
         return index
 
