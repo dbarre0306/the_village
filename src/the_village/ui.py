@@ -348,7 +348,7 @@ def format_discussion_transcript(
     all_messages = [message for day in state.days for message in day.discussion]
     messages = all_messages if limit is None else all_messages[:limit]
     lines = [
-        f"{_speaker_name_span(m.speaker, state)} {m.text}" for m in messages
+        f"{_speaker_name_span(m.player_name, state)} {m.text}" for m in messages
     ]
     if pending_speaker is not None:
         lines.append(
@@ -381,11 +381,11 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                 # Pace AI turns to reading speed with a "typing" placeholder;
                 # the player's own message (already visible to them as they
                 # typed it) shows immediately with no delay.
-                if item.speaker != state.player_name:
+                if item.player_name != state.player_name:
                     pending_transcript = format_discussion_transcript(
                         state,
                         limit=bridge.revealed_discussion_messages,
-                        pending_speaker=item.speaker,
+                        pending_speaker=item.player_name,
                     )
                     yield (
                         bridge,

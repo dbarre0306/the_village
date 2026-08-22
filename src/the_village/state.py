@@ -27,7 +27,7 @@ class Player(BaseModel):
 
 
 class DiscussionMessage(BaseModel):
-    speaker: str
+    player_name: str
     text: str
     addressed_to: str | None = None
 

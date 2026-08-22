@@ -68,7 +68,7 @@ def _format_history(state: GameState) -> str:
     messages = [message for day in state.days for message in day.discussion]
     if not messages:
         return "(No discussion has happened yet.)"
-    return "\n".join(f"{m.speaker}: {m.text}" for m in messages)
+    return "\n".join(f"{m.player_name}: {m.text}" for m in messages)
 
 
 def _living_participant_names(state: GameState) -> list[str]:
@@ -79,21 +79,21 @@ DECLINED_TO_RESPOND = "[declined to respond]"
 
 
 def _record_message(
-    state: GameState, speaker: str, message: str, addressed_to: str | None
+    state: GameState, player: str, text: str, addressed_to: str | None
 ) -> DiscussionMessage:
     msg = DiscussionMessage(
-        speaker=speaker,
-        text=message,
+        player_name=player,
+        text=text,
         addressed_to=addressed_to,
     )
     state.current_day.discussion.append(msg)
     logger.debug(
-        "_record_message: state=%s day=%s speaker=%s addressed_to=%s message=%r",
+        "_record_message: state=%s day=%s player_name=%s addressed_to=%s message=%r",
         id(state),
         state.day_number,
-        speaker,
+        player,
         addressed_to,
-        message,
+        text,
     )
     return msg
 
@@ -124,7 +124,7 @@ def _build_speak_prompt(state: GameState, addressed_by: DiscussionMessage | None
     ]
     if addressed_by is not None:
         parts.append(
-            f'{addressed_by.speaker} just said to you: "{addressed_by.text}" '
+            f'{addressed_by.player_name} just said to you: "{addressed_by.text}" '
             "Respond directly to this."
         )
     else:
@@ -287,10 +287,10 @@ class DiscussionRunner:
 
     def _log_message(self, message: DiscussionMessage):
         logger.debug(
-            "DiscussionRunner._run_round: runner=%s putting message=%s speaker=%s day=%s",
+            "DiscussionRunner._run_round: runner=%s putting message=%s player_name=%s day=%s",
             id(self),
             id(message),
-            message.speaker,
+            message.player_name,
             self.state.day_number,
         )
 
@@ -326,7 +326,7 @@ class DiscussionRunner:
     def _last_player_to_speak(messages) -> str | None:
         index = DiscussionRunner._index_of_last_speaker(messages)
         if index >= 0:
-            return messages[index].speaker
+            return messages[index].player_name
         else:
             return None
 
@@ -368,9 +368,9 @@ class DiscussionRunner:
         spoken_via_chain: set[str] | None = None,
     ) -> None:
         logger.debug(
-            "DiscussionRunner._resolve_address_chain: runner=%s speaker=%s addressed_to=%s chain=%s",
+            "DiscussionRunner._resolve_address_chain: runner=%s player_name=%s addressed_to=%s chain=%s",
             id(self),
-            message.speaker,
+            message.player_name,
             message.addressed_to,
             chain,
         )
@@ -381,15 +381,15 @@ class DiscussionRunner:
         if reply is None:
             return
         if spoken_via_chain is not None:
-            spoken_via_chain.add(reply.speaker)
+            spoken_via_chain.add(reply.player_name)
         logger.debug(
-            "DiscussionRunner._resolve_address_chain: runner=%s putting reply=%s speaker=%s day=%s",
+            "DiscussionRunner._resolve_address_chain: runner=%s putting reply=%s player_name=%s day=%s",
             id(self),
             id(reply),
-            reply.speaker,
+            reply.player_name,
             self.state.day_number,
         )
         await self.bridge.outbox.put(reply)
-        chain = chain | {message.speaker, target}
+        chain = chain | {message.player_name, target}
         if reply.addressed_to is not None and reply.addressed_to not in chain:
             await self._resolve_address_chain(reply, chain, spoken_via_chain)

@@ -191,7 +191,7 @@ async def test_streamed_discussion_message_appears_in_rendered_transcript(monkey
     await asyncio.sleep(0)
 
     state = _discussion_state()
-    message = DiscussionMessage(speaker="A", text="I saw something strange.")
+    message = DiscussionMessage(player_name="A", text="I saw something strange.")
     # DiscussionRunner._record_message appends to state.current_day.discussion
     # before putting the message on the outbox -- mirror that ordering here.
     state.current_day.discussion.append(message)
@@ -222,7 +222,7 @@ async def test_ai_turn_shows_pending_placeholder_before_revealing_message(monkey
     await real_sleep(0)
 
     state = _discussion_state()
-    message = DiscussionMessage(speaker="A", text="hi there")
+    message = DiscussionMessage(player_name="A", text="hi there")
     state.current_day.discussion.append(message)
     await bridge.outbox.put(message)
     await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
@@ -254,14 +254,14 @@ async def test_ai_turn_reveal_is_pinned_to_its_own_item_when_runner_races_ahead(
     state = _discussion_state()
     players = state.players + [Player(name="B", player_type="villager")]
     state = state.model_copy(update={"players": players})
-    msg_a = DiscussionMessage(speaker="A", text="first message")
+    msg_a = DiscussionMessage(player_name="A", text="first message")
     state.current_day.discussion.append(msg_a)
 
     bridge = SessionBridge()
     real_sleep = asyncio.sleep
 
     async def spy_sleep(seconds):
-        msg_b = DiscussionMessage(speaker="B", text="second message")
+        msg_b = DiscussionMessage(player_name="B", text="second message")
         state.current_day.discussion.append(msg_b)
         await bridge.outbox.put(msg_b)
         await real_sleep(0)
@@ -300,7 +300,7 @@ async def test_player_message_shows_immediately_without_placeholder_or_sleep(mon
     # so this exercises the same _stream_bridge path with speaker ==
     # state.player_name.
     state = _discussion_state()
-    message = DiscussionMessage(speaker="Dana", text="It wasn't me!")
+    message = DiscussionMessage(player_name="Dana", text="It wasn't me!")
     state.current_day.discussion.append(message)
     await bridge.outbox.put(message)
     await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
@@ -328,7 +328,7 @@ def test_format_discussion_transcript_lists_messages():
             Player(name="Dana", player_type="user"),
             Player(name="A", player_type="villager"),
         ],
-        days=[Day(day_number=1, discussion=[DiscussionMessage(speaker="A", text="hello")])],
+        days=[Day(day_number=1, discussion=[DiscussionMessage(player_name="A", text="hello")])],
     )
     transcript = format_discussion_transcript(state)
     assert "A:</span> hello" in transcript
@@ -342,7 +342,7 @@ def test_format_discussion_transcript_with_pending_speaker_hides_its_message():
             Player(name="Dana", player_type="user"),
             Player(name="A", player_type="villager"),
         ],
-        days=[Day(day_number=1, discussion=[DiscussionMessage(speaker="A", text="hello")])],
+        days=[Day(day_number=1, discussion=[DiscussionMessage(player_name="A", text="hello")])],
     )
     transcript = format_discussion_transcript(state, limit=0, pending_speaker="A")
     assert "hello" not in transcript
@@ -361,8 +361,8 @@ def test_format_discussion_transcript_with_pending_speaker_keeps_prior_messages(
             Day(
                 day_number=1,
                 discussion=[
-                    DiscussionMessage(speaker="A", text="first"),
-                    DiscussionMessage(speaker="Dana", text="second"),
+                    DiscussionMessage(player_name="A", text="first"),
+                    DiscussionMessage(player_name="Dana", text="second"),
                 ],
             )
         ],

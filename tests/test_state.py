@@ -21,15 +21,15 @@ def test_day_defaults():
 
 
 def test_discussion_message_fields():
-    message = DiscussionMessage(speaker="Alice", text="hello")
-    assert message.speaker == "Alice"
+    message = DiscussionMessage(player_name="Alice", text="hello")
+    assert message.player_name == "Alice"
     assert message.text == "hello"
     assert message.addressed_to is None
 
 
 def test_discussion_message_addressed_to():
     message = DiscussionMessage(
-        speaker="Alice",
+        player_name="Alice",
         text="Bram, where were you?",
         addressed_to="Bram",
     )

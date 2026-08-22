@@ -40,8 +40,8 @@ def test_format_history_includes_prior_days_in_order():
     state = GameState(
         player_name="Dana",
         days=[
-            Day(day_number=1, discussion=[DiscussionMessage(speaker="A", text="yesterday's message")]),
-            Day(day_number=2, discussion=[DiscussionMessage(speaker="B", text="today's message")]),
+            Day(day_number=1, discussion=[DiscussionMessage(player_name="A", text="yesterday's message")]),
+            Day(day_number=2, discussion=[DiscussionMessage(player_name="B", text="today's message")]),
         ],
     )
     assert (
@@ -84,7 +84,7 @@ def test_record_message_appends_to_current_day_and_returns_it():
     state = make_discussion_state()
     msg = _record_message(state, "A", "hello", addressed_to="B")
     assert state.current_day.discussion == [msg]
-    assert msg.speaker == "A"
+    assert msg.player_name == "A"
     assert msg.text == "hello"
     assert msg.addressed_to == "B"
     assert state.current_day.day_number == 1
@@ -121,7 +121,7 @@ async def test_run_ai_turn_records_decline_placeholder_when_owed_a_reply():
         message = await _run_ai_turn(
             speaker=_stub_agent(), analyst=_stub_agent(), state=state, name="A", addressed_by=asking
         )
-    assert message.speaker == "A"
+    assert message.player_name == "A"
     assert message.text == DECLINED_TO_RESPOND
     assert message.addressed_to is None
 
@@ -214,7 +214,7 @@ async def test_run_player_turn_resolves_address_via_the_analyst():
         await asyncio.sleep(0)
         bridge.resolve_input(PlayerInput(message="B, where were you?"))
         message = await task
-    assert message.speaker == "Dana"
+    assert message.player_name == "Dana"
     assert message.text == "B, where were you?"
     assert message.addressed_to == "B"
 
@@ -307,10 +307,10 @@ async def test_discussion_runner_resolves_a_bonus_reply_chain():
 
     addressed_messages = [m for m in transcript if m.text == "B, where were you?"]
     assert len(addressed_messages) == 1
-    assert addressed_messages[0].speaker == "A"
+    assert addressed_messages[0].player_name == "A"
     assert addressed_messages[0].addressed_to == "B"
     decline_replies = [
-        m for m in transcript if m.speaker == "B" and m.text == DECLINED_TO_RESPOND
+        m for m in transcript if m.player_name == "B" and m.text == DECLINED_TO_RESPOND
     ]
     assert len(decline_replies) == 1
 
@@ -363,7 +363,7 @@ async def test_discussion_runner_skips_a_player_already_used_in_the_reply_chain(
         )
         transcript = await runner.run()
 
-    b_messages = [m for m in transcript if m.speaker == "B"]
+    b_messages = [m for m in transcript if m.player_name == "B"]
     assert len(b_messages) == 1
     assert b_messages[0].text == "I was home."
 
