@@ -279,16 +279,20 @@ class DiscussionRunner:
                 continue
             message = await self._give_player_a_turn_to_speak(player, addressed_by=None)
             if message is not None:
-                logger.debug(
-                    "DiscussionRunner._run_round: runner=%s putting message=%s speaker=%s day=%s",
-                    id(self),
-                    id(message),
-                    message.speaker,
-                    self.state.day_number,
-                )
+                self._log_message(message)
                 await self.bridge.outbox.put(message)
                 await self._resolve_address_chain(message, spoken_via_chain=spoken_via_chain)
         return DiscussionRunner._last_player_to_speak(self.state.current_day.discussion)
+
+
+    def _log_message(self, message: DiscussionMessage):
+        logger.debug(
+            "DiscussionRunner._run_round: runner=%s putting message=%s speaker=%s day=%s",
+            id(self),
+            id(message),
+            message.speaker,
+            self.state.day_number,
+        )
 
     
     def _living_player_names(self) -> list[str]:
