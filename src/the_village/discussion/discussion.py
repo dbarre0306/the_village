@@ -41,7 +41,7 @@ class SpeakerOutput(BaseModel):
             "sit this turn out."
         )
     )
-    message: str | None = Field(
+    text: str | None = Field(
         default=None,
         description=(
             "What you say, if you have something to say. Keep it to one or "
@@ -190,14 +190,14 @@ async def _run_ai_turn(
     result = await crew.akickoff()
     speakerOutput = result.tasks_output[0].pydantic or SpeakerOutput(has_something_to_say=False)
 
-    if not speakerOutput.has_something_to_say or not speakerOutput.message:
+    if not speakerOutput.has_something_to_say or not speakerOutput.text:
         if addressed_by is None:
             return None
         return _record_message(state, name, DECLINED_TO_RESPOND, addressed_to=None)
 
     resolution = result.tasks_output[1].pydantic or AddressResolution(addressed_to=None)
     addressed_to = _resolve_target(resolution.addressed_to, state, exclude=name)
-    return _record_message(state, name, speakerOutput.message, addressed_to)
+    return _record_message(state, name, speakerOutput.text, addressed_to)
 
 
 async def _resolve_player_address(

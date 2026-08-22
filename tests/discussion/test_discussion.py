@@ -132,7 +132,7 @@ async def test_run_ai_turn_records_message_and_resolved_address():
         "the_village.discussion.discussion.Crew.akickoff",
         new=AsyncMock(
             return_value=_crew_result(
-                SpeakerOutput(has_something_to_say=True, message="I saw B leave."),
+                SpeakerOutput(has_something_to_say=True, text="I saw B leave."),
                 AddressResolution(addressed_to="B"),
             )
         ),
@@ -281,7 +281,7 @@ async def test_discussion_runner_resolves_a_bonus_reply_chain():
     state = make_discussion_runner_state()
 
     speak_and_address_b = _crew_result(
-        SpeakerOutput(has_something_to_say=True, message="B, where were you?"),
+        SpeakerOutput(has_something_to_say=True, text="B, where were you?"),
         AddressResolution(addressed_to="B"),
     )
     responses = iter([speak_and_address_b] + [_decline_result()] * 20)
@@ -327,18 +327,18 @@ async def test_discussion_runner_skips_a_player_already_used_in_the_reply_chain(
     state = make_discussion_runner_state()
 
     a_speaks_and_addresses_b = _crew_result(
-        SpeakerOutput(has_something_to_say=True, message="Where were you, B?"),
+        SpeakerOutput(has_something_to_say=True, text="Where were you, B?"),
         AddressResolution(addressed_to="B"),
     )
     b_chain_reply = _crew_result(
-        SpeakerOutput(has_something_to_say=True, message="I was home."),
+        SpeakerOutput(has_something_to_say=True, text="I was home."),
         AddressResolution(addressed_to=None),
     )
     # Filler has something to say every time it's asked, so an erroneous
     # extra main turn for B would show up as a second recorded B message
     # instead of silently declining.
     filler = _crew_result(
-        SpeakerOutput(has_something_to_say=True, message="Nothing new."),
+        SpeakerOutput(has_something_to_say=True, text="Nothing new."),
         AddressResolution(addressed_to=None),
     )
     responses = iter([a_speaks_and_addresses_b, b_chain_reply] + [filler] * 20)
