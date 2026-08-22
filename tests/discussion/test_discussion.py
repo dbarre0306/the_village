@@ -315,6 +315,59 @@ async def test_discussion_runner_resolves_a_bonus_reply_chain():
     assert len(decline_replies) == 1
 
 
+async def test_discussion_runner_skips_a_player_already_used_in_the_reply_chain():
+    """A player pulled into an address-chain reply must not also get their
+    still-pending scheduled main turn later in the same round -- that would
+    let one player speak twice in a row within a single round."""
+    bridge = SessionBridge()
+    # make_discussion_runner_state()'s villagers list is [Dana, A, B, C, D];
+    # with no shuffling, round order is exactly that -- Dana first (auto-
+    # passes), then A, who addresses B. B replies via the chain, and B is
+    # also next up in the main rotation.
+    state = make_discussion_runner_state()
+
+    a_speaks_and_addresses_b = _crew_result(
+        TurnOutput(has_something_to_say=True, message="Where were you, B?"),
+        AddressResolution(addressed_to="B"),
+    )
+    b_chain_reply = _crew_result(
+        TurnOutput(has_something_to_say=True, message="I was home."),
+        AddressResolution(addressed_to=None),
+    )
+    # Filler has something to say every time it's asked, so an erroneous
+    # extra main turn for B would show up as a second recorded B message
+    # instead of silently declining.
+    filler = _crew_result(
+        TurnOutput(has_something_to_say=True, message="Nothing new."),
+        AddressResolution(addressed_to=None),
+    )
+    responses = iter([a_speaks_and_addresses_b, b_chain_reply] + [filler] * 20)
+
+    async def scripted_akickoff(*_args, **_kwargs):
+        return next(responses)
+
+    async def auto_pass(*_args, **_kwargs):
+        return PlayerInput(message=None)
+
+    with (
+        patch("the_village.discussion.discussion.Crew.akickoff", new=scripted_akickoff),
+        patch.object(SessionBridge, "wait_for_input", auto_pass),
+        patch("the_village.discussion.discussion.NUMBER_OF_ROUNDS", 1),
+    ):
+        runner = DiscussionRunner(
+            state=state,
+            bridge=bridge,
+            player_agents=_stub_agents(["A", "B", "C", "D"]),
+            analyst=_stub_agent(),
+            rng=NoShuffleRandom(),
+        )
+        transcript = await runner.run()
+
+    b_messages = [m for m in transcript if m.speaker == "B"]
+    assert len(b_messages) == 1
+    assert b_messages[0].message == "I was home."
+
+
 async def test_discussion_runner_pauses_for_player_and_resumes():
     bridge = SessionBridge()
     state = make_discussion_runner_state()

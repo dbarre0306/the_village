@@ -263,7 +263,10 @@ class DiscussionRunner:
         logger.debug("DiscussionRunner._run_round: runner=%s living_players=%s", id(self), living_players)
 
         messages = []
+        spoken_via_chain: set[str] = set()
         for player in living_players:
+            if player in spoken_via_chain:
+                continue
             message = await self._give_player_a_turn_to_speak(player, addressed_by=None)
             if message is not None:
                 messages.append(message)
@@ -275,7 +278,7 @@ class DiscussionRunner:
                     self.state.day_number,
                 )
                 await self.bridge.outbox.put(message)
-                await self._resolve_address_chain(message)
+                await self._resolve_address_chain(message, spoken_via_chain=spoken_via_chain)
         return DiscussionRunner._last_player_to_speak(messages)
 
     
@@ -346,7 +349,10 @@ class DiscussionRunner:
         )
 
     async def _resolve_address_chain(
-        self, message: DiscussionMessage, chain: frozenset[str] = frozenset()
+        self,
+        message: DiscussionMessage,
+        chain: frozenset[str] = frozenset(),
+        spoken_via_chain: set[str] | None = None,
     ) -> None:
         logger.debug(
             "DiscussionRunner._resolve_address_chain: runner=%s speaker=%s addressed_to=%s chain=%s",
@@ -361,6 +367,8 @@ class DiscussionRunner:
         reply = await self._give_player_a_turn_to_speak(target, addressed_by=message)
         if reply is None:
             return
+        if spoken_via_chain is not None:
+            spoken_via_chain.add(reply.speaker)
         logger.debug(
             "DiscussionRunner._resolve_address_chain: runner=%s putting reply=%s speaker=%s day=%s",
             id(self),
@@ -371,4 +379,4 @@ class DiscussionRunner:
         await self.bridge.outbox.put(reply)
         chain = chain | {message.speaker, target}
         if reply.addressed_to is not None and reply.addressed_to not in chain:
-            await self._resolve_address_chain(reply, chain)
+            await self._resolve_address_chain(reply, chain, spoken_via_chain)
