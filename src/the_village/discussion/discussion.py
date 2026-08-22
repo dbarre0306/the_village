@@ -110,6 +110,8 @@ def _build_speak_prompt(state: GameState, addressed_by: DiscussionMessage | None
         "Discussion so far:",
         _format_history(state),
         "",
+        "When referring to another player, always use their name -- never a pronoun.",
+        "",
     ]
     if addressed_by is not None:
         parts.append(
