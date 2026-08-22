@@ -284,7 +284,7 @@ def _vote_candidate_names(state: GameState) -> list[str]:
     return [
         player.name
         for player in state.players
-        if player.is_alive and player.name != state.player_name
+        if player.is_alive and player.name != state.user_player_name
     ]
 
 
@@ -314,7 +314,7 @@ def format_alive_panel(state: GameState) -> str:
     chips = "".join(
         f'<span class="{VILLAGER_CHIP_CLASS}" '
         f'style="color: var(--speaker-{_speaker_color_index(player.name, state)})">'
-        f'{player.name}{" (me)" if player.name == state.player_name else ""}'
+        f'{player.name}{" (me)" if player.name == state.user_player_name else ""}'
         f"</span>"
         for player in alive
     )
@@ -381,7 +381,7 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                 # Pace AI turns to reading speed with a "typing" placeholder;
                 # the player's own message (already visible to them as they
                 # typed it) shows immediately with no delay.
-                if item.player_name != state.player_name:
+                if item.player_name != state.user_player_name:
                     pending_transcript = format_discussion_transcript(
                         state,
                         limit=bridge.revealed_discussion_messages,
@@ -579,7 +579,7 @@ async def start_game(player_name: str):
     village_flow = VillageFlow(bridge=bridge)
     bridge.task = asyncio.create_task(
         run_flow(
-            village_flow.kickoff_async(inputs={"player_name": player_name.strip()}), bridge
+            village_flow.kickoff_async(inputs={"user_player_name": player_name.strip()}), bridge
         )
     )
 

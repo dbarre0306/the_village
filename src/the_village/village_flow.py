@@ -24,7 +24,7 @@ class VillageFlow(Flow[GameState]):
 
     @start()
     async def setup_game(self):
-        roster_state = build_initial_roster(self.state.player_name)
+        roster_state = build_initial_roster(self.state.user_player_name)
         self.state.days = roster_state.days
         self.state.players = roster_state.players
         self._player_agents = self._build_ai_agents()
@@ -86,7 +86,7 @@ async def _auto_play_consumer(bridge: SessionBridge) -> None:
 async def _kickoff_async():
     bridge = SessionBridge()
     village_flow = VillageFlow(bridge=bridge)
-    flow_task = asyncio.create_task(village_flow.kickoff_async(inputs={"player_name": "TestPlayer"}))
+    flow_task = asyncio.create_task(village_flow.kickoff_async(inputs={"user_player_name": "TestPlayer"}))
     consumer_task = asyncio.create_task(_auto_play_consumer(bridge))
     await flow_task
     consumer_task.cancel()

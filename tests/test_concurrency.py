@@ -20,7 +20,7 @@ def _decline_result():
 async def _run_one_session(player_name: str) -> str:
     bridge = SessionBridge()
     flow = VillageFlow(bridge=bridge)
-    flow_task = asyncio.create_task(flow.kickoff_async(inputs={"player_name": player_name}))
+    flow_task = asyncio.create_task(flow.kickoff_async(inputs={"user_player_name": player_name}))
 
     while True:
         item = await bridge.outbox.get()
@@ -29,7 +29,7 @@ async def _run_one_session(player_name: str) -> str:
         bridge.resolve_input(PlayerInput(message=None))
 
     await flow_task
-    return flow.state.player_name
+    return flow.state.user_player_name
 
 
 async def test_two_village_flows_complete_independently_when_run_concurrently():

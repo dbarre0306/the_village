@@ -81,7 +81,7 @@ def cast_votes(
     votes: list[VoteRecord] = []
 
     for name in living_names:
-        if name == state.player_name:
+        if name == state.user_player_name:
             target = _resolve_target(player_vote, living_names, exclude=name)
         else:
             candidates = [n for n in living_names if n != name]

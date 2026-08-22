@@ -39,26 +39,26 @@ def test_vote_outcome_fields():
 
 
 def test_format_lynchings_with_no_lynchings():
-    state = GameState(player_name="Dana")
+    state = GameState(user_player_name="Dana")
     assert _format_lynchings(state) == "(No one has been lynched yet.)"
 
 
 def test_format_lynchings_lists_each_lynching():
     state = GameState(
-        player_name="Dana", days=[Day(day_number=1, player_lynched="C")]
+        user_player_name="Dana", days=[Day(day_number=1, player_lynched="C")]
     )
     assert _format_lynchings(state) == "C was lynched by the village on Sunday."
 
 
 def test_build_vote_prompt_lists_candidates():
-    state = GameState(player_name="Dana")
+    state = GameState(user_player_name="Dana")
     prompt = _build_vote_prompt(state, ["A", "B"])
     assert "A, B" in prompt
 
 
 def test_build_vote_prompt_includes_full_multi_day_discussion_history():
     state = GameState(
-        player_name="Dana",
+        user_player_name="Dana",
         days=[
             Day(day_number=1, discussion=[DiscussionMessage(player_name="A", text="yesterday's claim")]),
             Day(day_number=2, discussion=[DiscussionMessage(player_name="B", text="today's claim")]),
@@ -71,7 +71,7 @@ def test_build_vote_prompt_includes_full_multi_day_discussion_history():
 
 def test_build_vote_prompt_includes_lynching_history():
     state = GameState(
-        player_name="Dana", days=[Day(day_number=1, player_lynched="C")]
+        user_player_name="Dana", days=[Day(day_number=1, player_lynched="C")]
     )
     prompt = _build_vote_prompt(state, ["A", "B"])
     assert "C was lynched by the village on Sunday." in prompt
@@ -94,7 +94,7 @@ def make_voting_state(day_number: int = 2) -> GameState:
         Player(name="E", player_type="werewolf"),
     ]
     return GameState(
-        player_name="Dana", players=players, days=[Day(day_number=day_number)]
+        user_player_name="Dana", players=players, days=[Day(day_number=day_number)]
     )
 
 
@@ -185,7 +185,7 @@ def test_dead_villagers_excluded_from_voting_and_targets():
         Player(name="A", player_type="villager", is_alive=False),
         Player(name="B", player_type="villager"),
     ]
-    state = GameState(player_name="Dana", players=players, days=[Day(day_number=3)])
+    state = GameState(user_player_name="Dana", players=players, days=[Day(day_number=3)])
     agents = {"B": ScriptedVoteAgent("A")}
 
     outcome = cast_votes(state, agents, player_vote=None)

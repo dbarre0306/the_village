@@ -8,7 +8,7 @@ from the_village.village_flow import VillageFlow
 async def test_village_flow_produces_valid_night_one_result_and_pauses_for_discussion():
     bridge = SessionBridge()
     flow = VillageFlow(bridge=bridge)
-    task = asyncio.create_task(flow.kickoff_async(inputs={"player_name": "Dana"}))
+    task = asyncio.create_task(flow.kickoff_async(inputs={"user_player_name": "Dana"}))
 
     # announce_death() puts the victim's name (a bare str) on the outbox as
     # the very first item -- nothing else is queued before it, since
@@ -40,7 +40,7 @@ async def test_village_flow_produces_valid_night_one_result_and_pauses_for_discu
 async def test_village_flow_builds_player_agents_onto_the_bridge():
     bridge = SessionBridge()
     flow = VillageFlow(bridge=bridge)
-    task = asyncio.create_task(flow.kickoff_async(inputs={"player_name": "Dana"}))
+    task = asyncio.create_task(flow.kickoff_async(inputs={"user_player_name": "Dana"}))
 
     await bridge.outbox.get()
     bridge.resolve_input(PlayerInput())

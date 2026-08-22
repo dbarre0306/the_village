@@ -48,7 +48,7 @@ def test_vote_record_with_target():
 
 def test_game_state_defaults():
     state = GameState()
-    assert state.player_name == ""
+    assert state.user_player_name == ""
     assert state.players == []
     assert state.days == [Day(day_number=1)]
 

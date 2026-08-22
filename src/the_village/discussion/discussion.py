@@ -105,7 +105,7 @@ def _build_speak_prompt(state: GameState, addressed_by: DiscussionMessage | None
         _format_deaths(state),
         "",
         f"Living villagers: {', '.join(living_names)}, including "
-        f"{state.player_name} (the human player).",
+        f"{state.user_player_name} (the human player).",
         "",
         "Discussion so far:",
         _format_history(state),
@@ -145,7 +145,7 @@ def _build_analyze_prompt() -> str:
 
 
 def _build_player_analyze_prompt(state: GameState, message: str) -> str:
-    candidates = [n for n in _living_participant_names(state) if n != state.player_name]
+    candidates = [n for n in _living_participant_names(state) if n != state.user_player_name]
     return "\n".join(
         [
             "Known facts:",
@@ -156,7 +156,7 @@ def _build_player_analyze_prompt(state: GameState, message: str) -> str:
             "Discussion so far:",
             _format_history(state),
             "",
-            f'{state.player_name} just said: "{message}"',
+            f'{state.user_player_name} just said: "{message}"',
             "Who, if anyone, is this message directed at? A name that's "
             "merely mentioned doesn't count -- only someone actually being "
             "spoken to.",
@@ -351,14 +351,14 @@ class DiscussionRunner:
 
 
     def _is_human_player(self, name: str) -> bool:
-        return name == self.state.player_name
+        return name == self.state.user_player_name
 
 
     async def _give_human_player_a_turn_to_speak(self, addressed_by: DiscussionMessage | None) -> DiscussionMessage | None:
         status = FlowStatus.WAITING_FOR_ANSWER if addressed_by else FlowStatus.WAITING_FOR_TURN
         await self.bridge.outbox.put(status)
         return await _run_player_turn(
-            self._analyst, self.state, self.bridge, self.state.player_name, addressed_by
+            self._analyst, self.state, self.bridge, self.state.user_player_name, addressed_by
         )
 
     async def _resolve_address_chain(

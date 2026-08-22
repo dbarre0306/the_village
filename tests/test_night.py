@@ -17,7 +17,7 @@ def make_state() -> GameState:
         Player(name="E", player_type="werewolf", is_pack_leader=True),
         Player(name="F", player_type="werewolf"),
     ]
-    return GameState(player_name="Dana", players=players)
+    return GameState(user_player_name="Dana", players=players)
 
 
 def test_kills_a_non_player_non_werewolf_villager():

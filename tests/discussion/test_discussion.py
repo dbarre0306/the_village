@@ -22,23 +22,23 @@ from the_village.state import Day, DiscussionMessage, GameState, Player
 
 
 def test_format_deaths_with_no_deaths():
-    state = GameState(player_name="Dana")
+    state = GameState(user_player_name="Dana")
     assert _format_deaths(state) == "(No one has died yet.)"
 
 
 def test_format_deaths_lists_each_death():
-    state = GameState(player_name="Dana", days=[Day(day_number=2, player_killed="D")])
+    state = GameState(user_player_name="Dana", days=[Day(day_number=2, player_killed="D")])
     assert _format_deaths(state) == "D was found dead on Monday."
 
 
 def test_format_history_with_no_messages():
-    state = GameState(player_name="Dana")
+    state = GameState(user_player_name="Dana")
     assert _format_history(state) == "(No discussion has happened yet.)"
 
 
 def test_format_history_includes_prior_days_in_order():
     state = GameState(
-        player_name="Dana",
+        user_player_name="Dana",
         days=[
             Day(day_number=1, discussion=[DiscussionMessage(player_name="A", text="yesterday's message")]),
             Day(day_number=2, discussion=[DiscussionMessage(player_name="B", text="today's message")]),
@@ -56,7 +56,7 @@ def make_discussion_state() -> GameState:
         Player(name="A", player_type="villager"),
         Player(name="B", player_type="villager"),
     ]
-    return GameState(player_name="Dana", players=players)
+    return GameState(user_player_name="Dana", players=players)
 
 
 def _crew_result(*pydantic_outputs):
@@ -227,7 +227,7 @@ def make_discussion_runner_state() -> GameState:
         Player(name="C", player_type="werewolf", is_pack_leader=True),
         Player(name="D", player_type="werewolf"),
     ]
-    return GameState(player_name="Dana", players=players)
+    return GameState(user_player_name="Dana", players=players)
 
 
 def _decline_result():

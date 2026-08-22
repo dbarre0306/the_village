@@ -46,7 +46,7 @@ class Day(BaseModel):
 
 
 class GameState(BaseModel):
-    player_name: str = ""
+    user_player_name: str = ""
     players: list[Player] = []
     days: list[Day] = Field(default_factory=lambda: [Day(day_number=1)])
 
