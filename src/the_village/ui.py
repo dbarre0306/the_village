@@ -334,14 +334,19 @@ def _speaker_name_span(name: str, state: GameState) -> str:
 
 
 def format_discussion_transcript(
-    state: GameState, pending_speaker: str | None = None
+    state: GameState, limit: int | None = None, pending_speaker: str | None = None
 ) -> str:
-    # `pending_speaker` hides the last message (already appended to
-    # state.current_day.discussion by the time this is called) and shows a
-    # "typing" placeholder for that speaker instead, so the reveal can be
-    # paced.
+    # `limit` caps how many of state.current_day.discussion's messages are
+    # shown. DiscussionRunner appends straight to this same live GameState
+    # and doesn't wait for the UI to consume each outbox item before
+    # continuing, so by the time a given item is rendered, state may already
+    # hold messages the caller hasn't paced onto screen yet -- rendering
+    # "all of state" (or "all but the literal last one") would leak those
+    # ahead-of-pace messages into this render instead of just this item's.
+    # `pending_speaker` additionally appends a "typing" placeholder for that
+    # speaker after the limited messages, so the reveal can be paced.
     all_messages = [message for day in state.days for message in day.discussion]
-    messages = all_messages[:-1] if pending_speaker is not None else all_messages
+    messages = all_messages if limit is None else all_messages[:limit]
     lines = [
         f"{_speaker_name_span(m.speaker, state)} {m.message}" for m in messages
     ]
@@ -358,6 +363,14 @@ def format_discussion_transcript(
 async def _stream_bridge(bridge: SessionBridge, state: GameState):
     """Drains bridge.outbox, yielding a UI-update tuple per item, until a
     status tells the caller to stop and hand control back to the player."""
+    # DiscussionRunner appends straight to this same live GameState and
+    # doesn't wait for the UI to consume each outbox item before continuing
+    # (an address-chain reply can resolve in well under
+    # SPEAKER_THINKING_DELAY_SECONDS), so it can race ahead -- appending,
+    # even recording, further messages before this call starts or while an
+    # earlier item's placeholder is still being paced. bridge's own reveal
+    # counter (not state's current size, which the runner can move out from
+    # under us at any point) is what each render stays pinned to.
     try:
         while True:
             item = await bridge.outbox.get()
@@ -365,16 +378,14 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
             if isinstance(item, FlowFailed):
                 raise gr.Error("Something went wrong, please try again.")
             if isinstance(item, DiscussionMessage):
-                # DiscussionRunner appends directly to this same GameState
-                # (it's handed the live object, not a copy), so `item` is
-                # already the last entry in state.discussion by the time it
-                # shows up here -- nothing to add, just render.
                 # Pace AI turns to reading speed with a "typing" placeholder;
                 # the player's own message (already visible to them as they
                 # typed it) shows immediately with no delay.
                 if item.speaker != state.player_name:
                     pending_transcript = format_discussion_transcript(
-                        state, pending_speaker=item.speaker
+                        state,
+                        limit=bridge.revealed_discussion_messages,
+                        pending_speaker=item.speaker,
                     )
                     yield (
                         bridge,
@@ -386,7 +397,10 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                         gr.update(),
                     )
                     await asyncio.sleep(SPEAKER_THINKING_DELAY_SECONDS)
-                transcript = format_discussion_transcript(state)
+                bridge.revealed_discussion_messages += 1
+                transcript = format_discussion_transcript(
+                    state, limit=bridge.revealed_discussion_messages
+                )
                 yield (
                     bridge,
                     transcript,

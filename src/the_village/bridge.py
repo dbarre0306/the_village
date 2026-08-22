@@ -37,6 +37,12 @@ class SessionBridge:
     pending_input: asyncio.Future[PlayerInput] | None = None
     task: asyncio.Task | None = None
     player_agents: dict[str, Agent] = field(default_factory=dict)
+    # How many discussion messages ui.py has actually paced onto screen so
+    # far, across the whole session. Lives here (not derived from
+    # GameState.days at read time) because the background Flow task appends
+    # to the live GameState -- and can race ahead of the UI's pacing --
+    # without waiting for the UI to consume the corresponding outbox item.
+    revealed_discussion_messages: int = 0
 
     async def wait_for_input(self) -> PlayerInput:
         self.pending_input = asyncio.get_event_loop().create_future()

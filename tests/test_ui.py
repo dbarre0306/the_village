@@ -238,6 +238,50 @@ async def test_ai_turn_shows_pending_placeholder_before_revealing_message(monkey
     waiter.cancel()
 
 
+async def test_ai_turn_reveal_is_pinned_to_its_own_item_when_runner_races_ahead(monkeypatch):
+    # Regression: DiscussionRunner appends directly to the shared, live
+    # GameState and doesn't wait for the UI to consume each outbox item
+    # before continuing (see discussion.py's _resolve_address_chain, which
+    # can resolve a reply in well under SPEAKER_THINKING_DELAY_SECONDS).
+    # So while the UI is mid-delay showing A's "typing" placeholder, the
+    # runner can already have appended -- and enqueued -- B's message.
+    # format_discussion_transcript(state) was reading *all* of state's
+    # current messages when revealing A's turn, so B's message leaked into
+    # A's reveal, and B's later "typing" placeholder then showed after B's
+    # real message had already been visible for a render or two -- the
+    # flicker reported as a speaker's name reappearing with dots after
+    # their message was already shown.
+    state = _discussion_state()
+    players = state.players + [Player(name="B", player_type="villager")]
+    state = state.model_copy(update={"players": players})
+    msg_a = DiscussionMessage(speaker="A", message="first message")
+    state.current_day.discussion.append(msg_a)
+
+    bridge = SessionBridge()
+    real_sleep = asyncio.sleep
+
+    async def spy_sleep(seconds):
+        msg_b = DiscussionMessage(speaker="B", message="second message")
+        state.current_day.discussion.append(msg_b)
+        await bridge.outbox.put(msg_b)
+        await real_sleep(0)
+
+    monkeypatch.setattr(ui.asyncio, "sleep", spy_sleep)
+
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await real_sleep(0)
+
+    await bridge.outbox.put(msg_a)
+    await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
+
+    outputs = [update async for update in begin_discussion(bridge, state)]
+    transcripts = [update[1] for update in outputs if isinstance(update[1], str)]
+
+    reveal_index = next(i for i, t in enumerate(transcripts) if "first message" in t)
+    assert "second message" not in transcripts[reveal_index]
+    waiter.cancel()
+
+
 async def test_player_message_shows_immediately_without_placeholder_or_sleep(monkeypatch):
     sleep_calls = []
     real_sleep = asyncio.sleep
@@ -300,7 +344,7 @@ def test_format_discussion_transcript_with_pending_speaker_hides_its_message():
         ],
         days=[Day(day_number=1, discussion=[DiscussionMessage(speaker="A", message="hello")])],
     )
-    transcript = format_discussion_transcript(state, pending_speaker="A")
+    transcript = format_discussion_transcript(state, limit=0, pending_speaker="A")
     assert "hello" not in transcript
     assert "typing-indicator" in transcript
     assert "A:</span>" in transcript
@@ -323,7 +367,7 @@ def test_format_discussion_transcript_with_pending_speaker_keeps_prior_messages(
             )
         ],
     )
-    transcript = format_discussion_transcript(state, pending_speaker="Dana")
+    transcript = format_discussion_transcript(state, limit=1, pending_speaker="Dana")
     assert "first" in transcript
     assert "second" not in transcript
     assert "typing-indicator" in transcript
