@@ -4,14 +4,14 @@ from unittest.mock import AsyncMock, patch
 from types import SimpleNamespace
 
 from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
-from the_village.discussion.discussion import AddressResolution, TurnOutput
+from the_village.discussion.discussion import AddressResolution, SpeakerOutput
 from the_village.village_flow import VillageFlow
 
 
 def _decline_result():
     return SimpleNamespace(
         tasks_output=[
-            SimpleNamespace(pydantic=TurnOutput(has_something_to_say=False)),
+            SimpleNamespace(pydantic=SpeakerOutput(has_something_to_say=False)),
             SimpleNamespace(pydantic=AddressResolution(addressed_to=None)),
         ]
     )

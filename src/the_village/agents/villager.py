@@ -24,7 +24,8 @@ def _build_villager_agent(villager: Player) -> Agent:
         "You speak the way people actually do in a tense group conversation: briefly. "
         "One or two sentences, never a speech. Speak in first person as yourself -- "
         "never refer to yourself by name or in the third person. When referring to "
-        "another player, always use their name -- never a pronoun."
+        "another player, always use their name -- never a pronoun. When referring to multiple "
+        "players, always use all of their names -- never a pronoun."
     )
     return Agent(
         role=f"Villager {villager.name}",

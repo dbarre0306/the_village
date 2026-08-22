@@ -9,7 +9,7 @@ from the_village.discussion.discussion import (
     DECLINED_TO_RESPOND,
     AddressResolution,
     DiscussionRunner,
-    TurnOutput,
+    SpeakerOutput,
     _format_deaths,
     _format_history,
     _record_message,
@@ -77,7 +77,7 @@ def _stub_agents(names: list[str]) -> dict[str, Agent]:
 
 
 def test_turn_output_has_no_addressed_to_field():
-    assert "addressed_to" not in TurnOutput.model_fields
+    assert "addressed_to" not in SpeakerOutput.model_fields
 
 
 def test_record_message_appends_to_current_day_and_returns_it():
@@ -102,7 +102,7 @@ async def test_run_ai_turn_returns_none_on_scheduled_decline():
     state = make_discussion_state()
     with patch(
         "the_village.discussion.discussion.Crew.akickoff",
-        new=AsyncMock(return_value=_crew_result(TurnOutput(has_something_to_say=False), None)),
+        new=AsyncMock(return_value=_crew_result(SpeakerOutput(has_something_to_say=False), None)),
     ):
         message = await _run_ai_turn(
             speaker=_stub_agent(), analyst=_stub_agent(), state=state, name="A", addressed_by=None
@@ -116,7 +116,7 @@ async def test_run_ai_turn_records_decline_placeholder_when_owed_a_reply():
     asking = _record_message(state, "B", "Where were you?", addressed_to="A")
     with patch(
         "the_village.discussion.discussion.Crew.akickoff",
-        new=AsyncMock(return_value=_crew_result(TurnOutput(has_something_to_say=False), None)),
+        new=AsyncMock(return_value=_crew_result(SpeakerOutput(has_something_to_say=False), None)),
     ):
         message = await _run_ai_turn(
             speaker=_stub_agent(), analyst=_stub_agent(), state=state, name="A", addressed_by=asking
@@ -132,7 +132,7 @@ async def test_run_ai_turn_records_message_and_resolved_address():
         "the_village.discussion.discussion.Crew.akickoff",
         new=AsyncMock(
             return_value=_crew_result(
-                TurnOutput(has_something_to_say=True, message="I saw B leave."),
+                SpeakerOutput(has_something_to_say=True, message="I saw B leave."),
                 AddressResolution(addressed_to="B"),
             )
         ),
@@ -154,7 +154,7 @@ async def test_run_ai_turn_discards_addressed_to_from_the_analyst_on_decline():
         "the_village.discussion.discussion.Crew.akickoff",
         new=AsyncMock(
             return_value=_crew_result(
-                TurnOutput(has_something_to_say=False), AddressResolution(addressed_to="B")
+                SpeakerOutput(has_something_to_say=False), AddressResolution(addressed_to="B")
             )
         ),
     ):
@@ -231,7 +231,7 @@ def make_discussion_runner_state() -> GameState:
 
 
 def _decline_result():
-    return _crew_result(TurnOutput(has_something_to_say=False), None)
+    return _crew_result(SpeakerOutput(has_something_to_say=False), None)
 
 
 async def test_discussion_runner_runs_two_rounds_where_everyone_gets_a_turn():
@@ -281,7 +281,7 @@ async def test_discussion_runner_resolves_a_bonus_reply_chain():
     state = make_discussion_runner_state()
 
     speak_and_address_b = _crew_result(
-        TurnOutput(has_something_to_say=True, message="B, where were you?"),
+        SpeakerOutput(has_something_to_say=True, message="B, where were you?"),
         AddressResolution(addressed_to="B"),
     )
     responses = iter([speak_and_address_b] + [_decline_result()] * 20)
@@ -327,18 +327,18 @@ async def test_discussion_runner_skips_a_player_already_used_in_the_reply_chain(
     state = make_discussion_runner_state()
 
     a_speaks_and_addresses_b = _crew_result(
-        TurnOutput(has_something_to_say=True, message="Where were you, B?"),
+        SpeakerOutput(has_something_to_say=True, message="Where were you, B?"),
         AddressResolution(addressed_to="B"),
     )
     b_chain_reply = _crew_result(
-        TurnOutput(has_something_to_say=True, message="I was home."),
+        SpeakerOutput(has_something_to_say=True, message="I was home."),
         AddressResolution(addressed_to=None),
     )
     # Filler has something to say every time it's asked, so an erroneous
     # extra main turn for B would show up as a second recorded B message
     # instead of silently declining.
     filler = _crew_result(
-        TurnOutput(has_something_to_say=True, message="Nothing new."),
+        SpeakerOutput(has_something_to_say=True, message="Nothing new."),
         AddressResolution(addressed_to=None),
     )
     responses = iter([a_speaks_and_addresses_b, b_chain_reply] + [filler] * 20)

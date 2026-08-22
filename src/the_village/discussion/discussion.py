@@ -34,7 +34,7 @@ def _resolve_target(candidate: str | None, state: GameState, exclude: str) -> st
     return candidate
 
 
-class TurnOutput(BaseModel):
+class SpeakerOutput(BaseModel):
     has_something_to_say: bool = Field(
         description=(
             "Whether you have something to say right now. False means you'll "
@@ -111,6 +111,9 @@ def _build_speak_prompt(state: GameState, addressed_by: DiscussionMessage | None
         _format_history(state),
         "",
         "When referring to another player, always use their name -- never a pronoun.",
+        "When referring to more than one player, always use all of their names -- never a pronoun.",
+        ""
+        "Any statements, questions, or accusations must be consistent with what you previously said."
         "",
         "Only treat something as true if it's listed in Known facts above or was "
         "actually said in Discussion so far -- never invent a sighting, alibi, or "
@@ -171,8 +174,8 @@ async def _run_ai_turn(
     speak_task = Task(
         description=_build_speak_prompt(state, addressed_by),
         agent=speaker,
-        expected_output="A TurnOutput saying whether you have something to say.",
-        output_pydantic=TurnOutput,
+        expected_output="A SpeakerOutput saying whether you have something to say.",
+        output_pydantic=SpeakerOutput,
     )
     analyze_task = Task(
         description=_build_analyze_prompt(),
@@ -185,16 +188,16 @@ async def _run_ai_turn(
         agents=[speaker, analyst], tasks=[speak_task, analyze_task], process=Process.sequential
     )
     result = await crew.akickoff()
-    turn = result.tasks_output[0].pydantic or TurnOutput(has_something_to_say=False)
+    speakerOutput = result.tasks_output[0].pydantic or SpeakerOutput(has_something_to_say=False)
 
-    if not turn.has_something_to_say or not turn.message:
+    if not speakerOutput.has_something_to_say or not speakerOutput.message:
         if addressed_by is None:
             return None
         return _record_message(state, name, DECLINED_TO_RESPOND, addressed_to=None)
 
     resolution = result.tasks_output[1].pydantic or AddressResolution(addressed_to=None)
     addressed_to = _resolve_target(resolution.addressed_to, state, exclude=name)
-    return _record_message(state, name, turn.message, addressed_to)
+    return _record_message(state, name, speakerOutput.message, addressed_to)
 
 
 async def _resolve_player_address(
@@ -270,14 +273,12 @@ class DiscussionRunner:
 
         logger.debug("DiscussionRunner._run_round: runner=%s living_players=%s", id(self), living_players)
 
-        messages = []
         spoken_via_chain: set[str] = set()
         for player in living_players:
             if player in spoken_via_chain:
                 continue
             message = await self._give_player_a_turn_to_speak(player, addressed_by=None)
             if message is not None:
-                messages.append(message)
                 logger.debug(
                     "DiscussionRunner._run_round: runner=%s putting message=%s speaker=%s day=%s",
                     id(self),
@@ -287,7 +288,7 @@ class DiscussionRunner:
                 )
                 await self.bridge.outbox.put(message)
                 await self._resolve_address_chain(message, spoken_via_chain=spoken_via_chain)
-        return DiscussionRunner._last_player_to_speak(messages)
+        return DiscussionRunner._last_player_to_speak(self.state.current_day.discussion)
 
     
     def _living_player_names(self) -> list[str]:
@@ -329,7 +330,7 @@ class DiscussionRunner:
     @staticmethod
     def _index_of_last_speaker(messages) -> int:
         index = len(messages) - 1
-        while index >= 0 and (messages[index].message is None or messages[index] == ""):
+        while index >= 0 and messages[index].message == DECLINED_TO_RESPOND:
             index -= 1
         return index
 
