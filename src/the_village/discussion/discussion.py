@@ -256,15 +256,17 @@ class DiscussionRunner:
             last_player_to_speak = await self._run_round(last_player_to_speak)
 
 
-    async def _run_round(self, last_player_to_speak: str|None) -> None:
+    async def _run_round(self, last_player_to_speak: str|None) -> str | None:
         living_players = self._living_player_names()
         self._shuffle_players(living_players, last_player_to_speak)
 
         logger.debug("DiscussionRunner._run_round: runner=%s living_players=%s", id(self), living_players)
 
+        messages = []
         for player in living_players:
             message = await self._give_player_a_turn_to_speak(player, addressed_by=None)
             if message is not None:
+                messages.append(message)
                 logger.debug(
                     "DiscussionRunner._run_round: runner=%s putting message=%s speaker=%s day=%s",
                     id(self),
@@ -274,6 +276,7 @@ class DiscussionRunner:
                 )
                 await self.bridge.outbox.put(message)
                 await self._resolve_address_chain(message)
+        return DiscussionRunner._last_player_to_speak(messages)
 
     
     def _living_player_names(self) -> list[str]:
@@ -301,6 +304,23 @@ class DiscussionRunner:
     @staticmethod
     def _is_only_one_player_remaining_and_spoke_last(living_players: list[str], last_player_to_speak: str):
         return len(living_players) == 1 and living_players[0] == last_player_to_speak
+
+
+    @staticmethod
+    def _last_player_to_speak(messages) -> str | None:
+        index = DiscussionRunner._index_of_last_speaker(messages)
+        if index >= 0:
+            return messages[index].speaker
+        else:
+            return None
+
+            
+    @staticmethod
+    def _index_of_last_speaker(messages) -> int:
+        index = len(messages) - 1
+        while index >= 0 and (messages[index].message is None or messages[index] == ""):
+            index -= 1
+        return index
 
 
     async def _give_player_a_turn_to_speak(
