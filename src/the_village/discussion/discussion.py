@@ -112,6 +112,12 @@ def _build_speak_prompt(state: GameState, addressed_by: DiscussionMessage | None
         "",
         "When referring to another player, always use their name -- never a pronoun.",
         "",
+        "Only treat something as true if it's listed in Known facts above or was "
+        "actually said in Discussion so far -- never invent a sighting, alibi, or "
+        "claim about what another villager did. Turn order is random and says "
+        "nothing about anyone's guilt or honesty, so never comment on who has or "
+        "hasn't spoken yet, or how much someone has said.",
+        "",
     ]
     if addressed_by is not None:
         parts.append(
