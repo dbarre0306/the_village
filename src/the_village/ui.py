@@ -507,10 +507,10 @@ def begin_voting(state: GameState):
 
 def format_vote_result(state: GameState, outcome: VoteOutcome) -> str:
     lines = [
-        f"{_colored_name(record.voter, state)} voted for "
-        f"{_colored_name(record.target, state)}."
-        if record.target is not None
-        else f"{_colored_name(record.voter, state)} abstained."
+        f"{_colored_name(record.voter_name, state)} voted for "
+        f"{_colored_name(record.target_name, state)}."
+        if record.target_name is not None
+        else f"{_colored_name(record.voter_name, state)} abstained."
         for record in outcome.votes
     ]
     lines.append("")

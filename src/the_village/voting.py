@@ -93,14 +93,14 @@ def cast_votes(
                 logger.warning(
                     "Discarding %s's invalid vote for %r", name, choice.target
                 )
-        votes.append(VoteRecord(voter=name, target=target))
+        votes.append(VoteRecord(voter_name=name, target_name=target))
 
     state.current_day.votes.extend(votes)
 
     tally: dict[str, int] = {}
     for vote in votes:
-        if vote.target is not None:
-            tally[vote.target] = tally.get(vote.target, 0) + 1
+        if vote.target_name is not None:
+            tally[vote.target_name] = tally.get(vote.target_name, 0) + 1
 
     lynched: str | None = None
     if tally:

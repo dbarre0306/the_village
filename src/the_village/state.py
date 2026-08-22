@@ -33,8 +33,8 @@ class DiscussionMessage(BaseModel):
 
 
 class VoteRecord(BaseModel):
-    voter: str
-    target: str | None = None
+    voter_name: str
+    target_name: str | None = None
 
 
 class Day(BaseModel):

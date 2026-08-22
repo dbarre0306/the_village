@@ -175,8 +175,8 @@ def test_ai_self_vote_is_normalized_to_abstain():
 
     outcome = cast_votes(state, agents, player_vote=None)
 
-    a_record = next(v for v in outcome.votes if v.voter == "A")
-    assert a_record.target is None
+    a_record = next(v for v in outcome.votes if v.voter_name == "A")
+    assert a_record.target_name is None
 
 
 def test_dead_villagers_excluded_from_voting_and_targets():
@@ -190,9 +190,9 @@ def test_dead_villagers_excluded_from_voting_and_targets():
 
     outcome = cast_votes(state, agents, player_vote=None)
 
-    assert "A" not in [record.voter for record in outcome.votes]
-    b_record = next(v for v in outcome.votes if v.voter == "B")
-    assert b_record.target is None  # A is dead, so an invalid target
+    assert "A" not in [record.voter_name for record in outcome.votes]
+    b_record = next(v for v in outcome.votes if v.voter_name == "B")
+    assert b_record.target_name is None  # A is dead, so an invalid target
 
 
 def test_player_vote_used_directly_without_kickoff():
@@ -206,8 +206,8 @@ def test_player_vote_used_directly_without_kickoff():
 
     outcome = cast_votes(state, agents, player_vote="B")
 
-    dana_record = next(v for v in outcome.votes if v.voter == "Dana")
-    assert dana_record.target == "B"
+    dana_record = next(v for v in outcome.votes if v.voter_name == "Dana")
+    assert dana_record.target_name == "B"
 
 
 def test_votes_recorded_onto_the_current_day():

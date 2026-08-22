@@ -38,13 +38,13 @@ def test_discussion_message_addressed_to():
 
 
 def test_vote_record_defaults_to_abstain():
-    vote = VoteRecord(voter="Alice")
-    assert vote.target is None
+    vote = VoteRecord(voter_name="Alice")
+    assert vote.target_name is None
 
 
 def test_vote_record_with_target():
-    vote = VoteRecord(voter="Alice", target="Bruce")
-    assert vote.target == "Bruce"
+    vote = VoteRecord(voter_name="Alice", target_name="Bruce")
+    assert vote.target_name == "Bruce"
 
 
 def test_game_state_defaults():

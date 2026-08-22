@@ -491,8 +491,8 @@ def test_format_vote_result_lists_breakdown_and_lynch_outcome():
     outcome = VoteOutcome(
         day_number=2,
         votes=[
-            VoteRecord(voter="Dana", target="A"),
-            VoteRecord(voter="B", target=None),
+            VoteRecord(voter_name="Dana", target_name="A"),
+            VoteRecord(voter_name="B", target_name=None),
         ],
         tally={"A": 1},
         lynched="A",
@@ -515,7 +515,7 @@ def test_format_vote_result_lists_breakdown_and_lynch_outcome():
 def test_format_vote_result_omits_tally_line_when_no_non_abstain_votes():
     outcome = VoteOutcome(
         day_number=2,
-        votes=[VoteRecord(voter="Dana", target=None)],
+        votes=[VoteRecord(voter_name="Dana", target_name=None)],
         tally={},
         lynched=None,
     )
@@ -630,5 +630,5 @@ def test_cast_player_abstain_records_no_target():
 
     list(cast_player_abstain(state, bridge))
 
-    dana_record = next(v for v in state.current_day.votes if v.voter == "Dana")
-    assert dana_record.target is None
+    dana_record = next(v for v in state.current_day.votes if v.voter_name == "Dana")
+    assert dana_record.target_name is None
