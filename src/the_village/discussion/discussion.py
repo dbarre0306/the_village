@@ -261,15 +261,14 @@ class DiscussionRunner:
 
 
     async def _run_rounds(self):
-        last_player_to_speak = None
         for round_number in range(NUMBER_OF_ROUNDS):
             logger.debug("DiscussionRunner.run: runner=%s starting round %s", id(self), round_number)
-            last_player_to_speak = await self._run_round(last_player_to_speak)
+            await self._run_round()
 
 
-    async def _run_round(self, last_player_to_speak: str|None) -> str | None:
+    async def _run_round(self) -> None:
         living_players = self._living_player_names()
-        self._shuffle_players(living_players, last_player_to_speak)
+        self._shuffle_players(living_players, self.state.last_player_to_speak())
 
         logger.debug("DiscussionRunner._run_round: runner=%s living_players=%s", id(self), living_players)
 
@@ -282,7 +281,6 @@ class DiscussionRunner:
                 self._log_message(message)
                 await self.bridge.outbox.put(message)
                 await self._resolve_address_chain(message, spoken_via_chain=spoken_via_chain)
-        return DiscussionRunner._last_player_to_speak(self.state.current_day.discussion)
 
 
     def _log_message(self, message: DiscussionMessage):
@@ -320,23 +318,6 @@ class DiscussionRunner:
     @staticmethod
     def _is_only_one_player_remaining_and_spoke_last(living_players: list[str], last_player_to_speak: str):
         return len(living_players) == 1 and living_players[0] == last_player_to_speak
-
-
-    @staticmethod
-    def _last_player_to_speak(messages) -> str | None:
-        index = DiscussionRunner._index_of_last_speaker(messages)
-        if index >= 0:
-            return messages[index].player_name
-        else:
-            return None
-
-            
-    @staticmethod
-    def _index_of_last_speaker(messages) -> int:
-        index = len(messages) - 1
-        while index >= 0 and messages[index].text == DECLINED_TO_RESPOND:
-            index -= 1
-        return index
 
 
     async def _give_player_a_turn_to_speak(

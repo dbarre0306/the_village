@@ -1,3 +1,4 @@
+from the_village.discussion.discussion import DECLINED_TO_RESPOND
 from the_village.state import WEEKDAYS, Day, DiscussionMessage, GameState, Player, VoteRecord
 
 
@@ -78,3 +79,28 @@ def test_advance_day_with_no_death():
 
     assert new_day.player_killed is None
     assert state.day_number == 2
+
+
+def test_last_player_to_speak_returns_none_with_no_discussion():
+    state = GameState()
+    assert state.last_player_to_speak() is None
+
+
+def test_last_player_to_speak_returns_the_last_speaker():
+    state = GameState()
+    state.current_day.discussion = [
+        DiscussionMessage(player_name="Alice", text="hello"),
+        DiscussionMessage(player_name="Bram", text="hi Alice"),
+    ]
+
+    assert state.last_player_to_speak() == "Bram"
+
+
+def test_last_player_to_speak_returns_the_decliner_so_they_dont_speak_again_right_away():
+    state = GameState()
+    state.current_day.discussion = [
+        DiscussionMessage(player_name="Alice", text="hello"),
+        DiscussionMessage(player_name="Bram", text=DECLINED_TO_RESPOND),
+    ]
+
+    assert state.last_player_to_speak() == "Bram"

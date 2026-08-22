@@ -65,3 +65,8 @@ class GameState(BaseModel):
         new_day = Day(day_number=self.day_number + 1, player_killed=player_killed)
         self.days.append(new_day)
         return new_day
+
+    def last_player_to_speak(self) -> str | None:
+        if not self.current_day.discussion:
+            return None
+        return self.current_day.discussion[-1].player_name
