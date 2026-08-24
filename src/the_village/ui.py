@@ -334,7 +334,10 @@ def _speaker_name_span(name: str, state: GameState) -> str:
 
 
 def format_discussion_transcript(
-    state: GameState, limit: int | None = None, pending_speaker: str | None = None
+    state: GameState,
+    limit: int | None = None,
+    pending_speaker: str | None = None,
+    waiting: bool = False,
 ) -> str:
     # `limit` caps how many of state.current_day.discussion's messages are
     # shown. DiscussionRunner appends straight to this same live GameState
@@ -345,16 +348,20 @@ def format_discussion_transcript(
     # ahead-of-pace messages into this render instead of just this item's.
     # `pending_speaker` additionally appends a "typing" placeholder for that
     # speaker after the limited messages, so the reveal can be paced.
+    # `waiting` appends that same placeholder with no name attached, for the
+    # dead time before anyone's turn -- and thus their identity -- is known.
     all_messages = [message for day in state.days for message in day.discussion]
     messages = all_messages if limit is None else all_messages[:limit]
     lines = [
         f"{_speaker_name_span(m.player_name, state)} {m.text}" for m in messages
     ]
+    typing_indicator = (
+        f'<span class="{TYPING_INDICATOR_CLASS}"><span></span><span></span><span></span></span>'
+    )
     if pending_speaker is not None:
-        lines.append(
-            f'{_speaker_name_span(pending_speaker, state)} '
-            f'<span class="{TYPING_INDICATOR_CLASS}"><span></span><span></span><span></span></span>'
-        )
+        lines.append(f"{_speaker_name_span(pending_speaker, state)} {typing_indicator}")
+    elif waiting:
+        lines.append(typing_indicator)
     if not lines:
         return ""
     return "\n\n".join(lines)
@@ -447,7 +454,9 @@ async def begin_discussion(bridge: SessionBridge, state: GameState):
     weekday = WEEKDAYS[(state.day_number - 1) % 7]
     yield (
         bridge,
-        gr.update(),
+        format_discussion_transcript(
+            state, limit=bridge.revealed_discussion_messages, waiting=True
+        ),
         gr.update(),
         gr.update(),
         gr.update(),

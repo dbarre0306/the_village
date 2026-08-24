@@ -108,6 +108,20 @@ async def test_begin_discussion_resolves_the_death_gate_and_streams_to_completio
     assert len(outputs) == 2  # immediate "hide button" yield, then completion
 
 
+async def test_begin_discussion_shows_waiting_indicator_before_first_speaker():
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
+    await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
+
+    outputs = [
+        update async for update in begin_discussion(bridge, GameState())
+    ]
+
+    assert "typing-indicator" in outputs[0][1]
+    waiter.cancel()
+
+
 async def test_begin_discussion_is_a_noop_when_already_resolved():
     bridge = SessionBridge()  # nothing pending -- simulates a double-click
     outputs = [update async for update in begin_discussion(bridge, GameState())]
@@ -230,9 +244,10 @@ async def test_ai_turn_shows_pending_placeholder_before_revealing_message(monkey
     outputs = [update async for update in begin_discussion(bridge, state)]
     transcripts = [update[1] for update in outputs if isinstance(update[1], str)]
 
-    pending_index = next(i for i, t in enumerate(transcripts) if "typing-indicator" in t)
+    pending_index = next(
+        i for i, t in enumerate(transcripts) if "typing-indicator" in t and "A:</span>" in t
+    )
     assert "hi there" not in transcripts[pending_index]
-    assert "A:</span>" in transcripts[pending_index]
     assert "hi there" in transcripts[pending_index + 1]
     assert sleep_calls == [ui.SPEAKER_THINKING_DELAY_SECONDS]
     waiter.cancel()
@@ -370,6 +385,27 @@ def test_format_discussion_transcript_with_pending_speaker_keeps_prior_messages(
     transcript = format_discussion_transcript(state, limit=1, pending_speaker="Dana")
     assert "first" in transcript
     assert "second" not in transcript
+    assert "typing-indicator" in transcript
+
+
+def test_format_discussion_transcript_with_waiting_shows_generic_indicator():
+    state = GameState(user_player_name="Dana")
+    transcript = format_discussion_transcript(state, waiting=True)
+    assert "typing-indicator" in transcript
+    assert ":</span>" not in transcript  # no speaker name attached
+
+
+def test_format_discussion_transcript_with_waiting_keeps_prior_messages():
+    state = GameState(
+        user_player_name="Dana",
+        players=[
+            Player(name="Dana", player_type="user"),
+            Player(name="A", player_type="villager"),
+        ],
+        days=[Day(day_number=1, discussion=[DiscussionMessage(player_name="A", text="hello")])],
+    )
+    transcript = format_discussion_transcript(state, limit=1, waiting=True)
+    assert "hello" in transcript
     assert "typing-indicator" in transcript
 
 
