@@ -3,11 +3,11 @@ from pydantic import BaseModel, Field
 
 from the_village.bridge import SessionBridge
 
-from .speaker import AddressResolution, Speaker, DECLINED_TO_RESPOND
+from .speaker import _AddressResolution, _Speaker, DECLINED_TO_RESPOND
 from the_village.state import DiscussionMessage, GameState, Player
 
 
-class SpeakerOutput(BaseModel):
+class _SpeakerOutput(BaseModel):
     has_something_to_say: bool = Field(
         description=(
             "Whether you have something to say right now. False means you'll "
@@ -23,7 +23,7 @@ class SpeakerOutput(BaseModel):
     )
 
 
-class AiSpeaker(Speaker):
+class _AiSpeaker(_Speaker):
 
     def __init__(
         self,
@@ -46,7 +46,7 @@ class AiSpeaker(Speaker):
         crew = self._build_crew(speak_task, analyze_task)
 
         result = await crew.akickoff()
-        speakerOutput = result.tasks_output[0].pydantic or SpeakerOutput(
+        speakerOutput = result.tasks_output[0].pydantic or _SpeakerOutput(
             has_something_to_say=False
         )
 
@@ -55,7 +55,7 @@ class AiSpeaker(Speaker):
                 return None
             return self._record_message(DECLINED_TO_RESPOND, addressed_to=None)
 
-        resolution = result.tasks_output[1].pydantic or AddressResolution(
+        resolution = result.tasks_output[1].pydantic or _AddressResolution(
             addressed_to=None
         )
         addressed_to = self._resolve_target(resolution.addressed_to)
@@ -66,7 +66,7 @@ class AiSpeaker(Speaker):
             description=self._build_speak_prompt(addressed_by),
             agent=self._player_agent,
             expected_output="A SpeakerOutput saying whether you have something to say.",
-            output_pydantic=SpeakerOutput,
+            output_pydantic=_SpeakerOutput,
         )
 
     def _build_speak_prompt(self, addressed_by: DiscussionMessage | None) -> str:
@@ -86,7 +86,12 @@ class AiSpeaker(Speaker):
             "another player unless the discussion above actually shows them doing "
             "that. Turn order is random and says nothing about anyone's guilt or "
             "honesty, so never comment on who has or hasn't spoken yet, or how much "
-            "someone has said.",
+            "someone has said. This also applies to the group as a whole -- never "
+            'claim something like "no one seems to remember where they were" or '
+            '"it\'s strange no one has said X" unless the discussion above actually '
+            "shows people being asked and failing to answer. If no one has addressed "
+            "a topic yet, that just means it hasn't come up -- it is not evidence of "
+            "anything.",
             "",
             "When referring to another player, always use their name -- never a pronoun.",
             "When referring to more than one player, always use all of their names -- never a pronoun.",
@@ -114,7 +119,7 @@ class AiSpeaker(Speaker):
             description=self._build_analyze_prompt(),
             agent=self._analyst_agent,
             expected_output="An AddressResolution naming who, if anyone, was addressed.",
-            output_pydantic=AddressResolution,
+            output_pydantic=_AddressResolution,
             context=[speak_task],
         )
 

@@ -7,10 +7,10 @@ from typing import Final
 from crewai import Agent
 
 from the_village.bridge import SessionBridge
-from the_village.discussion.ai_speaker import AiSpeaker
-from the_village.discussion.human_speaker import HumanSpeaker
-from the_village.discussion.reply_chain import ReplyChain
-from the_village.discussion.speaker import Speaker
+from the_village.discussion.ai_speaker import _AiSpeaker
+from the_village.discussion.human_speaker import _HumanSpeaker
+from the_village.discussion.reply_chain import _ReplyChain
+from the_village.discussion.speaker import _Speaker
 from the_village.state import WEEKDAYS, DiscussionMessage, GameState
 
 logger = logging.getLogger(__name__)
@@ -34,22 +34,22 @@ class Discussion:
         self._analyst_agent = analyst_agent
         self._speakers = self._build_speakers()
 
-    def _build_speakers(self) -> dict[str, Speaker]:
+    def _build_speakers(self) -> dict[str, _Speaker]:
         living_players = self._state.names_of_living_players()
         return {
             player_name: self._build_speaker(player_name)
             for player_name in living_players
         }
 
-    def _build_speaker(self, player_name) -> Speaker | None:
+    def _build_speaker(self, player_name) -> _Speaker | None:
         if self._state.is_human_player(player_name):
-            return HumanSpeaker(
+            return _HumanSpeaker(
                 self._state,
                 self._bridge,
                 player_name,
                 self._analyst_agent,
             )
-        return AiSpeaker(
+        return _AiSpeaker(
             self._state,
             self._bridge,
             player_name,
@@ -128,5 +128,5 @@ class Discussion:
             return
         if message.addressed_to is None:
             return
-        replyChain = ReplyChain(self._speakers)
+        replyChain = _ReplyChain(self._speakers)
         await replyChain.execute(message)

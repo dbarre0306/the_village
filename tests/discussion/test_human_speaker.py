@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, patch
 from crewai import Agent
 
 from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
-from the_village.discussion.human_speaker import HumanSpeaker
-from the_village.discussion.speaker import DECLINED_TO_RESPOND, AddressResolution
+from the_village.discussion.human_speaker import _HumanSpeaker
+from the_village.discussion.speaker import DECLINED_TO_RESPOND, _AddressResolution
 from the_village.state import GameState, Player
 
 
@@ -29,8 +29,8 @@ def _crew_result(*pydantic_outputs):
     )
 
 
-def make_human_speaker(state: GameState, bridge: SessionBridge) -> HumanSpeaker:
-    return HumanSpeaker(state, bridge, "Dana", _stub_agent())
+def make_human_speaker(state: GameState, bridge: SessionBridge) -> _HumanSpeaker:
+    return _HumanSpeaker(state, bridge, "Dana", _stub_agent())
 
 
 async def test_returns_none_on_scheduled_pass():
@@ -68,7 +68,7 @@ async def test_resolves_address_via_the_analyst():
     speaker = make_human_speaker(state, bridge)
     with patch(
         "crewai.Crew.akickoff",
-        new=AsyncMock(return_value=_crew_result(AddressResolution(addressed_to="B"))),
+        new=AsyncMock(return_value=_crew_result(_AddressResolution(addressed_to="B"))),
     ):
         task = asyncio.create_task(speaker.speak(addressed_by=None))
         await asyncio.sleep(0)

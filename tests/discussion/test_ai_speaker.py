@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, patch
 from crewai import Agent
 
 from the_village.bridge import SessionBridge
-from the_village.discussion.ai_speaker import AiSpeaker, SpeakerOutput
-from the_village.discussion.speaker import DECLINED_TO_RESPOND, AddressResolution
+from the_village.discussion.ai_speaker import _AiSpeaker, _SpeakerOutput
+from the_village.discussion.speaker import DECLINED_TO_RESPOND, _AddressResolution
 from the_village.state import GameState, Player
 
 
@@ -31,14 +31,14 @@ def _crew_result(*pydantic_outputs):
     )
 
 
-def make_ai_speaker(state: GameState, player_name: str = "A") -> AiSpeaker:
-    return AiSpeaker(
+def make_ai_speaker(state: GameState, player_name: str = "A") -> _AiSpeaker:
+    return _AiSpeaker(
         state, SessionBridge(), player_name, _stub_agent(), _stub_agent()
     )
 
 
 def test_speaker_output_has_no_addressed_to_field():
-    assert "addressed_to" not in SpeakerOutput.model_fields
+    assert "addressed_to" not in _SpeakerOutput.model_fields
 
 
 def test_speak_prompt_forbids_unfounded_behavior_claims():
@@ -55,7 +55,7 @@ async def test_returns_none_on_scheduled_decline():
     with patch(
         "crewai.Crew.akickoff",
         new=AsyncMock(
-            return_value=_crew_result(SpeakerOutput(has_something_to_say=False), None)
+            return_value=_crew_result(_SpeakerOutput(has_something_to_say=False), None)
         ),
     ):
         message = await speaker.speak(addressed_by=None)
@@ -70,7 +70,7 @@ async def test_records_decline_placeholder_when_owed_a_reply():
     with patch(
         "crewai.Crew.akickoff",
         new=AsyncMock(
-            return_value=_crew_result(SpeakerOutput(has_something_to_say=False), None)
+            return_value=_crew_result(_SpeakerOutput(has_something_to_say=False), None)
         ),
     ):
         message = await speaker.speak(addressed_by=asking)
@@ -86,8 +86,8 @@ async def test_records_message_and_resolved_address():
         "crewai.Crew.akickoff",
         new=AsyncMock(
             return_value=_crew_result(
-                SpeakerOutput(has_something_to_say=True, text="I saw B leave."),
-                AddressResolution(addressed_to="B"),
+                _SpeakerOutput(has_something_to_say=True, text="I saw B leave."),
+                _AddressResolution(addressed_to="B"),
             )
         ),
     ):
@@ -107,8 +107,8 @@ async def test_discards_addressed_to_from_the_analyst_on_decline():
         "crewai.Crew.akickoff",
         new=AsyncMock(
             return_value=_crew_result(
-                SpeakerOutput(has_something_to_say=False),
-                AddressResolution(addressed_to="B"),
+                _SpeakerOutput(has_something_to_say=False),
+                _AddressResolution(addressed_to="B"),
             )
         ),
     ):

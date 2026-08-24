@@ -1,20 +1,20 @@
 import logging
 
-from .speaker import Speaker
+from .speaker import _Speaker
 from the_village.state import DiscussionMessage
 
 logger = logging.getLogger(__name__)
 
 
-class ReplyChain:
+class _ReplyChain:
 
-    def __init__(self, speakers: dict[str, Speaker]):
+    def __init__(self, speakers: dict[str, _Speaker]):
         self._speakers = speakers
         self._chain = frozenset()
 
     async def execute(self, message: DiscussionMessage) -> None:
         logger.debug(
-            "ReplyChain.execute: instance=%s player_name=%s addressed_to=%s chain=%s",
+            "_ReplyChain.execute: instance=%s player_name=%s addressed_to=%s chain=%s",
             id(self),
             message.player_name,
             message.addressed_to,

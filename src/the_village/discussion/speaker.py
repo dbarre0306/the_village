@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 DECLINED_TO_RESPOND = "[declined to respond]"
 
 
-class AddressResolution(BaseModel):
+class _AddressResolution(BaseModel):
     addressed_to: str | None = Field(
         default=None,
         description=(
@@ -23,7 +23,7 @@ class AddressResolution(BaseModel):
     )
 
 
-class Speaker:
+class _Speaker:
 
     def __init__(
         self,
@@ -56,7 +56,7 @@ class Speaker:
 
     def _log_message(self, message: DiscussionMessage):
         logger.debug(
-            "Speaker.speak: instance=%s putting message=%s player_name=%s day=%s",
+            "_Speaker.speak: instance=%s putting message=%s player_name=%s day=%s",
             id(self),
             id(message),
             message.player_name,

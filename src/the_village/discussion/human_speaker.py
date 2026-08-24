@@ -3,10 +3,10 @@ from crewai import Agent, Crew, Task
 from the_village.bridge import FlowStatus, SessionBridge
 from the_village.state import DiscussionMessage, GameState, Player
 
-from .speaker import DECLINED_TO_RESPOND, AddressResolution, Speaker
+from .speaker import DECLINED_TO_RESPOND, _AddressResolution, _Speaker
 
 
-class HumanSpeaker(Speaker):
+class _HumanSpeaker(_Speaker):
 
     def __init__(
         self,
@@ -40,7 +40,7 @@ class HumanSpeaker(Speaker):
         crew = Crew(agents=[self._analyst_agent], tasks=[task])
 
         result = await crew.akickoff()
-        resolution = result.tasks_output[0].pydantic or AddressResolution(
+        resolution = result.tasks_output[0].pydantic or _AddressResolution(
             addressed_to=None
         )
         return self._resolve_target(resolution.addressed_to)
@@ -50,7 +50,7 @@ class HumanSpeaker(Speaker):
             description=self._build_analyze_prompt(text),
             agent=self._analyst_agent,
             expected_output="An AddressResolution naming who, if anyone, was addressed.",
-            output_pydantic=AddressResolution,
+            output_pydantic=_AddressResolution,
         )
 
     def _build_analyze_prompt(self, text: str) -> str:
