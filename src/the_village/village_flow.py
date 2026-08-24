@@ -7,7 +7,7 @@ from crewai.flow import Flow, listen, start
 
 from the_village.agents import build_agent, build_conversation_analyst_agent
 from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
-from the_village.discussion.discussion import DiscussionRunner
+from the_village.discussion.discussion import Discussion
 from the_village.night import resolve_night_one
 from the_village.roster import build_initial_roster
 from the_village.state import GameState
@@ -20,7 +20,7 @@ class VillageFlow(Flow[GameState]):
         super().__init__()
         self.bridge = bridge
         self._player_agents: dict[str, Agent] = {}
-        self._analyst: Agent | None = None
+        self._analyst_agent: Agent | None = None
 
     @start()
     async def setup_game(self):
@@ -28,7 +28,7 @@ class VillageFlow(Flow[GameState]):
         self.state.days = roster_state.days
         self.state.players = roster_state.players
         self._player_agents = self._build_ai_agents()
-        self._analyst = build_conversation_analyst_agent()
+        self._analyst_agent = build_conversation_analyst_agent()
         self.bridge.player_agents = self._player_agents
 
     @listen(setup_game)
@@ -42,12 +42,16 @@ class VillageFlow(Flow[GameState]):
 
     @listen(announce_death)
     async def run_discussion(self):
-        logger.debug("VillageFlow.run_discussion: flow=%s bridge=%s entering", id(self), id(self.bridge))
-        await DiscussionRunner(
+        logger.debug(
+            "VillageFlow.run_discussion: flow=%s bridge=%s entering",
+            id(self),
+            id(self.bridge),
+        )
+        await Discussion(
             state=self.state,
             bridge=self.bridge,
             player_agents=self._player_agents,
-            analyst=self._analyst,
+            analyst_agent=self._analyst_agent,
         ).run()
         logger.debug(
             "VillageFlow.run_discussion: flow=%s bridge=%s discussion runner returned, transcript len=%s",
@@ -62,7 +66,6 @@ class VillageFlow(Flow[GameState]):
             player.name: build_agent(player, self.state.players)
             for player in self.state.ai_players()
         }
-
 
 
 async def _auto_play_consumer(bridge: SessionBridge) -> None:
@@ -80,13 +83,15 @@ async def _auto_play_consumer(bridge: SessionBridge) -> None:
         if item in (FlowStatus.WAITING_FOR_TURN, FlowStatus.WAITING_FOR_ANSWER) or (
             not isinstance(item, FlowStatus)
         ):
-            bridge.resolve_input(PlayerInput(message=None))
+            bridge.resolve_input(PlayerInput(text=None))
 
 
 async def _kickoff_async():
     bridge = SessionBridge()
     village_flow = VillageFlow(bridge=bridge)
-    flow_task = asyncio.create_task(village_flow.kickoff_async(inputs={"user_player_name": "TestPlayer"}))
+    flow_task = asyncio.create_task(
+        village_flow.kickoff_async(inputs={"user_player_name": "TestPlayer"})
+    )
     consumer_task = asyncio.create_task(_auto_play_consumer(bridge))
     await flow_task
     consumer_task.cancel()

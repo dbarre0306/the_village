@@ -19,6 +19,10 @@ WEEKDAYS = [
 ]
 
 
+def _weekday(day_number: int) -> str:
+    return WEEKDAYS[(day_number - 1) % 7]
+
+
 class Player(BaseModel):
     name: str
     player_type: PlayerType
@@ -51,7 +55,9 @@ class GameState(BaseModel):
     days: list[Day] = Field(default_factory=lambda: [Day(day_number=1)])
 
     def ai_players(self) -> list[str]:
-        return filter(lambda player: player.player_type in (VILLAGER, WEREWOLF), self.players)
+        return filter(
+            lambda player: player.player_type in (VILLAGER, WEREWOLF), self.players
+        )
 
     @property
     def day_number(self) -> int:
@@ -61,12 +67,41 @@ class GameState(BaseModel):
     def current_day(self) -> Day:
         return self.days[-1]
 
+    def is_human_player(self, name: str) -> bool:
+        return name == self.user_player_name
+
     def advance_day(self, player_killed: str | None = None) -> Day:
         new_day = Day(day_number=self.day_number + 1, player_killed=player_killed)
         self.days.append(new_day)
         return new_day
 
+    def names_of_living_players(self) -> list[str]:
+        return [player.name for player in self.players if player.is_alive]
+
+    def names_of_other_living_players(self, player_name: str) -> list[str]:
+        return [
+            name for name in self.names_of_living_players() if name != player_name
+        ]
+
     def last_player_to_speak(self) -> str | None:
         if not self.current_day.discussion:
             return None
         return self.current_day.discussion[-1].player_name
+
+    def is_last_player_to_speak(self, player_name: str) -> bool:
+        return player_name == self.last_player_to_speak()
+
+    def format_deaths(self) -> str:
+        dead_days = [day for day in self.days if day.player_killed]
+        if not dead_days:
+            return "(No one has died yet.)"
+        return "\n".join(
+            f"{day.player_killed} was found dead on {_weekday(day.day_number)}."
+            for day in dead_days
+        )
+
+    def format_history(self) -> str:
+        messages = [message for day in self.days for message in day.discussion]
+        if not messages:
+            return "(No discussion has happened yet.)"
+        return "\n".join(f"{m.player_name}: {m.text}" for m in messages)

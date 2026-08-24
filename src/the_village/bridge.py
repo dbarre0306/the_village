@@ -18,7 +18,7 @@ class FlowStatus(str, Enum):
 
 @dataclass
 class PlayerInput:
-    message: str | None = None  # None means "passed"
+    text: str | None = None  # None means "passed"
 
 
 @dataclass

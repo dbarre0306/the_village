@@ -5,7 +5,7 @@ from the_village.bridge import PlayerInput, SessionBridge
 
 def test_resolve_input_is_a_noop_with_no_pending_wait():
     bridge = SessionBridge()
-    assert bridge.resolve_input(PlayerInput(message="hi")) is False
+    assert bridge.resolve_input(PlayerInput(text="hi")) is False
 
 
 async def test_wait_for_input_returns_the_resolved_value():
@@ -13,8 +13,8 @@ async def test_wait_for_input_returns_the_resolved_value():
     waiter = asyncio.create_task(bridge.wait_for_input())
     await asyncio.sleep(0)  # let wait_for_input reach its await point
 
-    assert bridge.resolve_input(PlayerInput(message="hello")) is True
-    assert await waiter == PlayerInput(message="hello")
+    assert bridge.resolve_input(PlayerInput(text="hello")) is True
+    assert await waiter == PlayerInput(text="hello")
 
 
 async def test_resolve_input_is_a_noop_once_already_resolved():
@@ -22,10 +22,10 @@ async def test_resolve_input_is_a_noop_once_already_resolved():
     waiter = asyncio.create_task(bridge.wait_for_input())
     await asyncio.sleep(0)
 
-    bridge.resolve_input(PlayerInput(message="first"))
+    bridge.resolve_input(PlayerInput(text="first"))
 
-    assert bridge.resolve_input(PlayerInput(message="second")) is False
-    assert await waiter == PlayerInput(message="first")
+    assert bridge.resolve_input(PlayerInput(text="second")) is False
+    assert await waiter == PlayerInput(text="first")
 
 
 async def test_wait_for_input_clears_pending_input_after_resolving():

@@ -24,15 +24,12 @@ def build_initial_roster(
     rng = rng or random.Random()
 
     available_names = [
-        name
-        for name in PLAYER_NAME_POOL
-        if name.lower() != player_name.strip().lower()
+        name for name in PLAYER_NAME_POOL if name.lower() != player_name.strip().lower()
     ]
     ai_names = rng.sample(available_names, 6)
     players = [Player(name=player_name, player_type="user")]
-    players += [
-        Player(name=name, player_type="villager") for name in ai_names
-    ]
+    players += [Player(name=name, player_type="villager") for name in ai_names]
+    # TODO: none of the AI players can have the same name as the user
 
     werewolves = rng.sample(players[1:], 2)
     for werewolf in werewolves:

@@ -4,373 +4,129 @@ import logging
 import random
 from typing import Final
 
-from crewai import Agent, Crew, Process, Task
-from instructor import llm_validator
-from pydantic import BaseModel, Field
+from crewai import Agent
 
-from the_village.bridge import FlowStatus, SessionBridge
+from the_village.bridge import SessionBridge
+from the_village.discussion.ai_speaker import AiSpeaker
+from the_village.discussion.human_speaker import HumanSpeaker
+from the_village.discussion.reply_chain import ReplyChain
+from the_village.discussion.speaker import Speaker
 from the_village.state import WEEKDAYS, DiscussionMessage, GameState
 
 logger = logging.getLogger(__name__)
 
 NUMBER_OF_ROUNDS: Final = 2
 
-class AddressResolution(BaseModel):
-    addressed_to: str | None = Field(
-        default=None,
-        description=(
-            "The name of the living villager the message is speaking directly "
-            "to, if any — e.g. asking them a question or accusing them. Leave "
-            "unset if the message isn't addressing anyone in particular."
-        ),
-    )
 
-
-def _resolve_target(candidate: str | None, state: GameState, exclude: str) -> str | None:
-    if not candidate or candidate == exclude:
-        return None
-    if candidate not in _living_participant_names(state):
-        return None
-    return candidate
-
-
-class SpeakerOutput(BaseModel):
-    has_something_to_say: bool = Field(
-        description=(
-            "Whether you have something to say right now. False means you'll "
-            "sit this turn out."
-        )
-    )
-    text: str | None = Field(
-        default=None,
-        description=(
-            "What you say, if you have something to say. Keep it to one or "
-            "two sentences -- brief, like real spoken dialogue."
-        ),
-    )
-
-
-def _weekday(day_number: int) -> str:
-    return WEEKDAYS[(day_number - 1) % 7]
-
-
-def _format_deaths(state: GameState) -> str:
-    dead_days = [day for day in state.days if day.player_killed]
-    if not dead_days:
-        return "(No one has died yet.)"
-    return "\n".join(
-        f"{day.player_killed} was found dead on {_weekday(day.day_number)}."
-        for day in dead_days
-    )
-
-
-def _format_history(state: GameState) -> str:
-    messages = [message for day in state.days for message in day.discussion]
-    if not messages:
-        return "(No discussion has happened yet.)"
-    return "\n".join(f"{m.player_name}: {m.text}" for m in messages)
-
-
-def _living_participant_names(state: GameState) -> list[str]:
-    return [v.name for v in state.players if v.is_alive]
-
-
-DECLINED_TO_RESPOND = "[declined to respond]"
-
-
-def _record_message(
-    state: GameState, player: str, text: str, addressed_to: str | None
-) -> DiscussionMessage:
-    msg = DiscussionMessage(
-        player_name=player,
-        text=text,
-        addressed_to=addressed_to,
-    )
-    state.current_day.discussion.append(msg)
-    logger.debug(
-        "_record_message: state=%s day=%s player_name=%s addressed_to=%s message=%r",
-        id(state),
-        state.day_number,
-        player,
-        addressed_to,
-        text,
-    )
-    return msg
-
-
-def _build_speak_prompt(state: GameState, addressed_by: DiscussionMessage | None) -> str:
-    living_names = _living_participant_names(state)
-    parts = [
-        "Known facts:",
-        _format_deaths(state),
-        "",
-        f"Living villagers: {', '.join(living_names)}, including "
-        f"{state.user_player_name} (the human player).",
-        "",
-        "Discussion so far:",
-        _format_history(state),
-        "",
-        "When referring to another player, always use their name -- never a pronoun.",
-        "When referring to more than one player, always use all of their names -- never a pronoun.",
-        ""
-        "Any statements, questions, or accusations must be consistent with what you previously said."
-        "",
-        "Only treat something as true if it's listed in Known facts above or was "
-        "actually said in Discussion so far -- never invent a sighting, alibi, or "
-        "claim about what another villager did. Turn order is random and says "
-        "nothing about anyone's guilt or honesty, so never comment on who has or "
-        "hasn't spoken yet, or how much someone has said.",
-        "",
-    ]
-    if addressed_by is not None:
-        parts.append(
-            f'{addressed_by.player_name} just said to you: "{addressed_by.text}" '
-            "Respond directly to this."
-        )
-    else:
-        parts.append(
-            "It's your turn. Decide whether you have something to say -- a "
-            "statement, question, or accusation. If you have nothing to add, "
-            "say so."
-        )
-    return "\n".join(parts)
-
-
-def _build_analyze_prompt() -> str:
-    return (
-        "Determine who, if anyone, the message you were just given as "
-        "context is directed at. If the speaker had nothing to say, there "
-        "is nothing to analyze -- leave addressed_to unset."
-    )
-
-
-def _build_player_analyze_prompt(state: GameState, message: str) -> str:
-    candidates = [n for n in _living_participant_names(state) if n != state.user_player_name]
-    return "\n".join(
-        [
-            "Known facts:",
-            _format_deaths(state),
-            "",
-            f"Living villagers: {', '.join(candidates)}.",
-            "",
-            "Discussion so far:",
-            _format_history(state),
-            "",
-            f'{state.user_player_name} just said: "{message}"',
-            "Who, if anyone, is this message directed at? A name that's "
-            "merely mentioned doesn't count -- only someone actually being "
-            "spoken to.",
-        ]
-    )
-
-
-async def _run_ai_turn(
-    speaker: Agent,
-    analyst: Agent,
-    state: GameState,
-    name: str,
-    addressed_by: DiscussionMessage | None,
-) -> DiscussionMessage | None:
-    speak_task = Task(
-        description=_build_speak_prompt(state, addressed_by),
-        agent=speaker,
-        expected_output="A SpeakerOutput saying whether you have something to say.",
-        output_pydantic=SpeakerOutput,
-    )
-    analyze_task = Task(
-        description=_build_analyze_prompt(),
-        agent=analyst,
-        expected_output="An AddressResolution naming who, if anyone, was addressed.",
-        output_pydantic=AddressResolution,
-        context=[speak_task],
-    )
-    crew = Crew(
-        agents=[speaker, analyst], tasks=[speak_task, analyze_task], process=Process.sequential
-    )
-    result = await crew.akickoff()
-    speakerOutput = result.tasks_output[0].pydantic or SpeakerOutput(has_something_to_say=False)
-
-    if not speakerOutput.has_something_to_say or not speakerOutput.text:
-        if addressed_by is None:
-            return None
-        return _record_message(state, name, DECLINED_TO_RESPOND, addressed_to=None)
-
-    resolution = result.tasks_output[1].pydantic or AddressResolution(addressed_to=None)
-    addressed_to = _resolve_target(resolution.addressed_to, state, exclude=name)
-    return _record_message(state, name, speakerOutput.text, addressed_to)
-
-
-async def _resolve_player_address(
-    analyst: Agent, state: GameState, message: str, exclude: str
-) -> str | None:
-    task = Task(
-        description=_build_player_analyze_prompt(state, message),
-        agent=analyst,
-        expected_output="An AddressResolution naming who, if anyone, was addressed.",
-        output_pydantic=AddressResolution,
-    )
-    crew = Crew(agents=[analyst], tasks=[task])
-    result = await crew.akickoff()
-    resolution = result.tasks_output[0].pydantic or AddressResolution(addressed_to=None)
-    return _resolve_target(resolution.addressed_to, state, exclude=exclude)
-
-
-async def _run_player_turn(
-    analyst: Agent,
-    state: GameState,
-    bridge: SessionBridge,
-    name: str,
-    addressed_by: DiscussionMessage | None,
-) -> DiscussionMessage | None:
-    player_input = await bridge.wait_for_input()
-    if player_input.message is None:
-        if addressed_by is None:
-            return None
-        return _record_message(state, name, DECLINED_TO_RESPOND, addressed_to=None)
-
-    addressed_to = await _resolve_player_address(
-        analyst, state, player_input.message, exclude=name
-    )
-    return _record_message(state, name, player_input.message, addressed_to)
-
-
-class DiscussionRunner:
+class Discussion:
     def __init__(
         self,
         state: GameState,
         bridge: SessionBridge,
         player_agents: dict[str, Agent],
-        analyst: Agent,
+        analyst_agent: Agent,
         rng: random.Random | None = None,
     ):
-        self.state = state
-        self.bridge = bridge
-        self.rng = rng or random.Random()
+        self._state = state
+        self._bridge = bridge
+        self._rng = rng or random.Random()
         self._player_agents = player_agents
-        self._analyst = analyst
+        self._analyst_agent = analyst_agent
+        self._speakers = self._build_speakers()
+
+    def _build_speakers(self) -> dict[str, Speaker]:
+        living_players = self._state.names_of_living_players()
+        return {
+            player_name: self._build_speaker(player_name)
+            for player_name in living_players
+        }
+
+    def _build_speaker(self, player_name) -> Speaker | None:
+        if self._state.is_human_player(player_name):
+            return HumanSpeaker(
+                self._state,
+                self._bridge,
+                player_name,
+                self._analyst_agent,
+            )
+        return AiSpeaker(
+            self._state,
+            self._bridge,
+            player_name,
+            self._player_agents[player_name],
+            self._analyst_agent,
+        )
 
     async def run(self) -> list[DiscussionMessage]:
         logger.debug(
             "DiscussionRunner.run: runner=%s bridge=%s day=%s",
             id(self),
-            id(self.bridge),
-            self.state.day_number,
+            id(self._bridge),
+            self._state.day_number,
         )
         await self._run_rounds()
-        return self.state.current_day.discussion
-
+        return self._state.current_day.discussion
 
     async def _run_rounds(self):
         for round_number in range(NUMBER_OF_ROUNDS):
-            logger.debug("DiscussionRunner.run: runner=%s starting round %s", id(self), round_number)
+            logger.debug(
+                "DiscussionRunner.run: runner=%s starting round %s",
+                id(self),
+                round_number,
+            )
             await self._run_round()
 
-
     async def _run_round(self) -> None:
-        living_players = self._living_player_names()
-        self._shuffle_players(living_players, self.state.last_player_to_speak())
+        living_players = self._build_shuffled_living_players()
 
-        logger.debug("DiscussionRunner._run_round: runner=%s living_players=%s", id(self), living_players)
-
-        spoken_via_chain: set[str] = set()
-        for player in living_players:
-            if player in spoken_via_chain:
-                continue
-            message = await self._give_player_a_turn_to_speak(player, addressed_by=None)
-            if message is not None:
-                self._log_message(message)
-                await self.bridge.outbox.put(message)
-                await self._resolve_address_chain(message, spoken_via_chain=spoken_via_chain)
-
-
-    def _log_message(self, message: DiscussionMessage):
         logger.debug(
-            "DiscussionRunner._run_round: runner=%s putting message=%s player_name=%s day=%s",
+            "Discussion._run_round: runner=%s living_players=%s",
             id(self),
-            id(message),
-            message.player_name,
-            self.state.day_number,
+            living_players,
         )
 
-    
-    def _living_player_names(self) -> list[str]:
-        return [player.name for player in self.state.players if player.is_alive]
+        for player in living_players:
+            if not self._state.is_last_player_to_speak(player):
+                await self._speak(player, addressed_by=None)
 
+    async def _speak(
+        self, player_name: str, addressed_by: DiscussionMessage | None
+    ) -> None:
+        speaker = self._speakers[player_name]
+        message = await speaker.speak(addressed_by)
+        await self._handle_replies(message)
 
-    def _shuffle_players(self, living_players, last_player_to_speak) -> list[str]:
-        if (self._is_only_one_player_remaining_and_spoke_last(living_players, last_player_to_speak)): 
+    def _build_shuffled_living_players(self) -> list[str]:
+        living_players = self._state.names_of_living_players()
+        self._rng.shuffle(living_players)
+        last_player_to_speak = self._state.last_player_to_speak()
+
+        if len(living_players) == 0:
             return []
-        self.rng.shuffle(living_players)
+
+        if len(living_players) == 1:
+            if living_players[0] == last_player_to_speak:
+                return []  # don't allow the player to speak again
+            return living_players
 
         # If a player was the last to speak in a previous round, that player
-        # must not be the player to speak in this round.
-        if (living_players[0] == last_player_to_speak):
+        # must not be the first player to speak in this round.
+        if living_players[0] == last_player_to_speak:
             self._swap_first_player_with_another_player(living_players)
-        
+
         return living_players
 
-
     def _swap_first_player_with_another_player(self, living_players):
-        swap_index = self.rng.randrange(1, len(living_players))
-        living_players[0], living_players[swap_index] = living_players[swap_index], living_players[0]
-
-
-    @staticmethod
-    def _is_only_one_player_remaining_and_spoke_last(living_players: list[str], last_player_to_speak: str):
-        return len(living_players) == 1 and living_players[0] == last_player_to_speak
-
-
-    async def _give_player_a_turn_to_speak(
-        self, name: str, addressed_by: DiscussionMessage | None
-    ) -> DiscussionMessage | None:
-        if self._is_human_player(name):
-            return await self._give_human_player_a_turn_to_speak(addressed_by)
-        else:
-            return await _run_ai_turn(
-                self._player_agents[name], self._analyst, self.state, name, addressed_by
-            )
-
-
-    def _is_human_player(self, name: str) -> bool:
-        return name == self.state.user_player_name
-
-
-    async def _give_human_player_a_turn_to_speak(self, addressed_by: DiscussionMessage | None) -> DiscussionMessage | None:
-        status = FlowStatus.WAITING_FOR_ANSWER if addressed_by else FlowStatus.WAITING_FOR_TURN
-        await self.bridge.outbox.put(status)
-        return await _run_player_turn(
-            self._analyst, self.state, self.bridge, self.state.user_player_name, addressed_by
+        swap_index = self._rng.randrange(1, len(living_players))
+        living_players[0], living_players[swap_index] = (
+            living_players[swap_index],
+            living_players[0],
         )
 
-    async def _resolve_address_chain(
-        self,
-        message: DiscussionMessage,
-        chain: frozenset[str] = frozenset(),
-        spoken_via_chain: set[str] | None = None,
-    ) -> None:
-        logger.debug(
-            "DiscussionRunner._resolve_address_chain: runner=%s player_name=%s addressed_to=%s chain=%s",
-            id(self),
-            message.player_name,
-            message.addressed_to,
-            chain,
-        )
+    async def _handle_replies(self, message: DiscussionMessage | None) -> None:
+        if message is None:
+            return
         if message.addressed_to is None:
             return
-        target = message.addressed_to
-        reply = await self._give_player_a_turn_to_speak(target, addressed_by=message)
-        if reply is None:
-            return
-        if spoken_via_chain is not None:
-            spoken_via_chain.add(reply.player_name)
-        logger.debug(
-            "DiscussionRunner._resolve_address_chain: runner=%s putting reply=%s player_name=%s day=%s",
-            id(self),
-            id(reply),
-            reply.player_name,
-            self.state.day_number,
-        )
-        await self.bridge.outbox.put(reply)
-        chain = chain | {message.player_name, target}
-        if reply.addressed_to is not None and reply.addressed_to not in chain:
-            await self._resolve_address_chain(reply, chain, spoken_via_chain)
+        replyChain = ReplyChain(self._speakers)
+        await replyChain.execute(message)

@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock, patch
 from types import SimpleNamespace
 
 from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
-from the_village.discussion.discussion import AddressResolution, SpeakerOutput
+from the_village.discussion.ai_speaker import SpeakerOutput
+from the_village.discussion.speaker import AddressResolution
 from the_village.village_flow import VillageFlow
 
 
@@ -26,7 +27,7 @@ async def _run_one_session(player_name: str) -> str:
         item = await bridge.outbox.get()
         if item == FlowStatus.DISCUSSION_COMPLETE:
             break
-        bridge.resolve_input(PlayerInput(message=None))
+        bridge.resolve_input(PlayerInput(text=None))
 
     await flow_task
     return flow.state.user_player_name
@@ -34,7 +35,7 @@ async def _run_one_session(player_name: str) -> str:
 
 async def test_two_village_flows_complete_independently_when_run_concurrently():
     with patch(
-        "the_village.discussion.discussion.Crew.akickoff", new=AsyncMock(return_value=_decline_result())
+        "crewai.Crew.akickoff", new=AsyncMock(return_value=_decline_result())
     ):
         results = await asyncio.gather(
             _run_one_session("Alice"),

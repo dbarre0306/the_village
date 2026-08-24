@@ -462,7 +462,7 @@ async def send_discussion_turn(bridge: SessionBridge, state: GameState, message:
     if not message.strip():
         yield (gr.skip(),) * 7
         return
-    if not bridge.resolve_input(PlayerInput(message=message.strip())):
+    if not bridge.resolve_input(PlayerInput(text=message.strip())):
         return
     yield (
         bridge,
@@ -478,7 +478,7 @@ async def send_discussion_turn(bridge: SessionBridge, state: GameState, message:
 
 
 async def pass_discussion_turn(bridge: SessionBridge, state: GameState):
-    if not bridge.resolve_input(PlayerInput(message=None)):
+    if not bridge.resolve_input(PlayerInput(text=None)):
         return
     yield (
         bridge,

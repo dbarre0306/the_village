@@ -5,13 +5,7 @@ import logging
 from crewai import Agent
 from pydantic import BaseModel, Field
 
-from the_village.discussion.discussion import (
-    _format_deaths,
-    _format_history,
-    _living_participant_names,
-    _weekday,
-)
-from the_village.state import GameState, VoteRecord
+from the_village.state import GameState, VoteRecord, _weekday
 
 logger = logging.getLogger(__name__)
 
@@ -57,13 +51,13 @@ def _build_vote_prompt(state: GameState, candidates: list[str]) -> str:
     return "\n".join(
         [
             "Known facts:",
-            _format_deaths(state),
+            state.format_deaths(),
             _format_lynchings(state),
             "",
             f"Living villagers you may vote to lynch: {', '.join(candidates)}.",
             "",
             "Discussion so far:",
-            _format_history(state),
+            state.format_history(),
             "",
             "It's time to vote. Decide who you believe is responsible for the "
             "killing and vote to lynch them, or leave your vote unset to "
@@ -77,7 +71,7 @@ def cast_votes(
     agents: dict[str, Agent],
     player_vote: str | None,
 ) -> VoteOutcome:
-    living_names = _living_participant_names(state)
+    living_names = state.names_of_living_players()
     votes: list[VoteRecord] = []
 
     for name in living_names:

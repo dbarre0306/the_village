@@ -129,7 +129,7 @@ async def test_send_discussion_turn_resolves_pending_input():
     async for _ in send_discussion_turn(bridge, GameState(), "I didn't do it!"):
         pass
 
-    assert await waiter == PlayerInput(message="I didn't do it!")
+    assert await waiter == PlayerInput(text="I didn't do it!")
 
 
 async def test_pass_discussion_turn_resolves_pending_input_with_none():
@@ -141,7 +141,7 @@ async def test_pass_discussion_turn_resolves_pending_input_with_none():
     async for _ in pass_discussion_turn(bridge, GameState()):
         pass
 
-    assert await waiter == PlayerInput(message=None)
+    assert await waiter == PlayerInput(text=None)
 
 
 async def test_begin_discussion_raises_gr_error_on_flow_failed():
