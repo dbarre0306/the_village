@@ -11,6 +11,7 @@ from the_village.discussion import Discussion
 from the_village.night import resolve_night_one
 from the_village.roster import build_initial_roster
 from the_village.state import GameState
+from the_village.voting import Voting
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,17 @@ class VillageFlow(Flow[GameState]):
             len(self.state.current_day.discussion),
         )
         await self.bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
+        await self.bridge.wait_for_input()
+
+    @listen(run_discussion)
+    async def run_voting(self):
+        outcome = await Voting(
+            state=self.state,
+            bridge=self.bridge,
+            player_agents=self._player_agents,
+        ).run()
+        await self.bridge.outbox.put(outcome)
+        await self.bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
 
     def _build_ai_agents(self):
         return {
@@ -72,17 +84,21 @@ async def _auto_play_consumer(bridge: SessionBridge) -> None:
     """Drains the outbox and auto-passes every pause point, unattended.
 
     Used by the CLI kickoff() (crewai run/test), which has no live Gradio
-    session to answer pauses -- every AI/player turn auto-declines so the
-    flow reaches completion as a smoke test rather than hanging forever.
+    session to answer pauses -- every AI/player turn auto-declines (and the
+    player auto-abstains from voting) so the flow reaches completion as a
+    smoke test rather than hanging forever.
     """
     while True:
         item = await bridge.outbox.get()
         print(item)
-        if item == FlowStatus.DISCUSSION_COMPLETE:
+        if item == FlowStatus.VOTING_COMPLETE:
             return
-        if item in (FlowStatus.WAITING_FOR_TURN, FlowStatus.WAITING_FOR_ANSWER) or (
-            not isinstance(item, FlowStatus)
-        ):
+        if item in (
+            FlowStatus.WAITING_FOR_TURN,
+            FlowStatus.WAITING_FOR_ANSWER,
+            FlowStatus.WAITING_FOR_VOTE,
+            FlowStatus.DISCUSSION_COMPLETE,
+        ) or not isinstance(item, FlowStatus):
             bridge.resolve_input(PlayerInput(text=None))
 
 
