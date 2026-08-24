@@ -1,6 +1,11 @@
 import asyncio
 
-from the_village.bridge import PlayerInput, SessionBridge
+from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
+
+
+def test_flow_status_includes_voting_states():
+    assert FlowStatus.WAITING_FOR_VOTE == "waiting_for_vote"
+    assert FlowStatus.VOTING_COMPLETE == "voting_complete"
 
 
 def test_resolve_input_is_a_noop_with_no_pending_wait():

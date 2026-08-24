@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 class FlowStatus(str, Enum):
     WAITING_FOR_TURN = "waiting_for_turn"
     WAITING_FOR_ANSWER = "waiting_for_answer"
+    WAITING_FOR_VOTE = "waiting_for_vote"
     DISCUSSION_COMPLETE = "discussion_complete"
+    VOTING_COMPLETE = "voting_complete"
 
 
 @dataclass
@@ -25,8 +27,9 @@ class PlayerInput:
 class SessionBridge:
     """The sole channel between a session's background Flow task and Gradio.
 
-    `outbox` carries Flow -> UI updates (DiscussionMessage | str | FlowStatus
-    -- the death announcement is a bare str, the victim's name);
+    `outbox` carries Flow -> UI updates (DiscussionMessage | VoteOutcome |
+    str | FlowStatus -- the death announcement is a bare str, the victim's
+    name; VoteOutcome is the vote reveal, put on once everyone has voted);
     `pending_input` carries the one UI -> Flow value a paused Flow step is
     waiting on. Reused for every pause point across the whole session (the
     death-announcement gate, every discussion turn) rather than built fresh
