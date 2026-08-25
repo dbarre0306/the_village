@@ -50,3 +50,13 @@ def _ensure_living_pack_leader(state: GameState, rng: random.Random) -> None:
     if current_leader is not None:
         current_leader.is_pack_leader = False
     rng.choice(living_werewolves).is_pack_leader = True
+
+
+def _order_pack(state: GameState, rng: random.Random) -> list[str]:
+    living_werewolves = [
+        p for p in state.players if p.player_type == "werewolf" and p.is_alive
+    ]
+    leader = next(p for p in living_werewolves if p.is_pack_leader)
+    non_leader_names = [p.name for p in living_werewolves if not p.is_pack_leader]
+    rng.shuffle(non_leader_names)
+    return non_leader_names + [leader.name]

@@ -1,6 +1,6 @@
 import random
 
-from the_village.pick_victim.night import _build_guardrail, _eligible_targets, _VictimChoice, _ensure_living_pack_leader
+from the_village.pick_victim.night import _build_guardrail, _eligible_targets, _VictimChoice, _ensure_living_pack_leader, _order_pack
 from the_village.state import GameState, Player
 
 
@@ -104,3 +104,34 @@ def test_ensure_living_pack_leader_promotes_exactly_one_among_multiple_survivors
 
     new_leaders = [p for p in survivors if p.is_pack_leader]
     assert len(new_leaders) == 1
+
+
+def test_order_pack_is_just_the_leader_with_a_single_werewolf():
+    leader = Player(name="W1", player_type="werewolf", is_pack_leader=True)
+    state = make_state(werewolves=[leader])
+
+    order = _order_pack(state, random.Random(1))
+
+    assert order == ["W1"]
+
+
+def test_order_pack_puts_the_leader_last_with_multiple_werewolves():
+    leader = Player(name="W1", player_type="werewolf", is_pack_leader=True)
+    packmates = [Player(name=f"W{i}", player_type="werewolf") for i in (2, 3, 4)]
+    state = make_state(werewolves=[leader, *packmates])
+
+    order = _order_pack(state, random.Random(1))
+
+    assert order[-1] == "W1"
+    assert set(order[:-1]) == {"W2", "W3", "W4"}
+    assert len(order) == 4
+
+
+def test_order_pack_excludes_dead_werewolves():
+    leader = Player(name="W1", player_type="werewolf", is_pack_leader=True)
+    dead = Player(name="W2", player_type="werewolf", is_alive=False)
+    state = make_state(werewolves=[leader, dead])
+
+    order = _order_pack(state, random.Random(1))
+
+    assert order == ["W1"]
