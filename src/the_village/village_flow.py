@@ -3,7 +3,7 @@ import asyncio
 import logging
 
 from crewai import Agent
-from crewai.flow import Flow, listen, start
+from crewai.flow import Flow, listen, or_, router, start
 
 from the_village.agents import build_agent, build_conversation_analyst_agent
 from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
@@ -36,7 +36,7 @@ class VillageFlow(Flow[GameState]):
     async def run_night_one(self):
         kill_first_victim(self.state)
 
-    @listen(run_night_one)
+    @listen(or_("run_night_one", "night_fell"))
     async def announce_death(self):
         await self.bridge.outbox.put(self.state.current_day.player_found_dead)
         await self.bridge.wait_for_input()
@@ -85,13 +85,14 @@ class VillageFlow(Flow[GameState]):
         await self.bridge.outbox.put(outcome)
         await self.bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
 
-    @listen(run_voting)
+    @router(run_voting)
     async def run_next_night(self):
         await WereWolfPack(self.state, self._player_agents).kill_next_victim()
-
-    @listen(run_next_night)
-    async def announce_next_death(self):
-        await self.bridge.outbox.put(self.state.current_day.player_found_dead)
+        # Routing back to a "night_fell" signal (rather than listening on
+        # this method's own name) is what re-arms announce_death's or_()
+        # each cycle -- crewai only rearms a fired or_() branch when a
+        # @router emits a fresh signal, not on a plain @listen firing again.
+        return "night_fell"
 
     def _build_ai_agents(self):
         return {
@@ -100,19 +101,30 @@ class VillageFlow(Flow[GameState]):
         }
 
 
-async def _auto_play_consumer(bridge: SessionBridge) -> None:
+# VillageFlow's day/night cycle has no win condition yet and loops forever,
+# so the CLI smoke test below has to stop itself after a few days rather
+# than waiting for the flow to finish on its own.
+_AUTO_PLAY_MAX_DAYS = 3
+
+
+async def _auto_play_consumer(bridge: SessionBridge, max_days: int) -> None:
     """Drains the outbox and auto-passes every pause point, unattended.
 
     Used by the CLI kickoff() (crewai run/test), which has no live Gradio
     session to answer pauses -- every AI/player turn auto-declines (and the
     player auto-abstains from voting) so the flow reaches completion as a
-    smoke test rather than hanging forever.
+    smoke test rather than hanging forever. Returns once `max_days` votes
+    have completed; the caller cancels the (otherwise endless) flow task.
     """
+    days_voted = 0
     while True:
         item = await bridge.outbox.get()
         print(item)
         if item == FlowStatus.VOTING_COMPLETE:
-            return
+            days_voted += 1
+            if days_voted >= max_days:
+                return
+            continue
         if item in (
             FlowStatus.WAITING_FOR_TURN,
             FlowStatus.WAITING_FOR_ANSWER,
@@ -128,9 +140,13 @@ async def _kickoff_async():
     flow_task = asyncio.create_task(
         village_flow.kickoff_async(inputs={"user_player_name": "TestPlayer"})
     )
-    consumer_task = asyncio.create_task(_auto_play_consumer(bridge))
-    await flow_task
-    consumer_task.cancel()
+    consumer_task = asyncio.create_task(_auto_play_consumer(bridge, _AUTO_PLAY_MAX_DAYS))
+    await consumer_task
+    flow_task.cancel()
+    try:
+        await flow_task
+    except asyncio.CancelledError:
+        pass
     print(village_flow.state.model_dump_json(indent=2))
 
 

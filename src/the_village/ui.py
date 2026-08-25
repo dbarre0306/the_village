@@ -596,6 +596,12 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
         gr.update(value="Tallying the votes…", visible=True),
         gr.update(),
         gr.update(),
+        gr.update(),
+        gr.update(),
+        gr.update(),
+        gr.update(),
+        gr.update(),
+        gr.update(),
     )
     try:
         while True:
@@ -608,8 +614,35 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
                     gr.update(value=format_vote_result(state, item), visible=True),
                     format_alive_panel(state),
                     format_lynched_panel(state),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
                 )
             elif item == FlowStatus.VOTING_COMPLETE:
+                # VillageFlow.run_next_night routes straight into the next
+                # night and re-arms announce_death, so the very next outbox
+                # item is the following morning's death announcement (a bare
+                # str) -- the same shape start_game() waits on for night
+                # one. Surface it and re-open the Begin Discussion gate
+                # instead of leaving the flow paused with nothing on screen.
+                death = await bridge.outbox.get()
+                if isinstance(death, FlowFailed):
+                    raise gr.Error("Something went wrong, please try again.")
+                yield (
+                    gr.update(),
+                    gr.update(),
+                    format_alive_panel(state),
+                    gr.update(),
+                    format_event_log(state),
+                    format_deaths_panel(state),
+                    gr.update(visible=True),
+                    gr.update(visible=False),
+                    gr.update(visible=False),
+                    gr.update(visible=False),
+                )
                 return
     except gr.Error:
         raise
@@ -784,7 +817,18 @@ def build_app() -> gr.Blocks:
             outputs=[begin_voting_button],
         )
 
-        vote_outputs = [vote_button_row, vote_status, alive_panel, lynched_panel]
+        vote_outputs = [
+            vote_button_row,
+            vote_status,
+            alive_panel,
+            lynched_panel,
+            event_log,
+            deaths_panel,
+            begin_discussion_button,
+            discussion_title,
+            voting_title,
+            discussion_status,
+        ]
 
         # SessionBridge.resolve_input()'s no-pending-future guard (see
         # begin_discussion_button.click above) is what protects a

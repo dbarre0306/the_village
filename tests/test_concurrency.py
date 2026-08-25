@@ -26,7 +26,13 @@ async def _run_one_session(player_name: str) -> str:
         ):
             bridge.resolve_input(PlayerInput(text=None))
 
-    await flow_task
+    # The flow loops into the next night/day forever from here (no win
+    # condition yet), so cancel it instead of awaiting completion.
+    flow_task.cancel()
+    try:
+        await flow_task
+    except asyncio.CancelledError:
+        pass
     return flow.state.user_player_name
 
 

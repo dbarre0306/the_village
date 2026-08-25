@@ -84,7 +84,13 @@ async def test_village_flow_reaches_voting_complete_with_an_outcome():
             elif item in (FlowStatus.WAITING_FOR_TURN, FlowStatus.WAITING_FOR_ANSWER):
                 bridge.resolve_input(PlayerInput(text=None))
 
-        await task
+        # The flow loops into the next night/day forever from here (no win
+        # condition yet), so cancel it instead of awaiting completion.
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
     assert outcome is not None
     assert outcome.day_number == 1
@@ -115,7 +121,13 @@ async def test_village_flow_kills_and_announces_a_second_victim_after_voting():
             elif item in (FlowStatus.WAITING_FOR_TURN, FlowStatus.WAITING_FOR_ANSWER):
                 bridge.resolve_input(PlayerInput(text=None))
 
-        await task
+        # The flow loops into the next night/day forever from here (no win
+        # condition yet), so cancel it instead of awaiting completion.
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
     state = flow.state
     assert second_death is not None

@@ -674,7 +674,7 @@ async def test_cast_player_vote_resolves_the_ballot_and_hides_controls_before_th
     first_event = await events.__anext__()
 
     assert await waiter == PlayerInput(text="A")
-    row_update, status_update, _, _ = first_event
+    row_update, status_update, *_ = first_event
     assert row_update["visible"] is False
     assert status_update["value"] == "Tallying the votes…"
     await events.aclose()
@@ -702,7 +702,7 @@ async def test_cast_player_vote_reveals_outcome_and_updates_panels():
     await events.__anext__()  # the "Tallying..." yield; also resolves waiter
     await waiter
     await feed_outcome()
-    _row_update, status_update, alive_panel_value, lynched_panel_value = (
+    _row_update, status_update, alive_panel_value, lynched_panel_value, *_ = (
         await events.__anext__()
     )
 
@@ -711,6 +711,54 @@ async def test_cast_player_vote_reveals_outcome_and_updates_panels():
     assert '>A</span>' not in alive_panel_value
     assert '>A</span>' in lynched_panel_value
     await events.aclose()
+
+
+async def test_cast_player_vote_surfaces_next_death_and_reopens_discussion_gate():
+    state = _voting_state()
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
+
+    outcome = VoteOutcome(day_number=2, votes=[], tally={}, lynched=None)
+
+    async def feed_next_night():
+        # VillageFlow.run_voting/run_next_night mutate this same shared
+        # GameState and advance to a new day before putting the next
+        # morning's death (a bare str) on the outbox -- mirror that here.
+        await bridge.outbox.put(outcome)
+        await bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
+        state.days.append(Day(day_number=3, player_found_dead="A"))
+        next(p for p in state.players if p.name == "A").is_alive = False
+        await bridge.outbox.put("A")
+
+    events = cast_player_vote(bridge, state, None)
+    await events.__anext__()  # the "Tallying..." yield; also resolves waiter
+    await waiter
+    await feed_next_night()
+    await events.__anext__()  # the VoteOutcome yield
+    (
+        _row_update,
+        _status_update,
+        alive_panel_value,
+        _lynched_panel_value,
+        event_log_value,
+        deaths_panel_value,
+        begin_discussion_update,
+        discussion_title_update,
+        voting_title_update,
+        discussion_status_update,
+    ) = await events.__anext__()
+
+    assert '>A</span>' not in alive_panel_value
+    assert "A" in event_log_value
+    assert "A" in deaths_panel_value
+    assert begin_discussion_update["visible"] is True
+    assert discussion_title_update["visible"] is False
+    assert voting_title_update["visible"] is False
+    assert discussion_status_update["visible"] is False
+
+    with pytest.raises(StopAsyncIteration):
+        await events.__anext__()
 
 
 async def test_cast_player_vote_raises_gr_error_on_flow_failed():
