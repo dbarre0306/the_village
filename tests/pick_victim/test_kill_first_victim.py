@@ -2,7 +2,7 @@ import random
 
 import pytest
 
-from the_village.pick_victim import resolve_night_one
+from the_village.pick_victim import kill_first_victim
 from the_village.roster import build_initial_roster
 from the_village.state import GameState, Player
 
@@ -22,7 +22,7 @@ def make_state() -> GameState:
 
 def test_kills_a_non_player_non_werewolf_villager():
     state = make_state()
-    resolve_night_one(state, random.Random(1))
+    kill_first_victim(state, random.Random(1))
 
     assert len(state.days) == 1
     killed_name = state.current_day.player_found_dead
@@ -31,7 +31,7 @@ def test_kills_a_non_player_non_werewolf_villager():
 
 def test_killed_villager_marked_not_alive():
     state = make_state()
-    resolve_night_one(state, random.Random(1))
+    kill_first_victim(state, random.Random(1))
 
     killed_name = state.current_day.player_found_dead
     killed = next(v for v in state.players if v.name == killed_name)
@@ -40,7 +40,7 @@ def test_killed_villager_marked_not_alive():
 
 def test_player_and_werewolves_survive_night_one():
     state = make_state()
-    resolve_night_one(state, random.Random(1))
+    kill_first_victim(state, random.Random(1))
 
     player = next(v for v in state.players if v.player_type == "user")
     werewolves = [v for v in state.players if v.player_type == "werewolf"]
@@ -50,7 +50,7 @@ def test_player_and_werewolves_survive_night_one():
 
 def test_day_number_does_not_advance():
     state = make_state()
-    resolve_night_one(state, random.Random(1))
+    kill_first_victim(state, random.Random(1))
 
     assert state.day_number == 1
 
@@ -58,7 +58,7 @@ def test_day_number_does_not_advance():
 @pytest.mark.parametrize("seed", range(50))
 def test_player_is_never_killed_and_stays_alive_across_seeds(seed):
     state = build_initial_roster("Alice", random.Random(seed))
-    resolve_night_one(state, random.Random(seed))
+    kill_first_victim(state, random.Random(seed))
 
     assert state.current_day.player_found_dead != "Alice"
     assert state.players[0].is_alive is True
