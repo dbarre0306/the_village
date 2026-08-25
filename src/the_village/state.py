@@ -9,13 +9,13 @@ WEREWOLF: Final = "werewolf"
 PlayerType = Literal["user", "villager", "werewolf"]
 
 WEEKDAYS = [
-    "Sunday",
     "Monday",
     "Tuesday",
     "Wednesday",
     "Thursday",
     "Friday",
     "Saturday",
+    "Sunday",
 ]
 
 
@@ -70,8 +70,8 @@ class GameState(BaseModel):
     def is_human_player(self, name: str) -> bool:
         return name == self.user_player_name
 
-    def advance_day(self, player_found_dead: str | None = None) -> Day:
-        new_day = Day(day_number=self.day_number + 1, player_found_dead=player_found_dead)
+    def advance_day(self) -> Day:
+        new_day = Day(day_number=self.day_number + 1)
         self.days.append(new_day)
         return new_day
 

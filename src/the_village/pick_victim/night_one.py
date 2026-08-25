@@ -14,6 +14,6 @@ def resolve_night_one(
     victim = rng.choice(eligible)
     victim.is_alive = False
 
-    state.advance_day(player_found_dead=victim.name)
+    state.current_day.player_found_dead = victim.name
 
     return state

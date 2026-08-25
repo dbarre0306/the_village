@@ -24,7 +24,7 @@ def test_kills_a_non_player_non_werewolf_villager():
     state = make_state()
     resolve_night_one(state, random.Random(1))
 
-    assert len(state.days) == 2
+    assert len(state.days) == 1
     killed_name = state.current_day.player_found_dead
     assert killed_name in {"A", "B", "C", "D"}
 
@@ -48,11 +48,11 @@ def test_player_and_werewolves_survive_night_one():
     assert all(w.is_alive for w in werewolves)
 
 
-def test_day_number_advances_to_two():
+def test_day_number_does_not_advance():
     state = make_state()
     resolve_night_one(state, random.Random(1))
 
-    assert state.day_number == 2
+    assert state.day_number == 1
 
 
 @pytest.mark.parametrize("seed", range(50))

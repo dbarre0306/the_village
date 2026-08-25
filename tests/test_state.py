@@ -8,8 +8,9 @@ def test_player_defaults():
     assert player.is_alive is True
 
 
-def test_weekdays_starts_on_sunday():
-    assert WEEKDAYS[0] == "Sunday"
+def test_weekdays_starts_on_monday_ends_on_sunday():
+    assert WEEKDAYS[0] == "Monday"
+    assert WEEKDAYS[-1] == "Sunday"
     assert len(WEEKDAYS) == 7
 
 
@@ -66,18 +67,11 @@ def test_game_state_current_day_property_returns_the_last_day():
 
 def test_advance_day_appends_a_new_day_and_returns_it():
     state = GameState()
-    new_day = state.advance_day(player_found_dead="Bruce")
-
-    assert new_day == Day(day_number=2, player_found_dead="Bruce")
-    assert state.days == [Day(day_number=1), Day(day_number=2, player_found_dead="Bruce")]
-    assert state.current_day == new_day
-
-
-def test_advance_day_with_no_death():
-    state = GameState()
     new_day = state.advance_day()
 
-    assert new_day.player_found_dead is None
+    assert new_day == Day(day_number=2)
+    assert state.days == [Day(day_number=1), Day(day_number=2)]
+    assert state.current_day == new_day
     assert state.day_number == 2
 
 
@@ -134,7 +128,7 @@ def test_format_deaths_lists_each_death():
     state = GameState(
         user_player_name="Dana", days=[Day(day_number=2, player_found_dead="D")]
     )
-    assert state.format_deaths() == "D was killed by the werewolves on Monday."
+    assert state.format_deaths() == "D was killed by the werewolves on Tuesday."
 
 
 def test_format_history_with_no_messages():

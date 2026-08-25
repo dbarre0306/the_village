@@ -160,7 +160,7 @@ def test_build_target_prompt_lists_eligible_targets_and_known_facts():
     prompt = _build_target_prompt(state, ["Dana", "A", "B"])
 
     assert "Dana, A, B" in prompt
-    assert "C was lynched by the village on Sunday." in prompt
+    assert "C was lynched by the village on Monday." in prompt
 
 
 def test_build_tasks_chains_context_and_marks_only_the_last_as_decider():
@@ -251,7 +251,7 @@ async def test_resolve_night_kills_the_crews_chosen_target():
     victim = next(p for p in state.players if p.name == "A")
     assert victim.is_alive is False
     assert state.current_day.player_found_dead == "A"
-    assert state.day_number == 2
+    assert state.day_number == 1
 
 
 async def test_resolve_night_can_target_the_human_player():

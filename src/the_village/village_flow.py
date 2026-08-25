@@ -81,6 +81,7 @@ class VillageFlow(Flow[GameState]):
             id(self.bridge),
             outcome,
         )
+        self.state.advance_day()
         await self.bridge.outbox.put(outcome)
         await self.bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
 

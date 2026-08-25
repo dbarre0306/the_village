@@ -57,7 +57,7 @@ def test_vote_prompt_includes_lynching_history():
 
     prompt = voter._build_vote_prompt()
 
-    assert "C was lynched by the village on Sunday." in prompt
+    assert "C was lynched by the village on Monday." in prompt
 
 
 def test_vote_prompt_includes_full_multi_day_discussion_history():

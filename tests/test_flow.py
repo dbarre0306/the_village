@@ -29,7 +29,7 @@ async def test_village_flow_produces_valid_night_one_result_and_pauses_for_discu
 
     state = flow.state
     assert len(state.players) == 7
-    assert state.day_number == 2
+    assert state.day_number == 1
     assert state.current_day.player_found_dead == player_found_dead
 
     killed = next(v for v in state.players if v.name == player_found_dead)
@@ -87,6 +87,7 @@ async def test_village_flow_reaches_voting_complete_with_an_outcome():
         await task
 
     assert outcome is not None
-    assert outcome.day_number == flow.state.day_number
+    assert outcome.day_number == 1
     assert outcome.tally == {}
     assert outcome.lynched is None
+    assert flow.state.day_number == 2

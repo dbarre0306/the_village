@@ -45,7 +45,7 @@ def test_format_event_log_with_a_death():
     state = make_state_with_one_death()
     log = format_event_log(state)
     assert (
-        log == "<strong>Monday morning: "
+        log == "<strong>Tuesday morning: "
         f'<span class="{ui.DEATH_LINE_CLASS}">'
         "A was found dead, torn apart by a werewolf attack.</span></strong>"
     )
@@ -484,7 +484,7 @@ async def test_begin_voting_resolves_the_discussion_gate_and_reveals_the_ballot(
     # nothing about them changes once WAITING_FOR_VOTE arrives.
     _bridge0, begin_button_update, title_update, *_rest = outputs[0]
     assert begin_button_update["visible"] is False
-    assert title_update["value"] == "### Sunday's Voting"
+    assert title_update["value"] == "### Monday's Voting"
     assert title_update["visible"] is True
     (
         _bridge,
