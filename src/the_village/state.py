@@ -29,6 +29,14 @@ class Player(BaseModel):
     is_pack_leader: bool = False
     is_alive: bool = True
 
+    @property
+    def is_werewolf(self):
+        return self.player_type == WEREWOLF
+
+    @property
+    def is_not_werewolf(self):
+        return self.player_type != WEREWOLF
+
 
 class DiscussionMessage(BaseModel):
     player_name: str

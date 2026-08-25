@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from the_village.discussion.ai_speaker import _SpeakerOutput
 from the_village.discussion.speaker import _AddressResolution
-from the_village.pick_victim.kill_next_victim import _VictimChoice
+from the_village.pick_victim.werewolf_pack import _VictimChoice
 from the_village.voting.ai_voter import _VoteChoice
 
 
