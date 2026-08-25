@@ -60,3 +60,62 @@ def _order_pack(state: GameState, rng: random.Random) -> list[str]:
     non_leader_names = [p.name for p in living_werewolves if not p.is_pack_leader]
     rng.shuffle(non_leader_names)
     return non_leader_names + [leader.name]
+
+
+def _build_target_prompt(state: GameState, eligible: list[str]) -> str:
+    return "\n".join(
+        [
+            "Known facts:",
+            state.format_deaths(),
+            state.format_lynchings(),
+            "",
+            f"Living players you may target tonight: {', '.join(eligible)}.",
+            "",
+            "Discussion so far:",
+            state.format_history(),
+            "",
+            "Discuss privately with your fellow werewolves and decide who "
+            "the pack should kill tonight. Ground your reasoning in the "
+            "Known facts and Discussion above.",
+        ]
+    )
+
+
+def _build_tasks(
+    order: list[str],
+    player_agents: dict[str, Agent],
+    state: GameState,
+    eligible: list[str],
+) -> list[Task]:
+    prompt = _build_target_prompt(state, eligible)
+    tasks: list[Task] = []
+    for index, name in enumerate(order):
+        is_decider = index == len(order) - 1
+        kwargs: dict = {}
+        if tasks:
+            kwargs["context"] = list(tasks)
+        if is_decider:
+            kwargs["output_pydantic"] = _VictimChoice
+            kwargs["guardrail"] = _build_guardrail(eligible)
+            expected_output = "A VictimChoice naming who the pack should kill tonight."
+        else:
+            expected_output = "A short case for one candidate target, with reasoning."
+        tasks.append(
+            Task(
+                description=prompt,
+                agent=player_agents[name],
+                expected_output=expected_output,
+                **kwargs,
+            )
+        )
+    return tasks
+
+
+def _build_crew(
+    tasks: list[Task], order: list[str], player_agents: dict[str, Agent]
+) -> Crew:
+    return Crew(
+        agents=[player_agents[name] for name in order],
+        tasks=tasks,
+        process=Process.sequential,
+    )

@@ -12,10 +12,11 @@ def make_state(werewolves: list[Player], day_number: int = 1) -> GameState:
     ]
     from the_village.state import Day
 
+    days = [Day(day_number=i) for i in range(1, day_number + 1)]
     return GameState(
         user_player_name="Dana",
         players=others + werewolves,
-        days=[Day(day_number=day_number)],
+        days=days,
     )
 
 
@@ -135,3 +136,82 @@ def test_order_pack_excludes_dead_werewolves():
     order = _order_pack(state, random.Random(1))
 
     assert order == ["W1"]
+
+
+from crewai import Agent, Process
+
+from the_village.pick_victim.night import _build_crew, _build_target_prompt, _build_tasks
+
+
+def _stub_agent() -> Agent:
+    """A minimal real Agent -- Task/Crew construction validates that `agent`
+    fields are actual Agent instances, so a plain object() won't do."""
+    return Agent(role="Stub", goal="stub", backstory="stub")
+
+
+def test_build_target_prompt_lists_eligible_targets_and_known_facts():
+    state = make_state(
+        werewolves=[Player(name="W1", player_type="werewolf", is_pack_leader=True)],
+        day_number=2,
+    )
+    state.days[0].player_lynched = "C"
+
+    prompt = _build_target_prompt(state, ["Dana", "A", "B"])
+
+    assert "Dana, A, B" in prompt
+    assert "C was lynched by the village on Sunday." in prompt
+
+
+def test_build_tasks_chains_context_and_marks_only_the_last_as_decider():
+    order = ["W2", "W1"]
+    player_agents = {"W1": _stub_agent(), "W2": _stub_agent()}
+    state = make_state(
+        werewolves=[
+            Player(name="W1", player_type="werewolf", is_pack_leader=True),
+            Player(name="W2", player_type="werewolf"),
+        ]
+    )
+
+    tasks = _build_tasks(order, player_agents, state, ["Dana", "A", "B"])
+
+    assert len(tasks) == 2
+    assert tasks[0].agent is player_agents["W2"]
+    assert tasks[0].output_pydantic is None
+    assert tasks[0].guardrail is None
+    assert tasks[1].agent is player_agents["W1"]
+    assert tasks[1].context == [tasks[0]]
+    from the_village.pick_victim.night import _VictimChoice
+
+    assert tasks[1].output_pydantic is _VictimChoice
+    assert tasks[1].guardrail is not None
+
+
+def test_build_tasks_single_werewolf_is_immediately_the_decider():
+    order = ["W1"]
+    player_agents = {"W1": _stub_agent()}
+    state = make_state(werewolves=[Player(name="W1", player_type="werewolf", is_pack_leader=True)])
+
+    tasks = _build_tasks(order, player_agents, state, ["Dana", "A", "B"])
+
+    assert len(tasks) == 1
+    from the_village.pick_victim.night import _VictimChoice
+
+    assert tasks[0].output_pydantic is _VictimChoice
+
+
+def test_build_crew_uses_sequential_process_and_matching_agents():
+    order = ["W2", "W1"]
+    player_agents = {"W1": _stub_agent(), "W2": _stub_agent()}
+    state = make_state(
+        werewolves=[
+            Player(name="W1", player_type="werewolf", is_pack_leader=True),
+            Player(name="W2", player_type="werewolf"),
+        ]
+    )
+    tasks = _build_tasks(order, player_agents, state, ["Dana", "A", "B"])
+
+    crew = _build_crew(tasks, order, player_agents)
+
+    assert crew.process == Process.sequential
+    assert crew.agents == [player_agents["W2"], player_agents["W1"]]
+    assert crew.tasks == tasks
