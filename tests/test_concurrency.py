@@ -5,7 +5,7 @@ from unittest.mock import patch
 from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
 from the_village.village_flow import VillageFlow
 
-from tests.test_flow import _decline_and_abstain_akickoff
+from conftest import _decline_and_abstain_akickoff
 
 
 async def _run_one_session(player_name: str) -> str:
