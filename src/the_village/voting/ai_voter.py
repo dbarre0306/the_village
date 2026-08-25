@@ -1,3 +1,5 @@
+import logging
+
 from crewai import Agent, Crew, Task
 from pydantic import BaseModel, Field
 
@@ -5,6 +7,8 @@ from the_village.bridge import SessionBridge
 from the_village.state import GameState, _weekday
 
 from .voter import _Voter
+
+logger = logging.getLogger(__name__)
 
 
 class _VoteChoice(BaseModel):
@@ -44,7 +48,12 @@ class _AiVoter(_Voter):
         crew = Crew(agents=[self._player_agent], tasks=[task])
         result = await crew.akickoff()
         choice = result.tasks_output[0].pydantic or _VoteChoice()
-        return self._resolve_target(choice.target)
+        target = self._resolve_target(choice.target)
+        if choice.target and target is None:
+            logger.warning(
+                "Discarding %s's invalid vote for %r", self._player_name, choice.target
+            )
+        return target
 
     def _build_vote_task(self) -> Task:
         return Task(

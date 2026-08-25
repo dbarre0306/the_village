@@ -107,6 +107,30 @@ async def test_cast_normalizes_a_self_vote_to_abstain():
     assert target is None
 
 
+async def test_cast_logs_a_warning_when_discarding_an_invalid_vote(caplog):
+    state = make_voting_state()
+    voter = make_ai_voter(state, "A")
+
+    with caplog.at_level("WARNING"):
+        with patch("crewai.Crew.akickoff", new=AsyncMock(return_value=_crew_result("A"))):
+            target = await voter._cast()
+
+    assert target is None
+    assert "Discarding A's invalid vote for 'A'" in caplog.text
+
+
+async def test_cast_does_not_log_a_warning_for_a_genuine_abstention(caplog):
+    state = make_voting_state()
+    voter = make_ai_voter(state, "A")
+
+    with caplog.at_level("WARNING"):
+        with patch("crewai.Crew.akickoff", new=AsyncMock(return_value=_crew_result(None))):
+            target = await voter._cast()
+
+    assert target is None
+    assert caplog.text == ""
+
+
 async def test_cast_defaults_to_abstain_when_output_is_missing():
     state = make_voting_state()
     voter = make_ai_voter(state, "A")
