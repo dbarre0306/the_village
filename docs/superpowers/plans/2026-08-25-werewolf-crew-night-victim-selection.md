@@ -396,7 +396,7 @@ def test_ensure_living_pack_leader_promotes_exactly_one_among_multiple_survivors
     assert len(new_leaders) == 1
 ```
 
-(The `import random` at the top of the file collides with any earlier import in the same file — if `tests/pick_victim/test_night.py` already has a top-level `import random` from a prior task, don't duplicate it.)
+`tests/pick_victim/test_night.py` does not yet import `random` at module level (Task 2's tests didn't need it) — this is the first task to add it.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -621,7 +621,7 @@ Expected: FAIL — `_build_target_prompt`, `_build_tasks`, `_build_crew` not def
 
 - [ ] **Step 3: Write the implementation**
 
-Add to `src/the_village/pick_victim/night.py` (below `_order_pack`; also add `Agent`, `Crew`, `Process`, `Task` to the existing `from crewai import ...` line):
+Add to `src/the_village/pick_victim/night.py` (below `_order_pack`). The file's `from crewai import Agent, Crew, Process, Task` line was already added in Task 2 — no import changes needed here:
 
 ```python
 def _build_target_prompt(state: GameState, eligible: list[str]) -> str:
