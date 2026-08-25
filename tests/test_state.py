@@ -127,14 +127,14 @@ def test_last_player_to_speak_returns_the_decliner_so_they_dont_speak_again_righ
 
 def test_format_deaths_with_no_deaths():
     state = GameState(user_player_name="Dana")
-    assert state.format_deaths() == "(No one has died yet.)"
+    assert state.format_deaths() == "(No one has been killed by the werewolves yet.)"
 
 
 def test_format_deaths_lists_each_death():
     state = GameState(
         user_player_name="Dana", days=[Day(day_number=2, player_killed="D")]
     )
-    assert state.format_deaths() == "D was found dead on Monday."
+    assert state.format_deaths() == "D was killed by the werewolves on Monday."
 
 
 def test_format_history_with_no_messages():
