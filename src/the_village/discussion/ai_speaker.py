@@ -1,3 +1,6 @@
+import re
+from typing import Any
+
 from crewai import Agent, Crew, Process, Task
 from pydantic import BaseModel, Field
 
@@ -5,6 +8,15 @@ from the_village.bridge import SessionBridge
 
 from .speaker import _AddressResolution, _Speaker, DECLINED_TO_RESPOND
 from the_village.state import DiscussionMessage, GameState, Player
+
+_TURN_ORDER_COMMENTARY_PATTERN = re.compile(
+    r"""
+    (haven'?t|hasn'?t|has n[o']t)\s+(heard\s+from|spoken|said|talked|mentioned)
+    | no\s*one\s+(has\s+)?(said|spoken|mentioned|talked)
+    | (nobody|no\s+one)\s+has\s+(said|spoken|mentioned|talked)
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
 
 
 class _SpeakerOutput(BaseModel):
@@ -21,6 +33,20 @@ class _SpeakerOutput(BaseModel):
             "two sentences -- brief, like real spoken dialogue."
         ),
     )
+
+
+def _reject_turn_order_commentary(output: Any) -> tuple[bool, Any]:
+    speaker_output: _SpeakerOutput | None = output.pydantic
+    text = speaker_output.text if speaker_output else None
+    if text and _TURN_ORDER_COMMENTARY_PATTERN.search(text):
+        return (
+            False,
+            "Your message comments on who has or hasn't spoken yet. Turn "
+            "order is random and not evidence of anything -- remove that "
+            "commentary and say only things grounded in Known facts or "
+            "what was actually said.",
+        )
+    return (True, output)
 
 
 class _AiSpeaker(_Speaker):
@@ -67,6 +93,7 @@ class _AiSpeaker(_Speaker):
             agent=self._player_agent,
             expected_output="A SpeakerOutput saying whether you have something to say.",
             output_pydantic=_SpeakerOutput,
+            guardrail=_reject_turn_order_commentary,
         )
 
     def _build_speak_prompt(self, addressed_by: DiscussionMessage | None) -> str:

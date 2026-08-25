@@ -4,7 +4,11 @@ from unittest.mock import AsyncMock, patch
 from crewai import Agent
 
 from the_village.bridge import SessionBridge
-from the_village.discussion.ai_speaker import _AiSpeaker, _SpeakerOutput
+from the_village.discussion.ai_speaker import (
+    _AiSpeaker,
+    _reject_turn_order_commentary,
+    _SpeakerOutput,
+)
 from the_village.discussion.speaker import DECLINED_TO_RESPOND, _AddressResolution
 from the_village.state import GameState, Player
 
@@ -39,6 +43,39 @@ def make_ai_speaker(state: GameState, player_name: str = "A") -> _AiSpeaker:
 
 def test_speaker_output_has_no_addressed_to_field():
     assert "addressed_to" not in _SpeakerOutput.model_fields
+
+
+def test_guardrail_rejects_comment_about_who_hasnt_spoken():
+    output = SimpleNamespace(
+        pydantic=_SpeakerOutput(
+            has_something_to_say=True,
+            text="It's strange that we haven't heard from Don yet.",
+        )
+    )
+    passed, result = _reject_turn_order_commentary(output)
+    assert passed is False
+    assert "turn order" in result.lower()
+
+
+def test_guardrail_accepts_ordinary_speech():
+    output = SimpleNamespace(
+        pydantic=_SpeakerOutput(
+            has_something_to_say=True,
+            text="I saw B leave the tavern late last night.",
+        )
+    )
+    passed, result = _reject_turn_order_commentary(output)
+    assert passed is True
+    assert result is output
+
+
+def test_guardrail_accepts_decline():
+    output = SimpleNamespace(
+        pydantic=_SpeakerOutput(has_something_to_say=False, text=None)
+    )
+    passed, result = _reject_turn_order_commentary(output)
+    assert passed is True
+    assert result is output
 
 
 def test_speak_prompt_forbids_unfounded_behavior_claims():
