@@ -159,3 +159,43 @@ def test_builds_a_human_voter_for_the_user_and_ai_voters_for_everyone_else():
 
     assert isinstance(voting._voters["Dana"], _HumanVoter)
     assert isinstance(voting._voters["A"], _AiVoter)
+
+
+def test_voting_order_puts_the_human_first_even_if_not_first_in_players():
+    # Regression test: voting order must not depend on roster.py happening
+    # to place the human first in state.players.
+    players = [
+        Player(name="A", player_type="villager"),
+        Player(name="Dana", player_type="user"),
+        Player(name="B", player_type="villager"),
+    ]
+    state = GameState(user_player_name="Dana", players=players, days=[Day(day_number=1)])
+    agents = _stub_agents(["A", "B"])
+
+    voting = Voting(state=state, bridge=SessionBridge(), player_agents=agents)
+
+    assert voting._voting_order() == ["Dana", "A", "B"]
+
+
+async def test_human_votes_before_any_ai_kickoff_even_if_not_first_in_players():
+    # If the human weren't polled first, this would reach the real,
+    # unpatched Crew.akickoff before the bridge ever asks for the vote.
+    players = [
+        Player(name="A", player_type="villager"),
+        Player(name="Dana", player_type="user"),
+        Player(name="B", player_type="villager"),
+    ]
+    state = GameState(user_player_name="Dana", players=players, days=[Day(day_number=1)])
+    agents = _stub_agents(["A", "B"])
+    bridge = SessionBridge()
+    voting = Voting(state=state, bridge=bridge, player_agents=agents)
+    task = asyncio.create_task(voting.run())
+
+    status = await bridge.outbox.get()
+    assert status == FlowStatus.WAITING_FOR_VOTE
+    bridge.resolve_input(PlayerInput(text=None))
+
+    with patch("crewai.Crew.akickoff", new=_scripted_akickoff({"A": None, "B": None})):
+        outcome = await task
+
+    assert outcome.votes[0].voter_name == "Dana"

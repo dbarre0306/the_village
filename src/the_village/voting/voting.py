@@ -44,13 +44,20 @@ class Voting:
         )
 
     async def run(self) -> VoteOutcome:
-        # roster.py always places the human first in state.players, and
-        # names_of_living_players() preserves that order -- so the human's
-        # ballot naturally comes up before any AI kickoff runs, with no
-        # reordering needed to keep today's instant-ballot UX.
-        for player_name in self._state.names_of_living_players():
+        for player_name in self._voting_order():
             await self._voters[player_name].cast()
         return self._tally()
+
+    def _voting_order(self) -> list[str]:
+        # The human must vote first for the instant-ballot UX, ahead of any
+        # AI kickoff. Enforced explicitly here rather than assumed from
+        # state.players' ordering, so it can't silently break if that
+        # ordering changes elsewhere.
+        living_players = self._state.names_of_living_players()
+        human, ai = [], []
+        for name in living_players:
+            (human if self._state.is_human_player(name) else ai).append(name)
+        return human + ai
 
     def _tally(self) -> VoteOutcome:
         votes = self._state.current_day.votes
