@@ -6,7 +6,7 @@ import gradio as gr
 from the_village.bridge import FlowFailed, FlowStatus, PlayerInput, SessionBridge, run_flow
 from the_village.village_flow import VillageFlow
 from the_village.state import WEEKDAYS, DiscussionMessage, GameState
-from the_village.voting import VoteOutcome, cast_votes
+from the_village.voting import VoteOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -502,16 +502,38 @@ async def pass_discussion_turn(bridge: SessionBridge, state: GameState):
         yield update
 
 
-def begin_voting(state: GameState):
+async def begin_voting(bridge: SessionBridge, state: GameState):
+    if not bridge.resolve_input(PlayerInput()):
+        return  # already resolved (e.g. double-click) -- no-op
     weekday = WEEKDAYS[(state.day_number - 1) % 7]
-    return (
+    yield (
+        bridge,
         gr.update(visible=False),  # begin_voting_button
         gr.update(value=f"### {weekday}'s Voting", visible=True),  # voting_title
-        gr.update(visible=True),  # vote_button_row
-        *_vote_button_updates(state),
-        gr.update(visible=False),  # vote_status
-        gr.update(),  # discussion_status stays visible during voting
+        gr.update(),  # vote_button_row (shown once WAITING_FOR_VOTE arrives)
+        *([gr.update()] * MAX_VOTE_CANDIDATES),
+        gr.update(),  # vote_status
     )
+    try:
+        while True:
+            item = await bridge.outbox.get()
+            if isinstance(item, FlowFailed):
+                raise gr.Error("Something went wrong, please try again.")
+            if item == FlowStatus.WAITING_FOR_VOTE:
+                yield (
+                    bridge,
+                    gr.update(),
+                    gr.update(),
+                    gr.update(visible=True),
+                    *_vote_button_updates(state),
+                    gr.update(visible=False),
+                )
+                return
+    except gr.Error:
+        raise
+    except Exception as exc:
+        logger.exception("Voting turn failed")
+        raise gr.Error("Something went wrong, please try again.") from exc
 
 
 def format_vote_result(state: GameState, outcome: VoteOutcome) -> str:
@@ -542,9 +564,11 @@ def format_vote_result(state: GameState, outcome: VoteOutcome) -> str:
     return "\n\n".join(lines)
 
 
-def cast_player_vote(state: GameState, bridge: SessionBridge, target: str | None):
-    # Hide the ballot the instant the player votes, before the blocking AI
-    # kickoff calls run -- the row shouldn't linger visible while they resolve.
+async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str | None):
+    if not bridge.resolve_input(PlayerInput(text=target)):
+        return
+    # Hide the ballot the instant the player votes, before the AI kickoffs
+    # that Voting.run() drives inside the background Flow task resolve.
     yield (
         gr.update(visible=False),
         gr.update(value="Tallying the votes…", visible=True),
@@ -552,32 +576,29 @@ def cast_player_vote(state: GameState, bridge: SessionBridge, target: str | None
         gr.update(),
     )
     try:
-        outcome = cast_votes(state, bridge.player_agents, player_vote=target)
+        while True:
+            item = await bridge.outbox.get()
+            if isinstance(item, FlowFailed):
+                raise gr.Error("Something went wrong, please try again.")
+            if isinstance(item, VoteOutcome):
+                yield (
+                    gr.update(),
+                    gr.update(value=format_vote_result(state, item), visible=True),
+                    format_alive_panel(state),
+                    format_lynched_panel(state),
+                )
+            elif item == FlowStatus.VOTING_COMPLETE:
+                return
     except gr.Error:
         raise
     except Exception as exc:
         logger.exception("Vote casting failed")
-        # Restore the ballot so the player can actually retry -- leaving it
-        # hidden after the error would strand them with no way to vote again.
-        yield (
-            gr.update(visible=True),
-            gr.update(
-                value="Something went wrong — try voting again.", visible=True
-            ),
-            gr.update(),
-            gr.update(),
-        )
         raise gr.Error("Something went wrong, please try again.") from exc
-    yield (
-        gr.update(visible=False),
-        gr.update(value=format_vote_result(state, outcome), visible=True),
-        format_alive_panel(state),
-        format_lynched_panel(state),
-    )
 
 
-def cast_player_abstain(state: GameState, bridge: SessionBridge):
-    yield from cast_player_vote(state, bridge, None)
+async def cast_player_abstain(bridge: SessionBridge, state: GameState):
+    async for update in cast_player_vote(bridge, state, None):
+        yield update
 
 
 async def start_game(player_name: str):
@@ -723,15 +744,16 @@ def build_app() -> gr.Blocks:
 
         begin_voting_button.click(
             fn=begin_voting,
-            inputs=[game_state],
+            inputs=[session_bridge, game_state],
             outputs=[
+                session_bridge,
                 begin_voting_button,
                 voting_title,
                 vote_button_row,
                 *candidate_buttons,
                 vote_status,
-                discussion_status,
             ],
+            concurrency_limit=None,
         )
 
         discussion_status.change(
@@ -742,26 +764,24 @@ def build_app() -> gr.Blocks:
 
         vote_outputs = [vote_button_row, vote_status, alive_panel, lynched_panel]
 
-        # Both handlers mutate the same shared GameState via cast_votes() and
-        # block on AI kickoff calls -- sharing one concurrency slot with
-        # cast_player_abstain prevents a double-click (or clicking a
-        # candidate and Abstain in quick succession) from racing on that
-        # shared state, mirroring the "discussion_turn" guard above.
+        # SessionBridge.resolve_input()'s no-pending-future guard (see
+        # begin_discussion_button.click above) is what protects a
+        # double-click here now -- cast_player_vote/cast_player_abstain no
+        # longer call vote-casting logic directly, they resolve the bridge
+        # and let VillageFlow.run_voting drive the AI kickoffs.
         for button in candidate_buttons:
             button.click(
                 fn=cast_player_vote,
-                inputs=[game_state, session_bridge, button],
+                inputs=[session_bridge, game_state, button],
                 outputs=vote_outputs,
-                concurrency_limit=1,
-                concurrency_id="vote_cast",
+                concurrency_limit=None,
             )
 
         abstain_button.click(
             fn=cast_player_abstain,
-            inputs=[game_state, session_bridge],
+            inputs=[session_bridge, game_state],
             outputs=vote_outputs,
-            concurrency_limit=1,
-            concurrency_id="vote_cast",
+            concurrency_limit=None,
         )
 
     return demo

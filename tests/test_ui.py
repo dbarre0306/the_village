@@ -1,5 +1,4 @@
 import asyncio
-from types import SimpleNamespace
 
 import gradio as gr
 import pytest
@@ -9,6 +8,7 @@ from the_village.bridge import FlowFailed, FlowStatus, PlayerInput, SessionBridg
 from the_village.state import Day, DiscussionMessage, GameState, Player, VoteRecord
 from the_village.ui import (
     begin_discussion,
+    begin_voting,
     cast_player_abstain,
     cast_player_vote,
     format_alive_panel,
@@ -21,7 +21,7 @@ from the_village.ui import (
     send_discussion_turn,
     start_game,
 )
-from the_village.voting import VoteChoice, VoteOutcome
+from the_village.voting import VoteOutcome
 
 
 def make_state_with_one_death() -> GameState:
@@ -462,49 +462,66 @@ def test_vote_button_updates_labels_living_candidates_and_hides_extra_slots():
     assert updates[2].visible is False
 
 
-def test_begin_voting_shows_vote_controls_and_hides_begin_button():
+async def test_begin_voting_resolves_the_discussion_gate_and_reveals_the_ballot():
     state = GameState(
         user_player_name="Dana",
         players=[
             Player(name="Dana", player_type="user"),
             Player(name="A", player_type="villager"),
         ],
+        days=[Day(day_number=1)],
     )
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
+    await bridge.outbox.put(FlowStatus.WAITING_FOR_VOTE)
 
-    outputs = ui.begin_voting(state)
+    outputs = [update async for update in begin_voting(bridge, state)]
 
-    (
-        begin_button_update,
-        title_update,
-        row_update,
-        *candidate_updates,
-        status_update,
-        discussion_status_update,
-    ) = outputs
+    assert await waiter == PlayerInput()
+    # The immediate first yield is what actually sets the begin-button and
+    # title updates -- the second (final) yield leaves them as no-ops since
+    # nothing about them changes once WAITING_FOR_VOTE arrives.
+    _bridge0, begin_button_update, title_update, *_rest = outputs[0]
     assert begin_button_update["visible"] is False
     assert title_update["value"] == "### Sunday's Voting"
     assert title_update["visible"] is True
+    (
+        _bridge,
+        _begin_button_update,
+        _title_update,
+        row_update,
+        *candidate_updates,
+        status_update,
+    ) = outputs[-1]
     assert row_update["visible"] is True
     assert len(candidate_updates) == ui.MAX_VOTE_CANDIDATES
     assert candidate_updates[0].value == "A"
     assert candidate_updates[0].visible is True
     assert status_update["visible"] is False
-    # discussion_status is left untouched so its "moderator ended the
-    # discussion" message stays visible through the voting phase.
-    assert "visible" not in discussion_status_update
-    assert "value" not in discussion_status_update
+
+
+async def test_begin_voting_is_a_noop_when_already_resolved():
+    bridge = SessionBridge()  # nothing pending -- simulates a double-click
+    outputs = [update async for update in begin_voting(bridge, GameState())]
+    assert outputs == []
+
+
+async def test_begin_voting_raises_gr_error_on_flow_failed():
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
+    await bridge.outbox.put(FlowFailed(detail="boom"))
+
+    with pytest.raises(gr.Error):
+        async for _ in begin_voting(bridge, GameState()):
+            pass
+
+    waiter.cancel()
 
 
 def test_build_app_does_not_raise():
     ui.build_app()
-
-
-class ScriptedVoteAgent:
-    def __init__(self, target):
-        self._target = target
-
-    def kickoff(self, messages, response_format=None):
-        return SimpleNamespace(pydantic=VoteChoice(target=self._target))
 
 
 def test_colored_name_wraps_name_in_speaker_color_span():
@@ -583,8 +600,8 @@ def test_format_vote_result_reports_no_votes():
     assert "no one voted" in result.lower()
 
 
-def test_cast_player_vote_hides_controls_before_blocking_call():
-    state = GameState(
+def _voting_state() -> GameState:
+    return GameState(
         user_player_name="Dana",
         players=[
             Player(name="Dana", player_type="user"),
@@ -592,79 +609,80 @@ def test_cast_player_vote_hides_controls_before_blocking_call():
         ],
         days=[Day(day_number=2)],
     )
-    bridge = SessionBridge(player_agents={"A": ScriptedVoteAgent(None)})
 
-    events = cast_player_vote(state, bridge, "A")
-    first_event = next(events)
 
+async def test_cast_player_vote_resolves_the_ballot_and_hides_controls_before_the_reveal():
+    state = _voting_state()
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
+
+    events = cast_player_vote(bridge, state, "A")
+    first_event = await events.__anext__()
+
+    assert await waiter == PlayerInput(text="A")
     row_update, status_update, _, _ = first_event
     assert row_update["visible"] is False
     assert status_update["value"] == "Tallying the votes…"
+    await events.aclose()
 
 
-def test_cast_player_vote_reveals_outcome_and_updates_panels():
-    state = GameState(
-        user_player_name="Dana",
-        players=[
-            Player(name="Dana", player_type="user"),
-            Player(name="A", player_type="villager"),
-        ],
-        days=[Day(day_number=2)],
+async def test_cast_player_vote_reveals_outcome_and_updates_panels():
+    state = _voting_state()
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
+
+    outcome = VoteOutcome(day_number=2, votes=[], tally={"A": 1}, lynched="A")
+
+    async def feed_outcome():
+        # Voting.run() (invoked by VillageFlow.run_voting in the background
+        # Flow task) mutates this same shared GameState -- marking the
+        # lynched player dead and recording the day's outcome -- before the
+        # VoteOutcome is put on the bridge; mirror that ordering here.
+        next(p for p in state.players if p.name == "A").is_alive = False
+        state.current_day.player_lynched = "A"
+        await bridge.outbox.put(outcome)
+        await bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
+
+    events = cast_player_vote(bridge, state, "A")
+    await events.__anext__()  # the "Tallying..." yield; also resolves waiter
+    await waiter
+    await feed_outcome()
+    _row_update, status_update, alive_panel_value, lynched_panel_value = (
+        await events.__anext__()
     )
-    bridge = SessionBridge(player_agents={"A": ScriptedVoteAgent(None)})
-
-    events = list(cast_player_vote(state, bridge, "A"))
-    _, status_update, alive_panel_value, lynched_panel_value = events[-1]
 
     assert f"{ui._colored_name('A', state)} was lynched by the village." in status_update["value"]
     assert "Dana" in alive_panel_value
-    # Target the actual chip markup for "A" rather than a bare substring
-    # check -- "A" alone would also match unrelated text/markup.
     assert '>A</span>' not in alive_panel_value
     assert '>A</span>' in lynched_panel_value
+    await events.aclose()
 
 
-def test_cast_player_vote_wraps_unexpected_errors_as_gr_error():
-    state = GameState(
-        user_player_name="Dana",
-        players=[
-            Player(name="Dana", player_type="user"),
-            Player(name="A", player_type="villager"),
-        ],
-        days=[Day(day_number=2)],
-    )
+async def test_cast_player_vote_raises_gr_error_on_flow_failed():
+    state = _voting_state()
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
 
-    class BoomAgent:
-        def kickoff(self, *args, **kwargs):
-            raise RuntimeError("boom")
-
-    bridge = SessionBridge(player_agents={"A": BoomAgent()})
-
-    events = cast_player_vote(state, bridge, "A")
-    next(events)  # first yield: hides the ballot before the blocking call
-    # The error path must restore the ballot so the player can actually
-    # retry -- leaving it hidden after the error would strand them with no
-    # way to vote again.
-    row_update, status_update, _, _ = next(events)
-    assert row_update["visible"] is True
-    assert status_update["visible"] is True
+    events = cast_player_vote(bridge, state, "A")
+    await events.__anext__()
+    await waiter
+    await bridge.outbox.put(FlowFailed(detail="boom"))
 
     with pytest.raises(gr.Error):
-        next(events)
+        await events.__anext__()
 
 
-def test_cast_player_abstain_records_no_target():
-    state = GameState(
-        user_player_name="Dana",
-        players=[
-            Player(name="Dana", player_type="user"),
-            Player(name="A", player_type="villager"),
-        ],
-        days=[Day(day_number=2)],
-    )
-    bridge = SessionBridge(player_agents={"A": ScriptedVoteAgent(None)})
+async def test_cast_player_abstain_resolves_with_no_target():
+    state = _voting_state()
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
 
-    list(cast_player_abstain(state, bridge))
+    events = cast_player_abstain(bridge, state)
+    await events.__anext__()
 
-    dana_record = next(v for v in state.current_day.votes if v.voter_name == "Dana")
-    assert dana_record.target_name is None
+    assert await waiter == PlayerInput(text=None)
+    await events.aclose()
