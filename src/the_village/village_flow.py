@@ -38,7 +38,7 @@ class VillageFlow(Flow[GameState]):
 
     @listen(run_night_one)
     async def announce_death(self):
-        await self.bridge.outbox.put(self.state.current_day.player_killed)
+        await self.bridge.outbox.put(self.state.current_day.player_found_dead)
         await self.bridge.wait_for_input()
 
     @listen(announce_death)

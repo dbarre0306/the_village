@@ -242,7 +242,7 @@ DEATH_MESSAGE_TEMPLATES = [
 
 
 def format_event_log(state: GameState) -> str:
-    dead_days = [day for day in state.days if day.player_killed]
+    dead_days = [day for day in state.days if day.player_found_dead]
     if not dead_days:
         return "<strong>Nothing has happened yet.</strong>"
     lines = [
@@ -250,7 +250,7 @@ def format_event_log(state: GameState) -> str:
         f"{WEEKDAYS[(day.day_number - 1) % 7]} morning: "
         f'<span class="{DEATH_LINE_CLASS}">'
         + DEATH_MESSAGE_TEMPLATES[index % len(DEATH_MESSAGE_TEMPLATES)].format(
-            name=day.player_killed
+            name=day.player_found_dead
         )
         + "</span></strong>"
         for index, day in enumerate(dead_days)
@@ -259,13 +259,13 @@ def format_event_log(state: GameState) -> str:
 
 
 def format_deaths_panel(state: GameState) -> str:
-    dead_days = [day for day in state.days if day.player_killed]
+    dead_days = [day for day in state.days if day.player_found_dead]
     if not dead_days:
         return f'<div class="{CHIP_LIST_CLASS}">No one has been killed yet.</div>'
     chips = "".join(
         f'<span class="{VILLAGER_CHIP_CLASS} dead" '
-        f'style="color: var(--speaker-{_speaker_color_index(day.player_killed, state)})">'
-        f"{day.player_killed}</span>"
+        f'style="color: var(--speaker-{_speaker_color_index(day.player_found_dead, state)})">'
+        f"{day.player_found_dead}</span>"
         for day in dead_days
     )
     return f'<div class="{CHIP_LIST_CLASS}">{chips}</div>'

@@ -18,7 +18,7 @@ async def test_village_flow_produces_valid_night_one_result_and_pauses_for_discu
     # the very first item -- nothing else is queued before it, since
     # run_discussion() (which queues DiscussionMessage/FlowStatus items)
     # only starts after this pause is resolved.
-    player_killed = await bridge.outbox.get()
+    player_found_dead = await bridge.outbox.get()
     bridge.resolve_input(PlayerInput())
 
     task.cancel()
@@ -30,9 +30,9 @@ async def test_village_flow_produces_valid_night_one_result_and_pauses_for_discu
     state = flow.state
     assert len(state.players) == 7
     assert state.day_number == 2
-    assert state.current_day.player_killed == player_killed
+    assert state.current_day.player_found_dead == player_found_dead
 
-    killed = next(v for v in state.players if v.name == player_killed)
+    killed = next(v for v in state.players if v.name == player_found_dead)
     assert killed.player_type == "villager"
     assert killed.is_alive is False
 

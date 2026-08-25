@@ -32,7 +32,7 @@ def make_state_with_one_death() -> GameState:
     return GameState(
         user_player_name="Dana",
         players=players,
-        days=[Day(day_number=2, player_killed="A")],
+        days=[Day(day_number=2, player_found_dead="A")],
     )
 
 

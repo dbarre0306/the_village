@@ -15,7 +15,7 @@ def test_weekdays_starts_on_sunday():
 
 def test_day_defaults():
     day = Day(day_number=1)
-    assert day.player_killed is None
+    assert day.player_found_dead is None
     assert day.discussion == []
     assert day.votes == []
     assert day.player_lynched is None
@@ -55,21 +55,21 @@ def test_game_state_defaults():
 
 
 def test_game_state_day_number_property_reads_the_last_day():
-    state = GameState(days=[Day(day_number=1), Day(day_number=2, player_killed="Bruce")])
+    state = GameState(days=[Day(day_number=1), Day(day_number=2, player_found_dead="Bruce")])
     assert state.day_number == 2
 
 
 def test_game_state_current_day_property_returns_the_last_day():
-    state = GameState(days=[Day(day_number=1), Day(day_number=2, player_killed="Bruce")])
-    assert state.current_day == Day(day_number=2, player_killed="Bruce")
+    state = GameState(days=[Day(day_number=1), Day(day_number=2, player_found_dead="Bruce")])
+    assert state.current_day == Day(day_number=2, player_found_dead="Bruce")
 
 
 def test_advance_day_appends_a_new_day_and_returns_it():
     state = GameState()
-    new_day = state.advance_day(player_killed="Bruce")
+    new_day = state.advance_day(player_found_dead="Bruce")
 
-    assert new_day == Day(day_number=2, player_killed="Bruce")
-    assert state.days == [Day(day_number=1), Day(day_number=2, player_killed="Bruce")]
+    assert new_day == Day(day_number=2, player_found_dead="Bruce")
+    assert state.days == [Day(day_number=1), Day(day_number=2, player_found_dead="Bruce")]
     assert state.current_day == new_day
 
 
@@ -77,7 +77,7 @@ def test_advance_day_with_no_death():
     state = GameState()
     new_day = state.advance_day()
 
-    assert new_day.player_killed is None
+    assert new_day.player_found_dead is None
     assert state.day_number == 2
 
 
@@ -132,7 +132,7 @@ def test_format_deaths_with_no_deaths():
 
 def test_format_deaths_lists_each_death():
     state = GameState(
-        user_player_name="Dana", days=[Day(day_number=2, player_killed="D")]
+        user_player_name="Dana", days=[Day(day_number=2, player_found_dead="D")]
     )
     assert state.format_deaths() == "D was killed by the werewolves on Monday."
 

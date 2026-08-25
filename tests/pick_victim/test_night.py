@@ -250,7 +250,7 @@ async def test_resolve_night_kills_the_crews_chosen_target():
 
     victim = next(p for p in state.players if p.name == "A")
     assert victim.is_alive is False
-    assert state.current_day.player_killed == "A"
+    assert state.current_day.player_found_dead == "A"
     assert state.day_number == 2
 
 
@@ -278,7 +278,7 @@ async def test_resolve_night_falls_back_to_random_choice_when_the_crew_raises(ca
         with patch("crewai.Crew.akickoff", new=AsyncMock(side_effect=_raise)):
             await resolve_night(state, player_agents, random.Random(1))
 
-    assert state.current_day.player_killed in {"Dana", "A", "B"}
+    assert state.current_day.player_found_dead in {"Dana", "A", "B"}
     assert "Falling back to a random victim" in caplog.text
 
 
@@ -292,7 +292,7 @@ async def test_resolve_night_falls_back_when_pydantic_is_missing(caplog):
         with patch("crewai.Crew.akickoff", new=AsyncMock(return_value=empty_result)):
             await resolve_night(state, player_agents, random.Random(1))
 
-    assert state.current_day.player_killed in {"Dana", "A", "B"}
+    assert state.current_day.player_found_dead in {"Dana", "A", "B"}
     assert "Falling back to a random victim" in caplog.text
 
 
@@ -306,4 +306,4 @@ async def test_resolve_night_promotes_a_new_leader_before_deciding():
         await resolve_night(state, player_agents, random.Random(3))
 
     assert packmate.is_pack_leader is True
-    assert state.current_day.player_killed == "A"
+    assert state.current_day.player_found_dead == "A"
