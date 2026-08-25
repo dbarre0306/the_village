@@ -87,16 +87,16 @@ valid target from night two onward.
 
 ## Package Structure
 
-`night.py` becomes a `night/` package:
+`night.py` becomes a `pick_victim/` package:
 
-- **`night/night_one.py`** — today's `resolve_night_one`, moved as-is,
+- **`pick_victim/night_one.py`** — today's `resolve_night_one`, moved as-is,
   unchanged. Still `random.choice` over living `"villager"`-type players,
   no LLM, no `player_agents` parameter.
-- **`night/night.py`** — new `resolve_night`, covered below. No base
+- **`pick_victim/night.py`** — new `resolve_night`, covered below. No base
   class shared with `night_one.py` — the two functions don't share
   behavior worth abstracting, the same way `Voting` and `Discussion` don't
   share a base despite superficial similarity.
-- **`night/__init__.py`** — exports both `resolve_night_one` and
+- **`pick_victim/__init__.py`** — exports both `resolve_night_one` and
   `resolve_night`.
 
 Unlike `voting/` and `discussion/`, there's no `_Voter`/`_Speaker`-style
@@ -161,7 +161,7 @@ must `await` it.
 
 No `GameState`/`Player` schema changes are needed — `is_pack_leader`
 already exists and was unused until now; `_VictimChoice` is a private
-model local to `night/night.py`, the same way `_VoteChoice` is private to
+model local to `pick_victim/night.py`, the same way `_VoteChoice` is private to
 `ai_voter.py`.
 
 ## Error Handling
@@ -203,4 +203,4 @@ patched with `AsyncMock`, a stub `Agent` per werewolf, no real LLM calls:
   `resolve_night_one`'s existing contract tests.
 - **`resolve_night_one` regression**: existing `tests/test_night.py`
   cases continue to pass unmodified against the moved-but-unchanged
-  `night/night_one.py`, confirming night one's behavior didn't shift.
+  `pick_victim/night_one.py`, confirming night one's behavior didn't shift.
