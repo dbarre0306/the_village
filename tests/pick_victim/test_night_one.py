@@ -2,7 +2,7 @@ import random
 
 import pytest
 
-from the_village.night import resolve_night_one
+from the_village.pick_victim import resolve_night_one
 from the_village.roster import build_initial_roster
 from the_village.state import GameState, Player
 

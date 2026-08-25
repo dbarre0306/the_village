@@ -8,7 +8,7 @@ from crewai.flow import Flow, listen, start
 from the_village.agents import build_agent, build_conversation_analyst_agent
 from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
 from the_village.discussion import Discussion
-from the_village.night import resolve_night_one
+from the_village.pick_victim import resolve_night_one
 from the_village.roster import build_initial_roster
 from the_village.state import GameState
 from the_village.voting import Voting
