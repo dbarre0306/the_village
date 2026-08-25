@@ -4,7 +4,7 @@ from crewai import Agent, Crew, Task
 from pydantic import BaseModel, Field
 
 from the_village.bridge import SessionBridge
-from the_village.state import GameState, _weekday
+from the_village.state import GameState
 
 from .voter import _Voter
 
@@ -18,16 +18,6 @@ class _VoteChoice(BaseModel):
             "The name of the living villager you vote to lynch, or leave "
             "unset to abstain."
         ),
-    )
-
-
-def _format_lynchings(state: GameState) -> str:
-    lynched_days = [day for day in state.days if day.player_lynched]
-    if not lynched_days:
-        return "(No one has been lynched yet.)"
-    return "\n".join(
-        f"{day.player_lynched} was lynched by the village on {_weekday(day.day_number)}."
-        for day in lynched_days
     )
 
 
@@ -69,7 +59,7 @@ class _AiVoter(_Voter):
             [
                 "Known facts:",
                 self._state.format_deaths(),
-                _format_lynchings(self._state),
+                self._state.format_lynchings(),
                 "",
                 f"Living villagers you may vote to lynch: {', '.join(candidates)}.",
                 "",

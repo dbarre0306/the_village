@@ -100,6 +100,7 @@ class _AiSpeaker(_Speaker):
         parts = [
             "Known facts:",
             self._state.format_deaths(),
+            self._state.format_lynchings(),
             "",
             f"Other living players: {', '.join(self._names_of_other_living_players)}",
             "",

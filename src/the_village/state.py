@@ -94,10 +94,19 @@ class GameState(BaseModel):
     def format_deaths(self) -> str:
         dead_days = [day for day in self.days if day.player_killed]
         if not dead_days:
-            return "(No one has died yet.)"
+            return "(No one has been killed by the werewolves yet.)"
         return "\n".join(
-            f"{day.player_killed} was found dead on {_weekday(day.day_number)}."
+            f"{day.player_killed} was killed by the werewolves on {_weekday(day.day_number)}."
             for day in dead_days
+        )
+
+    def format_lynchings(self) -> str:
+        lynched_days = [day for day in self.days if day.player_lynched]
+        if not lynched_days:
+            return "(No one has been lynched yet.)"
+        return "\n".join(
+            f"{day.player_lynched} was lynched by the village on {_weekday(day.day_number)}."
+            for day in lynched_days
         )
 
     def format_history(self) -> str:
