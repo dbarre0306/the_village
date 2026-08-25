@@ -121,11 +121,11 @@ def _build_crew(
     )
 
 
-async def resolve_night(
+async def kill_next_victim(
     state: GameState,
     player_agents: dict[str, Agent],
     rng: random.Random | None = None,
-) -> GameState:
+) -> None:
     rng = rng or random.Random()
 
     _ensure_living_pack_leader(state, rng)
@@ -139,8 +139,6 @@ async def resolve_night(
     victim = next(p for p in state.players if p.name == target)
     victim.is_alive = False
     state.current_day.player_found_dead = victim.name
-
-    return state
 
 
 async def _decide_target(crew: Crew, eligible: list[str], rng: random.Random) -> str:

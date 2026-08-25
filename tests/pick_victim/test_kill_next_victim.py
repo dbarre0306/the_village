@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 from crewai import Agent, Process
 
-from the_village.pick_victim.night import (
+from the_village.pick_victim.kill_next_victim import (
     _build_crew,
     _build_guardrail,
     _build_target_prompt,
@@ -13,7 +13,7 @@ from the_village.pick_victim.night import (
     _ensure_living_pack_leader,
     _order_pack,
     _VictimChoice,
-    resolve_night,
+    kill_next_victim,
 )
 from the_village.state import Day, GameState, Player
 
@@ -240,13 +240,13 @@ def _crew_result(target):
     )
 
 
-async def test_resolve_night_kills_the_crews_chosen_target():
+async def test_kill_next_victim_kills_the_crews_chosen_target():
     leader = Player(name="W1", player_type="werewolf", is_pack_leader=True)
     state = make_state(werewolves=[leader])
     player_agents = {"W1": _stub_agent()}
 
     with patch("crewai.Crew.akickoff", new=AsyncMock(return_value=_crew_result("A"))):
-        await resolve_night(state, player_agents, random.Random(1))
+        await kill_next_victim(state, player_agents, random.Random(1))
 
     victim = next(p for p in state.players if p.name == "A")
     assert victim.is_alive is False
@@ -254,19 +254,19 @@ async def test_resolve_night_kills_the_crews_chosen_target():
     assert state.day_number == 1
 
 
-async def test_resolve_night_can_target_the_human_player():
+async def test_kill_next_victim_can_target_the_human_player():
     leader = Player(name="W1", player_type="werewolf", is_pack_leader=True)
     state = make_state(werewolves=[leader])
     player_agents = {"W1": _stub_agent()}
 
     with patch("crewai.Crew.akickoff", new=AsyncMock(return_value=_crew_result("Dana"))):
-        await resolve_night(state, player_agents, random.Random(1))
+        await kill_next_victim(state, player_agents, random.Random(1))
 
     dana = next(p for p in state.players if p.name == "Dana")
     assert dana.is_alive is False
 
 
-async def test_resolve_night_falls_back_to_random_choice_when_the_crew_raises(caplog):
+async def test_kill_next_victim_falls_back_to_random_choice_when_the_crew_raises(caplog):
     leader = Player(name="W1", player_type="werewolf", is_pack_leader=True)
     state = make_state(werewolves=[leader])
     player_agents = {"W1": _stub_agent()}
@@ -276,13 +276,13 @@ async def test_resolve_night_falls_back_to_random_choice_when_the_crew_raises(ca
 
     with caplog.at_level("WARNING"):
         with patch("crewai.Crew.akickoff", new=AsyncMock(side_effect=_raise)):
-            await resolve_night(state, player_agents, random.Random(1))
+            await kill_next_victim(state, player_agents, random.Random(1))
 
     assert state.current_day.player_found_dead in {"Dana", "A", "B"}
     assert "Falling back to a random victim" in caplog.text
 
 
-async def test_resolve_night_falls_back_when_pydantic_is_missing(caplog):
+async def test_kill_next_victim_falls_back_when_pydantic_is_missing(caplog):
     leader = Player(name="W1", player_type="werewolf", is_pack_leader=True)
     state = make_state(werewolves=[leader])
     player_agents = {"W1": _stub_agent()}
@@ -290,20 +290,20 @@ async def test_resolve_night_falls_back_when_pydantic_is_missing(caplog):
 
     with caplog.at_level("WARNING"):
         with patch("crewai.Crew.akickoff", new=AsyncMock(return_value=empty_result)):
-            await resolve_night(state, player_agents, random.Random(1))
+            await kill_next_victim(state, player_agents, random.Random(1))
 
     assert state.current_day.player_found_dead in {"Dana", "A", "B"}
     assert "Falling back to a random victim" in caplog.text
 
 
-async def test_resolve_night_promotes_a_new_leader_before_deciding():
+async def test_kill_next_victim_promotes_a_new_leader_before_deciding():
     dead_leader = Player(name="W1", player_type="werewolf", is_pack_leader=True, is_alive=False)
     packmate = Player(name="W2", player_type="werewolf")
     state = make_state(werewolves=[dead_leader, packmate])
     player_agents = {"W1": _stub_agent(), "W2": _stub_agent()}
 
     with patch("crewai.Crew.akickoff", new=AsyncMock(return_value=_crew_result("A"))):
-        await resolve_night(state, player_agents, random.Random(3))
+        await kill_next_victim(state, player_agents, random.Random(3))
 
     assert packmate.is_pack_leader is True
     assert state.current_day.player_found_dead == "A"
