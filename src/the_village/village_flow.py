@@ -8,7 +8,7 @@ from crewai.flow import Flow, listen, start
 from the_village.agents import build_agent, build_conversation_analyst_agent
 from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
 from the_village.discussion import Discussion
-from the_village.pick_victim import kill_first_victim
+from the_village.pick_victim import kill_first_victim, kill_next_victim
 from the_village.roster import build_initial_roster
 from the_village.state import GameState
 from the_village.voting import Voting
@@ -84,6 +84,14 @@ class VillageFlow(Flow[GameState]):
         self.state.advance_day()
         await self.bridge.outbox.put(outcome)
         await self.bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
+
+    @listen(run_voting)
+    async def run_next_night(self):
+        await kill_next_victim(self.state, self._player_agents)
+
+    @listen(run_next_night)
+    async def announce_next_death(self):
+        await self.bridge.outbox.put(self.state.current_day.player_found_dead)
 
     def _build_ai_agents(self):
         return {

@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from the_village.discussion.ai_speaker import _SpeakerOutput
 from the_village.discussion.speaker import _AddressResolution
+from the_village.pick_victim.kill_next_victim import _VictimChoice
 from the_village.voting.ai_voter import _VoteChoice
 
 
@@ -10,8 +11,9 @@ async def _decline_and_abstain_akickoff(crew):
     when voting -- a deterministic stand-in for real kickoff() calls so
     tests can drive the whole flow to completion without hitting an LLM.
     Dispatches on each task's output_pydantic, since a discussion turn's
-    crew has two tasks (_SpeakerOutput, _AddressResolution) and a vote's
-    crew has one (_VoteChoice).
+    crew has two tasks (_SpeakerOutput, _AddressResolution), a vote's crew
+    has one (_VoteChoice), and a kill_next_victim crew has one or more
+    tasks with only the last carrying _VictimChoice.
 
     Shared by tests/test_flow.py and tests/test_concurrency.py -- lives
     here (rather than being imported test-module-to-test-module) since
@@ -26,4 +28,6 @@ async def _decline_and_abstain_akickoff(crew):
             outputs.append(_AddressResolution(addressed_to=None))
         elif task.output_pydantic is _VoteChoice:
             outputs.append(_VoteChoice(target=None))
+        elif task.output_pydantic is _VictimChoice:
+            outputs.append(_VictimChoice(target=None))
     return SimpleNamespace(tasks_output=[SimpleNamespace(pydantic=o) for o in outputs])

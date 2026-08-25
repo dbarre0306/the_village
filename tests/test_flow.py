@@ -91,3 +91,36 @@ async def test_village_flow_reaches_voting_complete_with_an_outcome():
     assert outcome.tally == {}
     assert outcome.lynched is None
     assert flow.state.day_number == 2
+
+
+async def test_village_flow_kills_and_announces_a_second_victim_after_voting():
+    bridge = SessionBridge()
+    flow = VillageFlow(bridge=bridge)
+    task = asyncio.create_task(flow.kickoff_async(inputs={"user_player_name": "Dana"}))
+
+    with patch("crewai.Crew.akickoff", new=_decline_and_abstain_akickoff):
+        await bridge.outbox.get()  # night one's death announcement
+        bridge.resolve_input(PlayerInput())  # -> begin discussion
+
+        second_death = None
+        while True:
+            item = await bridge.outbox.get()
+            if item == FlowStatus.DISCUSSION_COMPLETE:
+                bridge.resolve_input(PlayerInput())  # -> begin voting
+            elif item == FlowStatus.WAITING_FOR_VOTE:
+                bridge.resolve_input(PlayerInput(text=None))  # player abstains
+            elif item == FlowStatus.VOTING_COMPLETE:
+                second_death = await bridge.outbox.get()
+                break
+            elif item in (FlowStatus.WAITING_FOR_TURN, FlowStatus.WAITING_FOR_ANSWER):
+                bridge.resolve_input(PlayerInput(text=None))
+
+        await task
+
+    state = flow.state
+    assert second_death is not None
+    assert state.current_day.player_found_dead == second_death
+
+    killed = next(v for v in state.players if v.name == second_death)
+    assert killed.player_type in ("villager", "user")
+    assert killed.is_alive is False
