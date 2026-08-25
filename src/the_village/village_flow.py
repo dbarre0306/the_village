@@ -3,7 +3,7 @@ import asyncio
 import logging
 
 from crewai import Agent
-from crewai.flow import Flow, listen, or_, router, start
+from crewai.flow import Flow, listen, router, start
 
 from the_village.agents import build_agent, build_conversation_analyst_agent
 from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
@@ -32,11 +32,15 @@ class VillageFlow(Flow[GameState]):
         self._analyst_agent = build_conversation_analyst_agent()
         self.bridge.player_agents = self._player_agents
 
-    @listen(setup_game)
+    @router(setup_game)
     async def run_night_one(self):
         kill_first_victim(self.state)
+        # Emitting "night_fell" (rather than listening on this method's own
+        # name) lets announce_death listen on a single signal shared with
+        # run_next_night's router below.
+        return "night_fell"
 
-    @listen(or_("run_night_one", "night_fell"))
+    @listen("night_fell")
     async def announce_death(self):
         await self.bridge.outbox.put(self.state.current_day.player_found_dead)
         await self.bridge.wait_for_input()
@@ -88,10 +92,6 @@ class VillageFlow(Flow[GameState]):
     @router(run_voting)
     async def run_next_night(self):
         await WereWolfPack(self.state, self._player_agents).kill_next_victim()
-        # Routing back to a "night_fell" signal (rather than listening on
-        # this method's own name) is what re-arms announce_death's or_()
-        # each cycle -- crewai only rearms a fired or_() branch when a
-        # @router emits a fresh signal, not on a plain @listen firing again.
         return "night_fell"
 
     def _build_ai_agents(self):
