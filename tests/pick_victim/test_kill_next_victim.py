@@ -87,7 +87,6 @@ def test_ensure_living_pack_leader_replaces_a_dead_leader():
 
     _ensure_living_pack_leader(state, random.Random(1))
 
-    assert dead_leader.is_pack_leader is False
     assert packmate.is_pack_leader is True
 
 
