@@ -1,7 +1,21 @@
 import random
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
-from the_village.pick_victim.night import _build_guardrail, _eligible_targets, _VictimChoice, _ensure_living_pack_leader, _order_pack
-from the_village.state import GameState, Player
+from crewai import Agent, Process
+
+from the_village.pick_victim.night import (
+    _build_crew,
+    _build_guardrail,
+    _build_target_prompt,
+    _build_tasks,
+    _eligible_targets,
+    _ensure_living_pack_leader,
+    _order_pack,
+    _VictimChoice,
+    resolve_night,
+)
+from the_village.state import Day, GameState, Player
 
 
 def make_state(werewolves: list[Player], day_number: int = 1) -> GameState:
@@ -10,8 +24,6 @@ def make_state(werewolves: list[Player], day_number: int = 1) -> GameState:
         Player(name="A", player_type="villager"),
         Player(name="B", player_type="villager"),
     ]
-    from the_village.state import Day
-
     days = [Day(day_number=i) for i in range(1, day_number + 1)]
     return GameState(
         user_player_name="Dana",
@@ -40,8 +52,6 @@ def test_eligible_targets_excludes_the_dead():
 
 
 def test_guardrail_accepts_an_eligible_target():
-    from types import SimpleNamespace
-
     guardrail = _build_guardrail(["A", "B"])
     output = SimpleNamespace(pydantic=_VictimChoice(target="A"))
 
@@ -52,8 +62,6 @@ def test_guardrail_accepts_an_eligible_target():
 
 
 def test_guardrail_rejects_an_ineligible_target():
-    from types import SimpleNamespace
-
     guardrail = _build_guardrail(["A", "B"])
     output = SimpleNamespace(pydantic=_VictimChoice(target="W1"))
 
@@ -64,8 +72,6 @@ def test_guardrail_rejects_an_ineligible_target():
 
 
 def test_guardrail_rejects_a_missing_target():
-    from types import SimpleNamespace
-
     guardrail = _build_guardrail(["A", "B"])
     output = SimpleNamespace(pydantic=_VictimChoice(target=None))
 
@@ -138,11 +144,6 @@ def test_order_pack_excludes_dead_werewolves():
     assert order == ["W1"]
 
 
-from crewai import Agent, Process
-
-from the_village.pick_victim.night import _build_crew, _build_target_prompt, _build_tasks
-
-
 def _stub_agent() -> Agent:
     """A minimal real Agent -- Task/Crew construction validates that `agent`
     fields are actual Agent instances, so a plain object() won't do."""
@@ -180,10 +181,28 @@ def test_build_tasks_chains_context_and_marks_only_the_last_as_decider():
     assert tasks[0].guardrail is None
     assert tasks[1].agent is player_agents["W1"]
     assert tasks[1].context == [tasks[0]]
-    from the_village.pick_victim.night import _VictimChoice
-
     assert tasks[1].output_pydantic is _VictimChoice
     assert tasks[1].guardrail is not None
+
+
+def test_build_tasks_gives_each_task_the_full_accumulated_history_not_just_the_last_speaker():
+    order = ["W2", "W3", "W1"]
+    player_agents = {"W1": _stub_agent(), "W2": _stub_agent(), "W3": _stub_agent()}
+    state = make_state(
+        werewolves=[
+            Player(name="W1", player_type="werewolf", is_pack_leader=True),
+            Player(name="W2", player_type="werewolf"),
+            Player(name="W3", player_type="werewolf"),
+        ]
+    )
+
+    tasks = _build_tasks(order, player_agents, state, ["Dana", "A", "B"])
+
+    assert tasks[0].agent is player_agents["W2"]
+    assert tasks[1].agent is player_agents["W3"]
+    assert tasks[1].context == [tasks[0]]
+    assert tasks[2].agent is player_agents["W1"]
+    assert tasks[2].context == [tasks[0], tasks[1]]
 
 
 def test_build_tasks_single_werewolf_is_immediately_the_decider():
@@ -194,8 +213,6 @@ def test_build_tasks_single_werewolf_is_immediately_the_decider():
     tasks = _build_tasks(order, player_agents, state, ["Dana", "A", "B"])
 
     assert len(tasks) == 1
-    from the_village.pick_victim.night import _VictimChoice
-
     assert tasks[0].output_pydantic is _VictimChoice
 
 
@@ -215,12 +232,6 @@ def test_build_crew_uses_sequential_process_and_matching_agents():
     assert crew.process == Process.sequential
     assert crew.agents == [player_agents["W2"], player_agents["W1"]]
     assert crew.tasks == tasks
-
-
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
-
-from the_village.pick_victim.night import resolve_night
 
 
 def _crew_result(target):
@@ -271,16 +282,18 @@ async def test_resolve_night_falls_back_to_random_choice_when_the_crew_raises(ca
     assert "Falling back to a random victim" in caplog.text
 
 
-async def test_resolve_night_falls_back_when_pydantic_is_missing():
+async def test_resolve_night_falls_back_when_pydantic_is_missing(caplog):
     leader = Player(name="W1", player_type="werewolf", is_pack_leader=True)
     state = make_state(werewolves=[leader])
     player_agents = {"W1": _stub_agent()}
     empty_result = SimpleNamespace(tasks_output=[SimpleNamespace(pydantic=None)])
 
-    with patch("crewai.Crew.akickoff", new=AsyncMock(return_value=empty_result)):
-        await resolve_night(state, player_agents, random.Random(1))
+    with caplog.at_level("WARNING"):
+        with patch("crewai.Crew.akickoff", new=AsyncMock(return_value=empty_result)):
+            await resolve_night(state, player_agents, random.Random(1))
 
     assert state.current_day.player_killed in {"Dana", "A", "B"}
+    assert "Falling back to a random victim" in caplog.text
 
 
 async def test_resolve_night_promotes_a_new_leader_before_deciding():

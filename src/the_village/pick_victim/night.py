@@ -152,7 +152,11 @@ async def _decide_target(crew: Crew, eligible: list[str], rng: random.Random) ->
         result = await crew.akickoff()
         choice = result.tasks_output[-1].pydantic
     except Exception:
-        choice = None
+        logger.warning(
+            "Falling back to a random victim -- the werewolves' Crew run failed",
+            exc_info=True,
+        )
+        return rng.choice(eligible)
 
     if choice is None or choice.target not in eligible:
         logger.warning(
