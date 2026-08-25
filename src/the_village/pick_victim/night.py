@@ -119,3 +119,45 @@ def _build_crew(
         tasks=tasks,
         process=Process.sequential,
     )
+
+
+async def resolve_night(
+    state: GameState,
+    player_agents: dict[str, Agent],
+    rng: random.Random | None = None,
+) -> GameState:
+    rng = rng or random.Random()
+
+    _ensure_living_pack_leader(state, rng)
+    order = _order_pack(state, rng)
+    eligible = _eligible_targets(state)
+    tasks = _build_tasks(order, player_agents, state, eligible)
+    crew = _build_crew(tasks, order, player_agents)
+
+    target = await _decide_target(crew, eligible, rng)
+
+    victim = next(p for p in state.players if p.name == target)
+    victim.is_alive = False
+    state.advance_day(player_killed=victim.name)
+
+    return state
+
+
+async def _decide_target(crew: Crew, eligible: list[str], rng: random.Random) -> str:
+    # A kill must always happen, so any failure here -- the guardrail
+    # exhausting its retries, or any other Crew-run error -- falls back to
+    # a random eligible target rather than propagating, mirroring night
+    # one's unconditional random choice as the worst-case behavior.
+    try:
+        result = await crew.akickoff()
+        choice = result.tasks_output[-1].pydantic
+    except Exception:
+        choice = None
+
+    if choice is None or choice.target not in eligible:
+        logger.warning(
+            "Falling back to a random victim -- the werewolves' Crew did "
+            "not produce a valid target"
+        )
+        return rng.choice(eligible)
+    return choice.target

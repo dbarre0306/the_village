@@ -215,3 +215,82 @@ def test_build_crew_uses_sequential_process_and_matching_agents():
     assert crew.process == Process.sequential
     assert crew.agents == [player_agents["W2"], player_agents["W1"]]
     assert crew.tasks == tasks
+
+
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
+from the_village.pick_victim.night import resolve_night
+
+
+def _crew_result(target):
+    return SimpleNamespace(
+        tasks_output=[SimpleNamespace(pydantic=_VictimChoice(target=target))]
+    )
+
+
+async def test_resolve_night_kills_the_crews_chosen_target():
+    leader = Player(name="W1", player_type="werewolf", is_pack_leader=True)
+    state = make_state(werewolves=[leader])
+    player_agents = {"W1": _stub_agent()}
+
+    with patch("crewai.Crew.akickoff", new=AsyncMock(return_value=_crew_result("A"))):
+        await resolve_night(state, player_agents, random.Random(1))
+
+    victim = next(p for p in state.players if p.name == "A")
+    assert victim.is_alive is False
+    assert state.current_day.player_killed == "A"
+    assert state.day_number == 2
+
+
+async def test_resolve_night_can_target_the_human_player():
+    leader = Player(name="W1", player_type="werewolf", is_pack_leader=True)
+    state = make_state(werewolves=[leader])
+    player_agents = {"W1": _stub_agent()}
+
+    with patch("crewai.Crew.akickoff", new=AsyncMock(return_value=_crew_result("Dana"))):
+        await resolve_night(state, player_agents, random.Random(1))
+
+    dana = next(p for p in state.players if p.name == "Dana")
+    assert dana.is_alive is False
+
+
+async def test_resolve_night_falls_back_to_random_choice_when_the_crew_raises(caplog):
+    leader = Player(name="W1", player_type="werewolf", is_pack_leader=True)
+    state = make_state(werewolves=[leader])
+    player_agents = {"W1": _stub_agent()}
+
+    async def _raise(*args, **kwargs):
+        raise RuntimeError("guardrail retries exhausted")
+
+    with caplog.at_level("WARNING"):
+        with patch("crewai.Crew.akickoff", new=AsyncMock(side_effect=_raise)):
+            await resolve_night(state, player_agents, random.Random(1))
+
+    assert state.current_day.player_killed in {"Dana", "A", "B"}
+    assert "Falling back to a random victim" in caplog.text
+
+
+async def test_resolve_night_falls_back_when_pydantic_is_missing():
+    leader = Player(name="W1", player_type="werewolf", is_pack_leader=True)
+    state = make_state(werewolves=[leader])
+    player_agents = {"W1": _stub_agent()}
+    empty_result = SimpleNamespace(tasks_output=[SimpleNamespace(pydantic=None)])
+
+    with patch("crewai.Crew.akickoff", new=AsyncMock(return_value=empty_result)):
+        await resolve_night(state, player_agents, random.Random(1))
+
+    assert state.current_day.player_killed in {"Dana", "A", "B"}
+
+
+async def test_resolve_night_promotes_a_new_leader_before_deciding():
+    dead_leader = Player(name="W1", player_type="werewolf", is_pack_leader=True, is_alive=False)
+    packmate = Player(name="W2", player_type="werewolf")
+    state = make_state(werewolves=[dead_leader, packmate])
+    player_agents = {"W1": _stub_agent(), "W2": _stub_agent()}
+
+    with patch("crewai.Crew.akickoff", new=AsyncMock(return_value=_crew_result("A"))):
+        await resolve_night(state, player_agents, random.Random(3))
+
+    assert packmate.is_pack_leader is True
+    assert state.current_day.player_killed == "A"
