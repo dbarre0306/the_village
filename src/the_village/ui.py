@@ -529,6 +529,24 @@ async def begin_voting(bridge: SessionBridge, state: GameState):
                     gr.update(visible=False),
                 )
                 return
+            elif isinstance(item, VoteOutcome):
+                # Not reachable today (night.py always keeps the human alive
+                # through night one), but if Voting.run() ever completes
+                # without a _HumanVoter ever pausing here, show the outcome
+                # instead of silently discarding it.
+                yield (
+                    bridge,
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    *([gr.update()] * MAX_VOTE_CANDIDATES),
+                    gr.update(value=format_vote_result(state, item), visible=True),
+                )
+            elif item == FlowStatus.VOTING_COMPLETE:
+                # Nothing left for this handler to show -- the vote is
+                # already fully decided. Return instead of looping forever
+                # on an empty queue.
+                return
     except gr.Error:
         raise
     except Exception as exc:

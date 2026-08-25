@@ -501,6 +501,59 @@ async def test_begin_voting_resolves_the_discussion_gate_and_reveals_the_ballot(
     assert status_update["visible"] is False
 
 
+async def test_begin_voting_returns_on_voting_complete_instead_of_hanging():
+    # Not reachable today (night.py always keeps the human alive through
+    # night one), but if Voting.run() ever completes without a _HumanVoter
+    # ever pausing here, begin_voting must not block forever on an empty
+    # queue waiting for a WAITING_FOR_VOTE that will never arrive.
+    state = GameState(
+        user_player_name="Dana",
+        players=[
+            Player(name="Dana", player_type="user"),
+            Player(name="A", player_type="villager"),
+        ],
+        days=[Day(day_number=1)],
+    )
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
+    await bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
+
+    outputs = [update async for update in begin_voting(bridge, state)]
+
+    assert await waiter == PlayerInput()
+    # Only the immediate first yield happens -- VOTING_COMPLETE returns
+    # without a second yield.
+    assert len(outputs) == 1
+
+
+async def test_begin_voting_renders_a_vote_outcome_before_voting_complete():
+    state = GameState(
+        user_player_name="Dana",
+        players=[
+            Player(name="Dana", player_type="user"),
+            Player(name="A", player_type="villager"),
+        ],
+        days=[Day(day_number=1)],
+    )
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
+    outcome = VoteOutcome(day_number=1, votes=[], tally={}, lynched=None)
+    await bridge.outbox.put(outcome)
+    await bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
+
+    outputs = [update async for update in begin_voting(bridge, state)]
+
+    assert await waiter == PlayerInput()
+    # First yield is the immediate ballot-hiding update; second is the
+    # rendered outcome; VOTING_COMPLETE then returns with no further yield.
+    assert len(outputs) == 2
+    *_rest, status_update = outputs[1]
+    assert status_update["visible"] is True
+    assert status_update["value"] == ui.format_vote_result(state, outcome)
+
+
 async def test_begin_voting_is_a_noop_when_already_resolved():
     bridge = SessionBridge()  # nothing pending -- simulates a double-click
     outputs = [update async for update in begin_voting(bridge, GameState())]
