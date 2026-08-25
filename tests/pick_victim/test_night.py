@@ -1,4 +1,6 @@
-from the_village.pick_victim.night import _build_guardrail, _eligible_targets, _VictimChoice
+import random
+
+from the_village.pick_victim.night import _build_guardrail, _eligible_targets, _VictimChoice, _ensure_living_pack_leader
 from the_village.state import GameState, Player
 
 
@@ -69,3 +71,36 @@ def test_guardrail_rejects_a_missing_target():
     passed, _ = guardrail(output)
 
     assert passed is False
+
+
+def test_ensure_living_pack_leader_replaces_a_dead_leader():
+    dead_leader = Player(name="W1", player_type="werewolf", is_pack_leader=True, is_alive=False)
+    packmate = Player(name="W2", player_type="werewolf")
+    state = make_state(werewolves=[dead_leader, packmate])
+
+    _ensure_living_pack_leader(state, random.Random(1))
+
+    assert dead_leader.is_pack_leader is False
+    assert packmate.is_pack_leader is True
+
+
+def test_ensure_living_pack_leader_leaves_a_living_leader_unchanged():
+    leader = Player(name="W1", player_type="werewolf", is_pack_leader=True)
+    packmate = Player(name="W2", player_type="werewolf")
+    state = make_state(werewolves=[leader, packmate])
+
+    _ensure_living_pack_leader(state, random.Random(1))
+
+    assert leader.is_pack_leader is True
+    assert packmate.is_pack_leader is False
+
+
+def test_ensure_living_pack_leader_promotes_exactly_one_among_multiple_survivors():
+    dead_leader = Player(name="W1", player_type="werewolf", is_pack_leader=True, is_alive=False)
+    survivors = [Player(name=f"W{i}", player_type="werewolf") for i in (2, 3, 4)]
+    state = make_state(werewolves=[dead_leader, *survivors])
+
+    _ensure_living_pack_leader(state, random.Random(7))
+
+    new_leaders = [p for p in survivors if p.is_pack_leader]
+    assert len(new_leaders) == 1
