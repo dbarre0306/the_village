@@ -1,13 +1,16 @@
 ---
 name: object-oriented-design
-description: Use when a class or file has grown large with mixed responsibilities, when code branches on a type/kind field to pick behavior, when a class repeatedly reads another object's fields to compute something, or when deciding what a package/module should expose publicly versus keep internal.
+description: Use when a class or file has grown large with mixed responsibilities, when code branches on a type/kind field to pick behavior, when a class repeatedly reads another object's fields to compute something, when a package/module should expose publicly versus keep internal, or when a cluster of free functions keeps passing the same 2-3 parameters to each other.
 ---
 
 # Object-Oriented Design
 
 ## Overview
 
-A class should have one reason to change, hide internals behind a narrow public surface, and let polymorphism replace branching on type. These five patterns are grounded in the real refactor of `the_village/discussion/` (see `discussion.py`, `speaker.py`, `ai_speaker.py`, `human_speaker.py`, `reply_chain.py`, `__init__.py`), which split a 400-line `DiscussionRunner` God object into a coordinator plus focused collaborators.
+A class should have one reason to change, hide internals behind a narrow public surface, and let polymorphism replace branching on type. These patterns are grounded in two real refactors:
+
+- `the_village/discussion/` (see `discussion.py`, `speaker.py`, `ai_speaker.py`, `human_speaker.py`, `reply_chain.py`, `__init__.py`), which split a 400-line `DiscussionRunner` God object into a coordinator plus focused collaborators.
+- `the_village/pick_victim/kill_next_victim.py` → `werewolf_pack.py`, which turned a module of free functions that all threaded `state`, `player_agents`, and `rng` through each other into a single `WereWolfPack` class.
 
 ## When to Use
 
@@ -17,6 +20,7 @@ Symptoms:
 - An `if/elif`/`match` dispatches on a `type`/`kind`/`channel` string, especially at more than one call site.
 - A class reaches into another object's fields repeatedly to derive something (feature envy).
 - A package exposes every internal helper class instead of one clear entry point.
+- A module of free functions keeps re-passing the same handful of parameters (`state`, `rng`, ...) from one function to the next just to hand them down the call chain.
 
 ## Patterns
 
@@ -71,6 +75,46 @@ __all__ = ["Discussion"]
 
 **Rule:** a package should expose exactly the classes callers need. Internal collaborators and DTOs get a leading underscore and stay out of `__all__` — this is what lets `_Speaker`/`_ReplyChain` keep changing shape without breaking anything outside the package.
 
+### 6. Combine Functions Into Class (shared parameters → fields)
+
+`kill_next_victim.py` was a dozen free functions — `_eligible_targets(state)`, `_ensure_living_pack_leader(state, rng)`, `_order_pack(state, rng)`, `_build_tasks(order, player_agents, state, eligible)`, `_build_crew(tasks, order, player_agents)` — where almost every call re-passed `state`, and several also re-passed `rng` and `player_agents`, purely to hand them down to the next function. The top-level `kill_next_victim(state, player_agents, rng)` was mostly plumbing.
+
+```python
+# Before: every function repeats the same parameters
+def _order_pack(state: GameState, rng: random.Random) -> list[str]: ...
+def _ensure_living_pack_leader(state: GameState, rng: random.Random) -> None: ...
+
+async def kill_next_victim(state, player_agents, rng=None) -> None:
+    rng = rng or random.Random()
+    _ensure_living_pack_leader(state, rng)
+    order = _order_pack(state, rng)
+    ...
+
+# After: the shared parameters become fields, set once
+class WereWolfPack:
+    def __init__(self, state: GameState, player_agents: dict[str, Agent], rng=None):
+        self._state = state
+        self._player_agents = player_agents
+        self._rng = rng or random.Random()
+
+    def _order_pack(self) -> list[str]: ...
+    def _ensure_living_pack_leader(self) -> None: ...
+
+    async def kill_next_victim(self) -> None:
+        self._ensure_living_pack_leader()
+        order = self._order_pack()
+        ...
+```
+
+**Rule:** when a group of free functions is always called together and repeatedly re-passes the same 2+ parameters just to forward them, that parameter set is an implicit object — make it explicit as `__init__` fields. Each method's signature shrinks to only what varies per call (`_build_tasks(order, eligible)` instead of `_build_tasks(order, player_agents, state, eligible)`), and the orchestrating function stops being parameter-threading plumbing.
+
+**Watch for on conversion:** turning a free function into a method is two edits, not one — add `self` to the signature, *and* replace every former-parameter reference in the body with `self._x`. Skipping either one compiles fine and fails in a different way at call time:
+
+- Add `self` to the call site (`self._build_guardrail(eligible)`) but forget it in the `def` → the method still only declares `(eligible)`, so the instance-bound call now passes two arguments to a one-argument function: `TypeError: takes 1 positional argument but 2 were given`.
+- Keep the old parameter name in the `def` (e.g. `def _build_target_prompt(state, eligible)`) without adding `self` → argument *count* still matches, so no error at definition or call time, but `state` now silently receives the class instance instead of the `GameState` it's named for. The body (`state.format_deaths()`) then fails with `AttributeError: 'WereWolfPack' object has no attribute 'format_deaths'` — or worse, succeeds silently if the instance happens to have a same-named attribute.
+
+Grep the diff for every `def` that lost a leading parameter and gained `self`, and check the body was updated to match — the interpreter won't catch a body that still expects the old parameter.
+
 ## Quick Reference
 
 | Symptom                                                             | Pattern                                     |
@@ -80,9 +124,11 @@ __all__ = ["Discussion"]
 | `if/elif` on type/kind at multiple call sites                       | Polymorphism (decide once, at construction) |
 | Class reads another object's fields repeatedly to compute something | Tell, Don't Ask                             |
 | Package exposes internal/helper classes callers shouldn't touch     | Underscore-prefix + `__all__` gate          |
+| Free functions keep re-passing the same 2+ parameters to each other | Combine Functions Into Class                |
 
 ## Common Mistakes
 
 - **Extract Class, but hand it the whole parent's state** — the new class stays coupled to the old one instead of becoming independent. Give it only what it needs (`_ReplyChain` gets `speakers`, not `Discussion`).
 - **A Template Method "hook" that isn't a hook** — if subclasses override the entire method instead of one clearly-delegated step, you have duplicated branching hidden across files, not a template.
 - **Underscore-prefixing without gating `__init__.py`** — the convention only works if other packages actually import through `__all__`; a private class still imported directly elsewhere isn't private.
+- **Function-to-method conversion that forgets `self`, or forgets to update the body** — see Pattern 6's "Watch for on conversion." One failure mode throws (`TypeError`); the other silently rebinds a parameter to the class instance and fails later, or not at all.
