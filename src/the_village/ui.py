@@ -24,6 +24,7 @@ SPEAKER_COLORS = [
     ("#e34948", "#e66767"),  # red
 ]
 
+RESULT_SCREEN_CLASS = "result-screen"
 DISCUSSION_TRANSCRIPT_CLASS = "discussion-transcript"
 DISCUSSION_INPUT_ROW_CLASS = "discussion-input-row"
 PINNED_BAR_CLASS = "pinned-bar"
@@ -164,23 +165,26 @@ def _layout_css() -> str:
 
 
 def _autoscroll_js() -> str:
-    # The transcript streams in as separate yields during a discussion turn,
+    # Discussion turns and the vote tally both stream in as separate yields,
     # so we can't hook a single event's completion to know when to scroll.
     # A MutationObserver reacts to every content change instead, regardless
-    # of how many times the Markdown gets updated.
+    # of how many times the Markdown gets updated. It's attached to the
+    # whole result screen (not just the transcript) so vote-status updates
+    # -- which land in a sibling Markdown, not the transcript node -- scroll
+    # the page down too.
     return f"""
     (() => {{
         const attach = () => {{
-            const transcript = document.querySelector(".{DISCUSSION_TRANSCRIPT_CLASS}");
+            const resultScreen = document.querySelector(".{RESULT_SCREEN_CLASS}");
             const scrollContainer = document.querySelector(".gradio-container");
-            if (!transcript || !scrollContainer) {{
+            if (!resultScreen || !scrollContainer) {{
                 setTimeout(attach, 200);
                 return;
             }}
             const scrollToBottom = () => {{
                 scrollContainer.scrollTop = scrollContainer.scrollHeight;
             }};
-            new MutationObserver(scrollToBottom).observe(transcript, {{
+            new MutationObserver(scrollToBottom).observe(resultScreen, {{
                 childList: true,
                 subtree: true,
                 characterData: true,
@@ -657,7 +661,7 @@ def build_app() -> gr.Blocks:
             name_input = gr.Textbox(label="Your first name")
             start_button = gr.Button("Start Game")
 
-        with gr.Column(visible=False) as result_screen:
+        with gr.Column(visible=False, elem_classes=[RESULT_SCREEN_CLASS]) as result_screen:
             with gr.Row(elem_classes=[PINNED_BAR_CLASS]):
                 with gr.Column():
                     gr.Markdown("### Living Villagers")
