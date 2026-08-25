@@ -1,21 +1,11 @@
 # tests/test_concurrency.py
 import asyncio
-from unittest.mock import AsyncMock, patch
-from types import SimpleNamespace
+from unittest.mock import patch
 
 from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
-from the_village.discussion.ai_speaker import _SpeakerOutput
-from the_village.discussion.speaker import _AddressResolution
 from the_village.village_flow import VillageFlow
 
-
-def _decline_result():
-    return SimpleNamespace(
-        tasks_output=[
-            SimpleNamespace(pydantic=_SpeakerOutput(has_something_to_say=False)),
-            SimpleNamespace(pydantic=_AddressResolution(addressed_to=None)),
-        ]
-    )
+from tests.test_flow import _decline_and_abstain_akickoff
 
 
 async def _run_one_session(player_name: str) -> str:
@@ -25,18 +15,23 @@ async def _run_one_session(player_name: str) -> str:
 
     while True:
         item = await bridge.outbox.get()
-        if item == FlowStatus.DISCUSSION_COMPLETE:
+        if item == FlowStatus.VOTING_COMPLETE:
             break
-        bridge.resolve_input(PlayerInput(text=None))
+        if item == FlowStatus.DISCUSSION_COMPLETE:
+            bridge.resolve_input(PlayerInput())  # -> begin voting
+        elif item == FlowStatus.WAITING_FOR_VOTE:
+            bridge.resolve_input(PlayerInput(text=None))  # player abstains
+        elif item in (FlowStatus.WAITING_FOR_TURN, FlowStatus.WAITING_FOR_ANSWER) or not isinstance(
+            item, FlowStatus
+        ):
+            bridge.resolve_input(PlayerInput(text=None))
 
     await flow_task
     return flow.state.user_player_name
 
 
 async def test_two_village_flows_complete_independently_when_run_concurrently():
-    with patch(
-        "crewai.Crew.akickoff", new=AsyncMock(return_value=_decline_result())
-    ):
+    with patch("crewai.Crew.akickoff", new=_decline_and_abstain_akickoff):
         results = await asyncio.gather(
             _run_one_session("Alice"),
             _run_one_session("Bob"),

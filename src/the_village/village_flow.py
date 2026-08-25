@@ -65,11 +65,22 @@ class VillageFlow(Flow[GameState]):
 
     @listen(run_discussion)
     async def run_voting(self):
+        logger.debug(
+            "VillageFlow.run_voting: flow=%s bridge=%s entering",
+            id(self),
+            id(self.bridge),
+        )
         outcome = await Voting(
             state=self.state,
             bridge=self.bridge,
             player_agents=self._player_agents,
         ).run()
+        logger.debug(
+            "VillageFlow.run_voting: flow=%s bridge=%s voting runner returned, outcome=%s",
+            id(self),
+            id(self.bridge),
+            outcome,
+        )
         await self.bridge.outbox.put(outcome)
         await self.bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
 
