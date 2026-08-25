@@ -61,7 +61,7 @@ Last-speaker tracking used to live in the orchestrator, which read and mutated s
 
 **Rule:** if a class repeatedly reads another object's fields to derive something, move that computation onto the object owning the fields and call a method on it instead.
 
-### 5. Encapsulation via Underscore Convention + `__all__`
+### 5. Encapsulation via Restricted Visibility (narrow public surface)
 
 `Speaker`, `AiSpeaker`, `HumanSpeaker`, `ReplyChain`, `SpeakerOutput`, and `AddressResolution` were all renamed to underscore-prefixed (`_Speaker`, etc.), and the package's public surface was pinned down explicitly:
 
@@ -73,7 +73,9 @@ from .discussion import Discussion
 __all__ = ["Discussion"]
 ```
 
-**Rule:** a package should expose exactly the classes callers need. Internal collaborators and DTOs get a leading underscore and stay out of `__all__` — this is what lets `_Speaker`/`_ReplyChain` keep changing shape without breaking anything outside the package.
+That's Python's mechanism; every OO language has one. Java/Kotlin have `private`/package-private/`internal`; C# has `private`/`internal`; C++ has `private` plus header/implementation separation (or the pImpl idiom); Go has unexported (lowercase) identifiers; Rust has private-by-default with `pub(crate)`; TypeScript has `private`/`#` fields plus explicit `export` lists. The mechanism differs, but the shape of the fix is the same.
+
+**Rule:** a package/module should expose exactly the classes callers need. Internal collaborators and DTOs get marked non-public (however the language spells that) and stay out of the public export surface — this is what lets `_Speaker`/`_ReplyChain` keep changing shape without breaking anything outside the package.
 
 ### 6. Combine Functions Into Class (shared parameters → fields)
 
@@ -106,14 +108,14 @@ class WereWolfPack:
         ...
 ```
 
-**Rule:** when a group of free functions is always called together and repeatedly re-passes the same 2+ parameters just to forward them, that parameter set is an implicit object — make it explicit as `__init__` fields. Each method's signature shrinks to only what varies per call (`_build_tasks(order, eligible)` instead of `_build_tasks(order, player_agents, state, eligible)`), and the orchestrating function stops being parameter-threading plumbing.
+**Rule:** when a group of free functions is always called together and repeatedly re-passes the same 2+ parameters just to forward them, that parameter set is an implicit object — make it explicit as constructor fields. Each method's signature shrinks to only what varies per call (`_build_tasks(order, eligible)` instead of `_build_tasks(order, player_agents, state, eligible)`), and the orchestrating function stops being parameter-threading plumbing.
 
-**Watch for on conversion:** turning a free function into a method is two edits, not one — add `self` to the signature, *and* replace every former-parameter reference in the body with `self._x`. Skipping either one compiles fine and fails in a different way at call time:
+**Watch for on conversion:** turning a free function into a method means every reference to a former parameter must now come from the instance instead. In languages where the receiver (`self`/`this`) is implicit class syntax — Java, C#, C++, Kotlin, Swift — the compiler enforces this for you: there's no way to "forget" the receiver, and a body that still refers to an undeclared local simply fails to compile. The risk is concentrated in languages where the receiver is just an ordinary, easy-to-typo parameter:
 
-- Add `self` to the call site (`self._build_guardrail(eligible)`) but forget it in the `def` → the method still only declares `(eligible)`, so the instance-bound call now passes two arguments to a one-argument function: `TypeError: takes 1 positional argument but 2 were given`.
-- Keep the old parameter name in the `def` (e.g. `def _build_target_prompt(state, eligible)`) without adding `self` → argument *count* still matches, so no error at definition or call time, but `state` now silently receives the class instance instead of the `GameState` it's named for. The body (`state.format_deaths()`) then fails with `AttributeError: 'WereWolfPack' object has no attribute 'format_deaths'` — or worse, succeeds silently if the instance happens to have a same-named attribute.
+- **Python**, where `self` is a plain first parameter you write out by hand. Add `self` to the call site (`self._build_guardrail(eligible)`) but forget it in the `def` → the method still only declares `(eligible)`, so the instance-bound call now passes two arguments to a one-argument function: `TypeError: takes 1 positional argument but 2 were given`. Or keep the old parameter name in the `def` (e.g. `def _build_target_prompt(state, eligible)`) without adding `self` → argument *count* still matches, so nothing errors at definition or call time, but `state` now silently receives the class instance instead of the `GameState` it's named for. The body (`state.format_deaths()`) then fails with `AttributeError: 'WereWolfPack' object has no attribute 'format_deaths'` — or worse, succeeds silently if the instance happens to have a same-named attribute.
+- **JavaScript/TypeScript**, where `this` is resolved dynamically by call site rather than lexical class structure — extracting or detaching a method (e.g. passing `obj.method` as a callback) silently loses the intended `this` unless bound or written as an arrow function.
 
-Grep the diff for every `def` that lost a leading parameter and gained `self`, and check the body was updated to match — the interpreter won't catch a body that still expects the old parameter.
+Even in languages the compiler protects, the broader check still applies: audit every method body for a local variable or parameter that now shadows a same-named field, so it's reading stale state instead of `this.state`/`self._state`.
 
 ## Quick Reference
 
@@ -123,12 +125,12 @@ Grep the diff for every `def` that lost a leading parameter and gained `self`, a
 | N subclasses share a wrapper around one varying step                | Template Method                             |
 | `if/elif` on type/kind at multiple call sites                       | Polymorphism (decide once, at construction) |
 | Class reads another object's fields repeatedly to compute something | Tell, Don't Ask                             |
-| Package exposes internal/helper classes callers shouldn't touch     | Underscore-prefix + `__all__` gate          |
+| Package exposes internal/helper classes callers shouldn't touch     | Restrict visibility to a narrow public surface |
 | Free functions keep re-passing the same 2+ parameters to each other | Combine Functions Into Class                |
 
 ## Common Mistakes
 
 - **Extract Class, but hand it the whole parent's state** — the new class stays coupled to the old one instead of becoming independent. Give it only what it needs (`_ReplyChain` gets `speakers`, not `Discussion`).
 - **A Template Method "hook" that isn't a hook** — if subclasses override the entire method instead of one clearly-delegated step, you have duplicated branching hidden across files, not a template.
-- **Underscore-prefixing without gating `__init__.py`** — the convention only works if other packages actually import through `__all__`; a private class still imported directly elsewhere isn't private.
-- **Function-to-method conversion that forgets `self`, or forgets to update the body** — see Pattern 6's "Watch for on conversion." One failure mode throws (`TypeError`); the other silently rebinds a parameter to the class instance and fails later, or not at all.
+- **Marking something non-public without gating the module's export surface** — the convention only works if other packages actually import through the declared public API (Python's `__all__`, an explicit `export`/module boundary, etc.); a "private" class still importable/reachable directly elsewhere isn't private.
+- **Function-to-method conversion that leaves a body still reading the old parameter instead of the instance** — see Pattern 6's "Watch for on conversion." In receiver-as-plain-parameter languages (Python, JavaScript) this can fail loudly (`TypeError`), fail with a wrong-object error later, or not fail at all; in receiver-as-syntax languages (Java, C#, C++, Kotlin) the compiler mostly prevents it, but a locally-shadowed field is still worth checking for.
