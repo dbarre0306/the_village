@@ -86,6 +86,9 @@ class GameState(BaseModel):
     def names_of_living_players(self) -> list[str]:
         return [player.name for player in self.players if player.is_alive]
 
+    def names_of_dead_players(self) -> list[str]:
+        return [player.name for player in self.players if not player.is_alive]
+
     def names_of_other_living_players(self, player_name: str) -> list[str]:
         return [name for name in self.names_of_living_players() if name != player_name]
 

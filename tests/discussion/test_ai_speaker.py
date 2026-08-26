@@ -6,6 +6,7 @@ from crewai import Agent
 from the_village.bridge import SessionBridge
 from the_village.discussion.ai_speaker import (
     _AiSpeaker,
+    _build_dead_player_guardrail,
     _reject_turn_order_commentary,
     _SpeakerOutput,
 )
@@ -99,6 +100,62 @@ def test_speak_prompt_forbids_comparing_dead_players_credibility_to_living():
     speaker = make_ai_speaker(state, "A")
     prompt = speaker._build_speak_prompt(addressed_by=None)
     assert "credibility is still in question" in prompt
+
+
+def test_dead_player_guardrail_rejects_whereabouts_pressure():
+    guardrail = _build_dead_player_guardrail(["Joshua"])
+    output = SimpleNamespace(
+        pydantic=_SpeakerOutput(
+            has_something_to_say=True,
+            text=(
+                "It's concerning that Joshua is directing so much suspicion "
+                "toward Don while avoiding questions about his own "
+                "whereabouts today."
+            ),
+        )
+    )
+    passed, result = guardrail(output)
+    assert passed is False
+    assert "Joshua" in result
+    assert "dead" in result.lower()
+
+
+def test_dead_player_guardrail_rejects_where_was_phrasing():
+    guardrail = _build_dead_player_guardrail(["Joshua"])
+    output = SimpleNamespace(
+        pydantic=_SpeakerOutput(
+            has_something_to_say=True,
+            text="We need to look into where Joshua was today.",
+        )
+    )
+    passed, result = guardrail(output)
+    assert passed is False
+
+
+def test_dead_player_guardrail_accepts_historical_mention():
+    guardrail = _build_dead_player_guardrail(["Joshua"])
+    output = SimpleNamespace(
+        pydantic=_SpeakerOutput(
+            has_something_to_say=True,
+            text="Joshua was killed by the werewolves last night.",
+        )
+    )
+    passed, result = guardrail(output)
+    assert passed is True
+    assert result is output
+
+
+def test_dead_player_guardrail_ignores_living_players():
+    guardrail = _build_dead_player_guardrail([])
+    output = SimpleNamespace(
+        pydantic=_SpeakerOutput(
+            has_something_to_say=True,
+            text="Where was Don last night? He needs to explain himself.",
+        )
+    )
+    passed, result = guardrail(output)
+    assert passed is True
+    assert result is output
 
 
 async def test_returns_none_on_scheduled_decline():

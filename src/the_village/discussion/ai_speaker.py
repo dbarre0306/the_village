@@ -1,5 +1,5 @@
 import re
-from typing import Any
+from typing import Any, Final
 
 from crewai import Agent, Crew, Process, Task
 from pydantic import BaseModel, Field
@@ -17,6 +17,21 @@ _TURN_ORDER_COMMENTARY_PATTERN = re.compile(
     """,
     re.IGNORECASE | re.VERBOSE,
 )
+
+_DEAD_PLAYER_SUSPECT_LANGUAGE_PATTERN = re.compile(
+    r"""
+    explain(?:s|ed|ing)? | whereabouts | \balibi\b | clarify | clarified |
+    account\s+for | credibility | \bpress(?:ed|ing)?\b |
+    hasn'?t\s+(?:fully\s+)?(?:explained|said|answered) |
+    avoid(?:s|ed|ing)?\s+questions | suspicious\s+of |
+    should\s+(?:be\s+)?voted?\s+for | vote\s+for |
+    where\s+(?:\w+\s+){0,2}(?:was|were) |
+    still\s+need|needs?\s+to\s+answer
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+_DEAD_PLAYER_WINDOW: Final = 80
 
 
 class _SpeakerOutput(BaseModel):
@@ -47,6 +62,31 @@ def _reject_turn_order_commentary(output: Any) -> tuple[bool, Any]:
             "what was actually said.",
         )
     return (True, output)
+
+
+def _build_dead_player_guardrail(dead_names: list[str]):
+    def _reject_dead_player_as_active_suspect(output: Any) -> tuple[bool, Any]:
+        speaker_output: _SpeakerOutput | None = output.pydantic
+        text = speaker_output.text if speaker_output else None
+        if not text:
+            return (True, output)
+        for name in dead_names:
+            for match in re.finditer(rf"\b{re.escape(name)}\b", text):
+                window_start = max(0, match.start() - _DEAD_PLAYER_WINDOW)
+                window_end = min(len(text), match.end() + _DEAD_PLAYER_WINDOW)
+                window = text[window_start:window_end]
+                if _DEAD_PLAYER_SUSPECT_LANGUAGE_PATTERN.search(window):
+                    return (
+                        False,
+                        f"{name} is dead and out of the game -- don't talk "
+                        "about them as a suspect who still needs to explain "
+                        "themselves, clarify their whereabouts, or answer "
+                        "questions. Remove that and only discuss currently "
+                        "living players as suspects.",
+                    )
+        return (True, output)
+
+    return _reject_dead_player_as_active_suspect
 
 
 class _AiSpeaker(_Speaker):
@@ -93,8 +133,21 @@ class _AiSpeaker(_Speaker):
             agent=self._player_agent,
             expected_output="A SpeakerOutput saying whether you have something to say.",
             output_pydantic=_SpeakerOutput,
-            guardrail=_reject_turn_order_commentary,
+            guardrail=self._build_guardrail(),
         )
+
+    def _build_guardrail(self):
+        reject_dead_player_as_active_suspect = _build_dead_player_guardrail(
+            self._state.names_of_dead_players()
+        )
+
+        def _guardrail(output: Any) -> tuple[bool, Any]:
+            passed, result = _reject_turn_order_commentary(output)
+            if not passed:
+                return passed, result
+            return reject_dead_player_as_active_suspect(output)
+
+        return _guardrail
 
     def _build_speak_prompt(self, addressed_by: DiscussionMessage | None) -> str:
         parts = [
