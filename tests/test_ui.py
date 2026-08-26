@@ -418,12 +418,12 @@ def test_format_completed_round_history_interleaves_night_strip_between_days():
         ],
     )
     history = format_completed_round_history(state)
-    # Day two's leading death shows up as a night-strip transition, and it
-    # comes before day two's own chapter header.
-    night_strip_index = history.index(ui.NIGHT_STRIP_CLASS)
+    # Day two's chapter header is the main label, with its leading death
+    # shown as a night-strip transition right after it.
     tuesday_index = history.index("### Tuesday")
-    assert night_strip_index < tuesday_index
-    assert "B" in history[night_strip_index:tuesday_index]
+    night_strip_index = history.index(ui.NIGHT_STRIP_CLASS)
+    assert tuesday_index < night_strip_index
+    assert "B" in history[tuesday_index:]
 
 
 def test_format_completed_round_history_renders_newest_day_first():

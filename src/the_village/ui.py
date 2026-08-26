@@ -598,9 +598,9 @@ def format_completed_round_history(state: GameState) -> str:
     for day in reversed(completed_days):
         weekday = WEEKDAYS[(day.day_number - 1) % 7]
         section = []
+        section.append(f"### {weekday}")
         if day.player_found_dead:
             section.append(_format_night_line(day, dead_day_index[id(day)]))
-        section.append(f"### {weekday}")
         transcript_lines = _format_transcript_lines(day.discussion, state)
         if transcript_lines:
             section.append("\n\n".join(transcript_lines))
