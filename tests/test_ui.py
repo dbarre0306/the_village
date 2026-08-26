@@ -879,7 +879,11 @@ async def test_cast_player_vote_reveals_continue_button_on_voting_complete():
         await events.__anext__()
 
 
-async def test_continue_to_next_day_surfaces_next_death_and_reopens_discussion_gate():
+async def test_continue_to_next_day_surfaces_next_death_and_starts_discussion_immediately():
+    # Only day one gates its death reveal and discussion behind a "Begin"
+    # click -- every later day starts them immediately once Continue
+    # resolves announce_death's wait_for_input(), the same gate
+    # begin_discussion resolves for day one.
     state = _voting_state()
     # VillageFlow.run_voting/run_next_night mutate this same shared
     # GameState and advance to a new day before putting the next morning's
@@ -887,35 +891,46 @@ async def test_continue_to_next_day_surfaces_next_death_and_reopens_discussion_g
     state.days.append(Day(day_number=3, player_found_dead="A"))
     next(p for p in state.players if p.name == "A").is_alive = False
     bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
     await bridge.outbox.put("A")
+    await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
 
     (
+        stream_bridge,
         status_update,
         alive_panel_value,
         deaths_panel_value,
         begin_discussion_update,
         discussion_title_update,
+        discussion_transcript_update,
+        _discussion_textbox_update,
+        _discussion_input_row_update,
         discussion_status_update,
         _history_log_update,
-        discussion_transcript_update,
         panel_death_line_update,
         continue_button_update,
     ) = await continue_to_next_day(bridge, state).__anext__()
 
+    assert await waiter == PlayerInput()
+    assert stream_bridge is bridge
     assert '>A</span>' not in alive_panel_value
     assert "A" in deaths_panel_value
-    assert begin_discussion_update["visible"] is True
-    # The panel's title is set to the new day immediately -- it's the death
-    # reveal and discussion that stay gated behind the next Begin click.
+    # The Begin button is day-one-only -- it stays hidden here.
+    assert begin_discussion_update["visible"] is False
     assert discussion_title_update["visible"] is True
     assert discussion_title_update["value"] == "### Wednesday"
     assert discussion_status_update["visible"] is False
-    assert panel_death_line_update["visible"] is False
+    # The death reveal and discussion start immediately -- no second click.
+    assert panel_death_line_update["visible"] is True
+    assert "A" in panel_death_line_update["value"]
+    assert discussion_transcript_update == ui.format_discussion_transcript(
+        state, limit=0, waiting=True
+    )
     # The just-finished round's vote result moves into history_log, so the
     # live vote_status widget (reused by the next round) is hidden instead
     # of continuing to show it.
     assert status_update["visible"] is False
-    assert discussion_transcript_update["value"] == ""
     assert continue_button_update["visible"] is False
 
 

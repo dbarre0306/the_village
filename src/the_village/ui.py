@@ -312,10 +312,12 @@ def _chronicle_css() -> str:
     }}
 
     /* The current round: a single fixed card near the top of the page --
-       titled with the day of the week, gated behind one "Begin" click that
-       reveals the night's death and the day's discussion in place. Finished
-       days pile up *below* it in history_log, so this card never moves and
-       there's never a hunt for where to click next. */
+       titled with the day of the week. Day one is gated behind one "Begin"
+       click that reveals the night's death and the day's discussion in
+       place; every later day starts the same reveal immediately on
+       Continue instead. Finished days pile up *below* it in history_log,
+       so this card never moves and there's never a hunt for where to
+       click next. */
     .{LIVE_DAY_CARD_CLASS} {{
         background: var(--parchment);
         border: 1px solid var(--parchment-edge);
@@ -929,26 +931,63 @@ async def continue_to_next_day(bridge: SessionBridge, state: GameState):
         # VillageFlow.run_next_night routes straight into the next night and
         # re-arms announce_death, so the very next outbox item is the
         # following morning's death announcement (a bare str) -- the same
-        # shape start_game() waits on for night one. It's only consumed here
-        # (to unblock the flow's own outbox draining); it isn't displayed
-        # until the player clicks Begin for the new round -- see
-        # begin_discussion.
+        # shape start_game() waits on for night one. The Begin button only
+        # gates day one; every later day's discussion starts immediately
+        # once this resolves announce_death's wait_for_input(), the same
+        # way begin_discussion does for day one -- see that function for
+        # why resolving right after this get() is safe (no click needed
+        # in between).
         death = await bridge.outbox.get()
         if isinstance(death, FlowFailed):
             raise gr.Error("Something went wrong, please try again.")
+        if not bridge.resolve_input(PlayerInput()):
+            return  # already resolved (e.g. double-click) -- no-op
+        bridge.revealed_discussion_messages = 0
         weekday = WEEKDAYS[(state.day_number - 1) % 7]
         yield (
+            bridge,
             gr.update(visible=False),  # vote_status
             format_alive_panel(state),
             format_deaths_panel(state),
-            gr.update(visible=True),  # begin_discussion_button
+            gr.update(visible=False),  # begin_discussion_button
             gr.update(value=f"### {weekday}", visible=True),  # discussion_title
+            format_discussion_transcript(
+                state, limit=bridge.revealed_discussion_messages, waiting=True
+            ),  # discussion_transcript
+            gr.update(),  # discussion_textbox
+            gr.update(),  # discussion_input_row
             gr.update(visible=False),  # discussion_status
             gr.update(value=format_completed_round_history(state)),  # history_log
-            gr.update(value=""),  # discussion_transcript
-            gr.update(visible=False),  # panel_death_line
+            gr.update(
+                value=format_latest_death_announcement(state), visible=True
+            ),  # panel_death_line
             gr.update(visible=False),  # continue_button
         )
+        async for update in _stream_bridge(bridge, state):
+            (
+                stream_bridge,
+                transcript,
+                textbox,
+                input_row,
+                status,
+                begin_button,
+                death_line,
+            ) = update
+            yield (
+                stream_bridge,
+                gr.update(),  # vote_status
+                gr.update(),  # alive_panel
+                gr.update(),  # deaths_panel
+                begin_button,
+                gr.update(),  # discussion_title
+                transcript,
+                textbox,
+                input_row,
+                status,
+                gr.update(),  # history_log
+                death_line,
+                gr.update(),  # continue_button
+            )
     except gr.Error:
         raise
     except Exception as exc:
@@ -1014,12 +1053,14 @@ def build_app() -> gr.Blocks:
             with gr.Column():
                 # The current round: one fixed card, always in this same
                 # spot. Its title is set once per round (by start_game or
-                # cast_player_vote) and stays visible; a single "Begin"
-                # click reveals that night's death and the day's discussion
-                # in place. When the round ends, its content is folded into
-                # history_log (below it, newest day first) and this card
-                # resets for the next day -- so a new day always appears to
-                # stack "above" the last one without ever moving itself.
+                # cast_player_vote) and stays visible. Only day one gates
+                # that night's death and discussion behind a "Begin" click
+                # -- every later day reveals them immediately once Continue
+                # is clicked (see continue_to_next_day). When the round
+                # ends, its content is folded into history_log (below it,
+                # newest day first) and this card resets for the next day
+                # -- so a new day always appears to stack "above" the last
+                # one without ever moving itself.
                 with gr.Column(elem_classes=[LIVE_DAY_CARD_CLASS]):
                     discussion_title = gr.Markdown(
                         visible=False, elem_classes=[DISCUSSION_TITLE_CLASS]
@@ -1167,14 +1208,17 @@ def build_app() -> gr.Blocks:
             fn=continue_to_next_day,
             inputs=[session_bridge, game_state],
             outputs=[
+                session_bridge,
                 vote_status,
                 alive_panel,
                 deaths_panel,
                 begin_discussion_button,
                 discussion_title,
+                discussion_transcript,
+                discussion_textbox,
+                discussion_input_row,
                 discussion_status,
                 history_log,
-                discussion_transcript,
                 panel_death_line,
                 continue_button,
             ],
