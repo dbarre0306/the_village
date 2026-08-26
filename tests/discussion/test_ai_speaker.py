@@ -94,6 +94,13 @@ def test_speak_prompt_forbids_treating_dead_players_as_active_suspects():
     assert "press" in prompt
 
 
+def test_speak_prompt_forbids_comparing_dead_players_credibility_to_living():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "credibility is still in question" in prompt
+
+
 async def test_returns_none_on_scheduled_decline():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")

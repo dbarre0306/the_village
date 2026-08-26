@@ -122,7 +122,11 @@ class _AiSpeaker(_Speaker):
             "anything. Players listed above as killed or lynched are dead and out of "
             "the game -- never treat them as suspects who still need to explain "
             "themselves or clarify their whereabouts, never press them for answers, "
-            "and never talk as if they might still speak or be voted on.",
+            "never talk as if they might still speak or be voted on, and never cite "
+            "their earlier claims alongside a living player's as if their story is "
+            "still being compared or their credibility is still in question -- their "
+            "part in the game is over, so leave them out of arguments about who is "
+            "currently suspicious.",
             "",
             "When referring to another player, always use their name -- never a pronoun.",
             "When referring to more than one player, always use all of their names -- never a pronoun.",
