@@ -102,6 +102,20 @@ def test_speak_prompt_forbids_comparing_dead_players_credibility_to_living():
     assert "credibility is still in question" in prompt
 
 
+def test_speak_prompt_forbids_saying_dead_players_are_evading_questions():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "evading, dodging, or avoiding questions" in prompt
+
+
+def test_speak_prompt_allows_discussing_the_dead_players_killing():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "still fine to discuss why or how a dead player died" in prompt
+
+
 def test_dead_player_guardrail_rejects_whereabouts_pressure():
     guardrail = _build_dead_player_guardrail(["Joshua"])
     output = SimpleNamespace(
@@ -130,6 +144,40 @@ def test_dead_player_guardrail_rejects_where_was_phrasing():
     )
     passed, result = guardrail(output)
     assert passed is False
+
+
+def test_dead_player_guardrail_rejects_evading_questions_phrasing():
+    guardrail = _build_dead_player_guardrail(["Don"])
+    output = SimpleNamespace(
+        pydantic=_SpeakerOutput(
+            has_something_to_say=True,
+            text=(
+                "We need to focus on why Don is evading questions while "
+                "making accusations."
+            ),
+        )
+    )
+    passed, result = guardrail(output)
+    assert passed is False
+    assert "Don" in result
+
+
+def test_dead_player_guardrail_accepts_discussion_of_the_killing_itself():
+    guardrail = _build_dead_player_guardrail(["Bruce"])
+    output = SimpleNamespace(
+        pydantic=_SpeakerOutput(
+            has_something_to_say=True,
+            text=(
+                "I was home alone reading last night, but that doesn't "
+                "explain why Bruce was killed. We need to think about who "
+                "might have had the opportunity to do this; can anyone "
+                "account for their whereabouts?"
+            ),
+        )
+    )
+    passed, result = guardrail(output)
+    assert passed is True
+    assert result is output
 
 
 def test_dead_player_guardrail_accepts_historical_mention():
@@ -204,6 +252,89 @@ async def test_records_message_and_resolved_address():
     assert message.text == "I saw B leave."
     assert message.addressed_to == "B"
     assert state.current_day.discussion == [message]
+
+
+def test_guardrail_logs_rejection(caplog):
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    guardrail = speaker._build_guardrail()
+    output = SimpleNamespace(
+        pydantic=_SpeakerOutput(
+            has_something_to_say=True,
+            text="It's strange that we haven't heard from Don yet.",
+        )
+    )
+    with caplog.at_level("WARNING"):
+        passed, result = guardrail(output)
+    assert passed is False
+    assert "A" in caplog.text
+    assert "guardrail" in caplog.text.lower()
+    assert result in caplog.text
+    assert "It's strange that we haven't heard from Don yet." in caplog.text
+
+
+def test_guardrail_does_not_log_on_pass(caplog):
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    guardrail = speaker._build_guardrail()
+    output = SimpleNamespace(
+        pydantic=_SpeakerOutput(
+            has_something_to_say=True,
+            text="I saw B leave the tavern late last night.",
+        )
+    )
+    with caplog.at_level("WARNING"):
+        passed, result = guardrail(output)
+    assert passed is True
+    assert caplog.text == ""
+
+
+async def test_returns_none_when_guardrail_keeps_failing_and_no_reply_owed():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    with patch(
+        "crewai.Crew.akickoff",
+        new=AsyncMock(
+            side_effect=Exception(
+                "Task failed guardrail validation after 3 retries. Last "
+                "error: Bruce is dead and out of the game."
+            )
+        ),
+    ):
+        message = await speaker.speak(addressed_by=None)
+    assert message is None
+    assert state.current_day.discussion == []
+
+
+async def test_records_decline_placeholder_when_guardrail_keeps_failing_and_reply_owed():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    asking = speaker._record_message("Where were you?", addressed_to="A")
+    with patch(
+        "crewai.Crew.akickoff",
+        new=AsyncMock(
+            side_effect=Exception("Task failed guardrail validation after 3 retries.")
+        ),
+    ):
+        message = await speaker.speak(addressed_by=asking)
+    assert message.player_name == "A"
+    assert message.text == DECLINED_TO_RESPOND
+    assert message.addressed_to is None
+
+
+async def test_reraises_non_guardrail_errors():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    with patch(
+        "crewai.Crew.akickoff",
+        new=AsyncMock(side_effect=RuntimeError("boom")),
+    ):
+        try:
+            await speaker.speak(addressed_by=None)
+        except RuntimeError as exc:
+            assert str(exc) == "boom"
+        else:
+            raise AssertionError("expected RuntimeError to propagate")
 
 
 async def test_discards_addressed_to_from_the_analyst_on_decline():

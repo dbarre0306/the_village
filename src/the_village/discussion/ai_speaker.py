@@ -1,3 +1,4 @@
+import logging
 import re
 from typing import Any, Final
 
@@ -8,6 +9,8 @@ from the_village.bridge import SessionBridge
 
 from .speaker import _AddressResolution, _Speaker, DECLINED_TO_RESPOND
 from the_village.state import DiscussionMessage, GameState, Player
+
+logger = logging.getLogger(__name__)
 
 _TURN_ORDER_COMMENTARY_PATTERN = re.compile(
     r"""
@@ -23,7 +26,8 @@ _DEAD_PLAYER_SUSPECT_LANGUAGE_PATTERN = re.compile(
     explain(?:s|ed|ing)? | whereabouts | \balibi\b | clarify | clarified |
     account\s+for | credibility | \bpress(?:ed|ing)?\b |
     hasn'?t\s+(?:fully\s+)?(?:explained|said|answered) |
-    avoid(?:s|ed|ing)?\s+questions | suspicious\s+of |
+    avoid(?:s|ed|ing)?\s+questions | evad(?:e|es|ed|ing)?\s+questions |
+    evasion | suspicious\s+of |
     should\s+(?:be\s+)?voted?\s+for | vote\s+for |
     where\s+(?:\w+\s+){0,2}(?:was|were) |
     still\s+need|needs?\s+to\s+answer
@@ -32,6 +36,22 @@ _DEAD_PLAYER_SUSPECT_LANGUAGE_PATTERN = re.compile(
 )
 
 _DEAD_PLAYER_WINDOW: Final = 80
+
+
+def _build_safe_death_explanation_pattern(name: str) -> re.Pattern[str]:
+    """Matches talk about *why/how the dead player died* -- e.g. "that doesn't
+    explain why Bruce was killed" -- which is legitimate murder-mystery
+    discussion, not pressuring the dead player themselves. Stripped out of a
+    window before the suspect-language check runs so it can't trigger a
+    false-positive rejection on its own."""
+    return re.compile(
+        rf"""
+        explain(?:s|ed|ing)?\s+(?:to\s+\w+\s+)?(?:why|how)\s+{re.escape(name)}\s+
+        (?:was\s+(?:killed|murdered|slain|targeted|attacked|lynched|found\s+dead)
+        | died | is\s+dead)
+        """,
+        re.IGNORECASE | re.VERBOSE,
+    )
 
 
 class _SpeakerOutput(BaseModel):
@@ -65,6 +85,10 @@ def _reject_turn_order_commentary(output: Any) -> tuple[bool, Any]:
 
 
 def _build_dead_player_guardrail(dead_names: list[str]):
+    safe_death_explanation_patterns = {
+        name: _build_safe_death_explanation_pattern(name) for name in dead_names
+    }
+
     def _reject_dead_player_as_active_suspect(output: Any) -> tuple[bool, Any]:
         speaker_output: _SpeakerOutput | None = output.pydantic
         text = speaker_output.text if speaker_output else None
@@ -75,6 +99,7 @@ def _build_dead_player_guardrail(dead_names: list[str]):
                 window_start = max(0, match.start() - _DEAD_PLAYER_WINDOW)
                 window_end = min(len(text), match.end() + _DEAD_PLAYER_WINDOW)
                 window = text[window_start:window_end]
+                window = safe_death_explanation_patterns[name].sub("", window)
                 if _DEAD_PLAYER_SUSPECT_LANGUAGE_PATTERN.search(window):
                     return (
                         False,
@@ -111,7 +136,20 @@ class _AiSpeaker(_Speaker):
         analyze_task = self._build_analyze_task(speak_task)
         crew = self._build_crew(speak_task, analyze_task)
 
-        result = await crew.akickoff()
+        try:
+            result = await crew.akickoff()
+        except Exception as exc:
+            if "guardrail" not in str(exc).lower():
+                raise
+            logger.warning(
+                "%s's turn kept failing guardrail validation and was skipped: %s",
+                self._player_name,
+                exc,
+            )
+            if addressed_by is None:
+                return None
+            return self._record_message(DECLINED_TO_RESPOND, addressed_to=None)
+
         speakerOutput = result.tasks_output[0].pydantic or _SpeakerOutput(
             has_something_to_say=False
         )
@@ -143,9 +181,19 @@ class _AiSpeaker(_Speaker):
 
         def _guardrail(output: Any) -> tuple[bool, Any]:
             passed, result = _reject_turn_order_commentary(output)
+            if passed:
+                passed, result = reject_dead_player_as_active_suspect(output)
             if not passed:
-                return passed, result
-            return reject_dead_player_as_active_suspect(output)
+                speaker_output: _SpeakerOutput | None = output.pydantic
+                failed_text = speaker_output.text if speaker_output else None
+                logger.warning(
+                    "%s's speaker output failed guardrail validation: "
+                    "reason=%s text=%r",
+                    self._player_name,
+                    result,
+                    failed_text,
+                )
+            return passed, result
 
         return _guardrail
 
@@ -181,11 +229,15 @@ class _AiSpeaker(_Speaker):
             "anything. Players listed above as killed or lynched are dead and out of "
             "the game -- never treat them as suspects who still need to explain "
             "themselves or clarify their whereabouts, never press them for answers, "
-            "never talk as if they might still speak or be voted on, and never cite "
-            "their earlier claims alongside a living player's as if their story is "
-            "still being compared or their credibility is still in question -- their "
-            "part in the game is over, so leave them out of arguments about who is "
-            "currently suspicious.",
+            "never say they are evading, dodging, or avoiding questions, never accuse "
+            "them of anything, never talk as if they might still speak or be voted "
+            "on, and never cite their earlier claims alongside a living player's as "
+            "if their story is still being compared or their credibility is still in "
+            "question -- their part in the game is over, so leave them out of "
+            "arguments about who is currently suspicious entirely. It's still fine "
+            "to discuss why or how a dead player died, and to ask living players "
+            "about their own whereabouts or actions -- that's discussing the "
+            "murder, not pressuring the dead player themselves.",
             "",
             "When referring to another player, always use their name -- never a pronoun.",
             "When referring to more than one player, always use all of their names -- never a pronoun.",
