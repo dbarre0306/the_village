@@ -45,6 +45,7 @@ VOTE_CANDIDATE_BUTTON_CLASS = "vote-candidate-button"
 HISTORY_LOG_CLASS = "history-log"
 NIGHT_STRIP_CLASS = "night-strip"
 LIVE_DAY_CARD_CLASS = "live-day-card"
+PANEL_DEATH_LINE_CLASS = "panel-death-line"
 MODERATOR_NOTICE_CLASS = "moderator-notice"
 
 # Matches roster.py's fixed count of 6 sampled AI villagers -- the vote
@@ -254,16 +255,38 @@ def _chronicle_css() -> str:
         display: none;
     }}
 
-    .{HISTORY_LOG_CLASS} h3,
-    .{DISCUSSION_TITLE_CLASS} {{
+    /* Gradio's own `.gradio-container-X .prose h1..h5` rule (two classes
+       deep) sets font-size/margin on every rendered heading and otherwise
+       beats a plain `.history-log h3` selector on specificity regardless of
+       source order -- our override has to be qualified with `.prose` too
+       (real DOM: each Markdown component's elem_class lands on both its
+       outer wrapper and its inner .prose div, so `.prose.history-log`
+       matches the same element) to actually win the cascade. */
+    .prose.{HISTORY_LOG_CLASS} h3,
+    .prose.{DISCUSSION_TITLE_CLASS} h3 {{
         font-family: 'Fraunces', Georgia, serif;
         font-weight: 600;
-        font-size: 1.5em;
+        font-size: 1.9em;
         letter-spacing: 0.01em;
+        margin: 24px 0 10px;
     }}
-    .{HISTORY_LOG_CLASS} h3 {{ margin: 24px 0 10px; }}
-    .{DISCUSSION_TITLE_CLASS}:not(.prose) {{ margin: 24px 0 10px; }}
-    .{HISTORY_LOG_CLASS} h3:first-child {{ margin-top: 8px; }}
+    .prose.{HISTORY_LOG_CLASS} h3:first-child,
+    .prose.{DISCUSSION_TITLE_CLASS} h3:first-child {{ margin-top: 8px; }}
+    /* The night banner sits in its own <p> (Markdown wraps the bare
+       night-strip span in a paragraph) directly under the day heading --
+       without this override the paragraph's own margin plus the banner's
+       default 20px top margin stack into a gap far wider than intended. */
+    .{HISTORY_LOG_CLASS} h3 + p:has(> .{NIGHT_STRIP_CLASS}) {{ margin-top: 0; }}
+    .{HISTORY_LOG_CLASS} h3 + p > .{NIGHT_STRIP_CLASS} {{ margin-top: 8px; }}
+    /* The live day card's death line (panel_death_line) is a separate
+       component from the day title, sitting one flex item away in
+       live-day-card's column -- the column's flex `gap` (16px) stacks with
+       the title's own margin-bottom and the banner's default top margin,
+       producing a much wider gap than the history-log equivalent above.
+       Pull it back up by exactly that stacked amount and match the same
+       tight top margin used there. */
+    .{PANEL_DEATH_LINE_CLASS}:not(.prose) {{ margin-top: -24px; }}
+    .{PANEL_DEATH_LINE_CLASS} .{NIGHT_STRIP_CLASS} {{ margin-top: 8px; }}
 
     .{HISTORY_LOG_CLASS} h5 {{
         font-family: 'IBM Plex Sans', sans-serif;
@@ -1070,7 +1093,9 @@ def build_app() -> gr.Blocks:
                     begin_discussion_button = gr.Button(
                         "Begin", elem_classes=[BEGIN_DISCUSSION_BUTTON_CLASS]
                     )
-                    panel_death_line = gr.Markdown(visible=False)
+                    panel_death_line = gr.Markdown(
+                        visible=False, elem_classes=[PANEL_DEATH_LINE_CLASS]
+                    )
                     discussion_transcript = gr.Markdown(
                         elem_classes=[DISCUSSION_TRANSCRIPT_CLASS]
                     )
