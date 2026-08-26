@@ -115,6 +115,36 @@ async def test_begin_discussion_resolves_the_death_gate_and_streams_to_completio
     assert len(outputs) == 2  # immediate "hide button" yield, then completion
 
 
+async def test_discussion_complete_status_value_differs_across_rounds():
+    # Regression test: discussion_status.change() is what auto-triggers
+    # start_voting (see build_app), and Gradio only fires .change() when a
+    # component's value actually changes. The notice text is otherwise a
+    # hardcoded constant, so a second round reusing the exact same value as
+    # the first would never fire .change() -- silently hanging the flow
+    # forever at run_discussion's post-discussion wait_for_input(), since
+    # nothing ever resolves it. Each round's rendered value must differ.
+    day_one_state = _discussion_state()
+    bridge_one = SessionBridge()
+    waiter_one = asyncio.create_task(bridge_one.wait_for_input())
+    await asyncio.sleep(0)
+    await bridge_one.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
+    outputs_one = [update async for update in begin_discussion(bridge_one, day_one_state)]
+    await waiter_one
+    status_one = outputs_one[-1][4]["value"]
+
+    day_two_state = _discussion_state()
+    day_two_state.days.append(Day(day_number=2, player_found_dead="A"))
+    bridge_two = SessionBridge()
+    waiter_two = asyncio.create_task(bridge_two.wait_for_input())
+    await asyncio.sleep(0)
+    await bridge_two.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
+    outputs_two = [update async for update in begin_discussion(bridge_two, day_two_state)]
+    await waiter_two
+    status_two = outputs_two[-1][4]["value"]
+
+    assert status_one != status_two
+
+
 async def test_begin_discussion_shows_waiting_indicator_before_first_speaker():
     bridge = SessionBridge()
     waiter = asyncio.create_task(bridge.wait_for_input())

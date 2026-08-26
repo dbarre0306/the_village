@@ -456,6 +456,25 @@ DEATH_MESSAGE_TEMPLATES = [
 ]
 
 
+def _discussion_complete_notice(state: GameState) -> str:
+    # discussion_status.change() is what auto-triggers start_voting (see
+    # build_app), and Gradio only fires .change() when the component's
+    # value actually changes. The visible text is otherwise a hardcoded
+    # constant, so a later round reusing the exact same string as an
+    # earlier one would never register as a change -- silently hanging the
+    # flow forever at run_discussion's post-discussion wait_for_input(). A
+    # hidden per-day marker keeps the value distinct round to round without
+    # altering what's rendered.
+    return (
+        f'<div class="{MODERATOR_NOTICE_CLASS}">'
+        "Moderator has stopped the discussion."
+        "</div>\n\n"
+        "---\n\n"
+        "Who do you think is a werewolf?\n\n"
+        f'<span style="display:none">day {state.day_number}</span>'
+    )
+
+
 def _dead_days(state: GameState) -> list[Day]:
     return [day for day in state.days if day.player_found_dead]
 
@@ -714,13 +733,7 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                     gr.update(visible=False),
                     gr.update(
                         visible=True,
-                        value=(
-                            f'<div class="{MODERATOR_NOTICE_CLASS}">'
-                            "Moderator has stopped the discussion."
-                            "</div>\n\n"
-                            "---\n\n"
-                            "Who do you think is a werewolf?"
-                        ),
+                        value=_discussion_complete_notice(state),
                     ),
                     gr.update(),
                     gr.update(),
