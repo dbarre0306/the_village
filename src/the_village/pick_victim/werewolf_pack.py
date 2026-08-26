@@ -84,7 +84,8 @@ class WereWolfPack:
                 state.format_history(),
                 "",
                 "Discuss privately with your fellow werewolves and decide who "
-                "the pack should kill tonight. Ground your reasoning in the "
+                "the pack should kill tonight. Try to determine the villager who "
+                "poses the greatest threat to you.  Ground your reasoning in the "
                 "Known facts and Discussion above.",
             ]
         )
