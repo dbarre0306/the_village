@@ -1,8 +1,8 @@
 import logging
-import re
-from typing import Any, Final
+from typing import Any
 
 from crewai import Agent, Crew, Process, Task
+from crewai.tasks.llm_guardrail import LLMGuardrail
 from pydantic import BaseModel, Field
 
 from the_village.bridge import SessionBridge
@@ -11,60 +11,6 @@ from .speaker import _AddressResolution, _Speaker, DECLINED_TO_RESPOND
 from the_village.state import DiscussionMessage, GameState, Player
 
 logger = logging.getLogger(__name__)
-
-_TURN_ORDER_COMMENTARY_PATTERN = re.compile(
-    r"""
-    (haven'?t|hasn'?t|has n[o']t)\s+(heard\s+from|spoken|said|talked|mentioned)
-    | no\s*one\s+(has\s+)?(said|spoken|mentioned|talked)
-    | (nobody|no\s+one)\s+has\s+(said|spoken|mentioned|talked)
-    """,
-    re.IGNORECASE | re.VERBOSE,
-)
-
-_DEAD_PLAYER_SUSPECT_LANGUAGE_PATTERN = re.compile(
-    r"""
-    explain(?:s|ed|ing)? | whereabouts | \balibi\b | clarify | clarified |
-    account\s+for | credibility | \bpress(?:ed|ing)?\b |
-    hasn'?t\s+(?:fully\s+)?(?:explained|said|answered) |
-    avoid(?:s|ed|ing)?\s+questions | evad(?:e|es|ed|ing)?\s+questions |
-    evasion | suspicious\s+of |
-    should\s+(?:be\s+)?voted?\s+for | vote\s+for |
-    where\s+(?:\w+\s+){0,2}(?:was|were) |
-    still\s+need|needs?\s+to\s+answer
-    """,
-    re.IGNORECASE | re.VERBOSE,
-)
-
-_UNFOUNDED_BEHAVIOR_CLAIM_PATTERN = re.compile(
-    r"""
-    (?:been\s+)?acting\s+(?:a\s+bit\s+|really\s+|so\s+)?
-        (?:odd|strange|weird|suspicious|off|nervous|shady)
-    | seem(?:s|ed)?\s+(?:a\s+bit\s+|really\s+|so\s+)?
-        (?:odd|strange|weird|suspicious|off|nervous|shady|focused\s+on)
-    | keeps?\s+(?:bringing\s+up|mentioning|watching|looking\s+at)
-    | behaving\s+(?:oddly|strangely|suspiciously)
-    | (?:her|his|their)\s+movements
-    """,
-    re.IGNORECASE | re.VERBOSE,
-)
-
-_DEAD_PLAYER_WINDOW: Final = 80
-
-
-def _build_safe_death_explanation_pattern(name: str) -> re.Pattern[str]:
-    """Matches talk about *why/how the dead player died* -- e.g. "that doesn't
-    explain why Bruce was killed" -- which is legitimate murder-mystery
-    discussion, not pressuring the dead player themselves. Stripped out of a
-    window before the suspect-language check runs so it can't trigger a
-    false-positive rejection on its own."""
-    return re.compile(
-        rf"""
-        explain(?:s|ed|ing)?\s+(?:to\s+\w+\s+)?(?:why|how)\s+{re.escape(name)}\s+
-        (?:was\s+(?:killed|murdered|slain|targeted|attacked|lynched|found\s+dead)
-        | died | is\s+dead)
-        """,
-        re.IGNORECASE | re.VERBOSE,
-    )
 
 
 class _SpeakerOutput(BaseModel):
@@ -81,65 +27,6 @@ class _SpeakerOutput(BaseModel):
             "two sentences -- brief, like real spoken dialogue."
         ),
     )
-
-
-def _reject_turn_order_commentary(output: Any) -> tuple[bool, Any]:
-    speaker_output: _SpeakerOutput | None = output.pydantic
-    text = speaker_output.text if speaker_output else None
-    if text and _TURN_ORDER_COMMENTARY_PATTERN.search(text):
-        return (
-            False,
-            "Your message comments on who has or hasn't spoken yet. Turn "
-            "order is random and not evidence of anything -- remove that "
-            "commentary and say only things grounded in Known facts or "
-            "what was actually said.",
-        )
-    return (True, output)
-
-
-def _reject_unfounded_behavior_claims(output: Any) -> tuple[bool, Any]:
-    speaker_output: _SpeakerOutput | None = output.pydantic
-    text = speaker_output.text if speaker_output else None
-    if text and _UNFOUNDED_BEHAVIOR_CLAIM_PATTERN.search(text):
-        return (
-            False,
-            "Your message makes a vague, unfounded claim about how another "
-            "player has been behaving (e.g. acting odd, seeming suspicious, "
-            "their movements). Only describe behavior that the discussion "
-            "above actually shows -- remove the vague claim or ground it in "
-            "something specific that was actually said.",
-        )
-    return (True, output)
-
-
-def _build_dead_player_guardrail(dead_names: list[str]):
-    safe_death_explanation_patterns = {
-        name: _build_safe_death_explanation_pattern(name) for name in dead_names
-    }
-
-    def _reject_dead_player_as_active_suspect(output: Any) -> tuple[bool, Any]:
-        speaker_output: _SpeakerOutput | None = output.pydantic
-        text = speaker_output.text if speaker_output else None
-        if not text:
-            return (True, output)
-        for name in dead_names:
-            for match in re.finditer(rf"\b{re.escape(name)}\b", text):
-                window_start = max(0, match.start() - _DEAD_PLAYER_WINDOW)
-                window_end = min(len(text), match.end() + _DEAD_PLAYER_WINDOW)
-                window = text[window_start:window_end]
-                window = safe_death_explanation_patterns[name].sub("", window)
-                if _DEAD_PLAYER_SUSPECT_LANGUAGE_PATTERN.search(window):
-                    return (
-                        False,
-                        f"{name} is dead and out of the game -- don't talk "
-                        "about them as a suspect who still needs to explain "
-                        "themselves, clarify their whereabouts, or answer "
-                        "questions. Remove that and only discuss currently "
-                        "living players as suspects.",
-                    )
-        return (True, output)
-
-    return _reject_dead_player_as_active_suspect
 
 
 class _AiSpeaker(_Speaker):
@@ -203,29 +90,109 @@ class _AiSpeaker(_Speaker):
         )
 
     def _build_guardrail(self):
-        reject_dead_player_as_active_suspect = _build_dead_player_guardrail(
-            self._state.names_of_dead_players()
+        """Wraps CrewAI's own LLMGuardrail rather than passing a plain string,
+        so each attempt's candidate text and rejection reason can be logged --
+        the string-guardrail path CrewAI runs internally exposes neither
+        through its events, which made a real production miss impossible to
+        diagnose from logs alone."""
+        llm_guardrail = LLMGuardrail(
+            description=self._build_guardrail_description(),
+            llm=self._player_agent.llm,
         )
+        attempt = 0
 
         def _guardrail(output: Any) -> tuple[bool, Any]:
-            passed, result = _reject_turn_order_commentary(output)
-            if passed:
-                passed, result = _reject_unfounded_behavior_claims(output)
-            if passed:
-                passed, result = reject_dead_player_as_active_suspect(output)
+            nonlocal attempt
+            passed, result = llm_guardrail(output)
             if not passed:
                 speaker_output: _SpeakerOutput | None = output.pydantic
-                failed_text = speaker_output.text if speaker_output else None
+                text = speaker_output.text if speaker_output else None
                 logger.warning(
-                    "%s's speaker output failed guardrail validation: "
-                    "reason=%s text=%r",
+                    "%s's speaker output failed the LLM guardrail (attempt "
+                    "%s): reason=%s text=%r",
                     self._player_name,
+                    attempt,
                     result,
-                    failed_text,
+                    text,
                 )
+            attempt += 1
             return passed, result
 
         return _guardrail
+
+    def _build_guardrail_description(self) -> str:
+        parts = [
+            "The task result is a JSON object with a `text` field containing "
+            "what the player said aloud. Judge only the content of that field "
+            "against the rules below.",
+            "If `has_something_to_say` is false, or the `text` field is "
+            "null or empty, that is always valid -- there is nothing to "
+            "judge.",
+            "Be conservative: reject only if the text explicitly and "
+            "directly violates a rule. Do not infer, assume, or read "
+            "between the lines -- if a violation would require guessing at "
+            "unstated intent, or the text is a generic question or request "
+            "addressed to the whole group (e.g. asking what everyone did, "
+            "or asking living players to share their whereabouts), it is "
+            "valid. When you do reject, quote the exact phrase that "
+            "violates the rule.",
+            "Reject only if the text explicitly comments on turn order -- "
+            "i.e. whether someone has spoken or been heard from at all "
+            '(e.g. "you haven\'t said anything," "no one has spoken yet," '
+            '"we haven\'t heard from you"). A statement that players '
+            "haven't provided some specific piece of information (e.g. an "
+            'alibi, an answer, evidence) is not turn-order commentary, '
+            'even when phrased as "none of you have..." or "no one has '
+            'provided..." -- that\'s a request for content, not a comment '
+            "on participation.",
+            "Recapping a turn-order comment that a specific player "
+            "actually made earlier in Discussion so far (e.g. \"Stephen "
+            "questioned Della's silence earlier\") is grounded reportage "
+            "of what was said, not a fresh turn-order complaint, and is "
+            "valid.",
+            "Reject only if the text explicitly asserts, about a specific "
+            "named player, that they have been acting oddly/strangely/"
+            "suspiciously/nervously/shady, or references their movements, "
+            "without grounding it in something specific. A generic "
+            "question or request directed at the group is not a behavior "
+            "claim about anyone.",
+        ]
+        dead_names = self._state.names_of_dead_players()
+        if dead_names:
+            names = ", ".join(dead_names)
+            first_name = dead_names[0]
+            verb = "is" if len(dead_names) == 1 else "are"
+            parts.append(
+                f"{names} {verb} dead and out of the game. The key test: "
+                "forbid only text that treats them as someone who could "
+                "still respond or act right now -- pressing them for new "
+                "whereabouts, alibi, or explanations; claiming they are "
+                "currently evading questions; comparing their ongoing "
+                "credibility or story to a living player's; or suggesting "
+                "they might still speak or be voted on. Generic statements "
+                'addressed to "everyone" or the group do not count as '
+                "naming them, since the living players obviously "
+                "understand that to mean the living players."
+            )
+            parts.append(
+                "Everything else about a dead player is valid: discussing "
+                "why or how they died; asking a living player about their "
+                "own whereabouts or actions, even when the dead player's "
+                'name or death is used only as a time reference (e.g. '
+                f'"where were you when {first_name} was killed", "do you '
+                f'have an alibi for when {first_name} died"); a flat '
+                "factual or emotional statement about them on its own "
+                f'(e.g. "{first_name} was killed", "this is terrible news '
+                f'about {first_name}"); and analyzing their own past '
+                "actions, statements, or apparent beliefs from while they "
+                "were alive -- including what they seemed to think about "
+                'another player, living or dead -- as investigative '
+                f'reasoning about what already happened (e.g. "Don was '
+                'quick to accuse Lisa -- maybe he was deflecting", "Don '
+                'seemed to think Lisa was acting suspicious"), as long as '
+                "it's grounded in Discussion so far or Known facts."
+            )
+        return "\n\n".join(parts)
 
     def _build_speak_prompt(self, addressed_by: DiscussionMessage | None) -> str:
         parts = [
@@ -245,34 +212,21 @@ class _AiSpeaker(_Speaker):
             "they're relevant.",
             "",
             "Only treat something as true if it's listed in Known facts above or was "
-            "actually said in Discussion so far -- never invent a sighting, alibi, or "
-            "claim about what another villager did or how they've been behaving. For "
-            'example, never say someone "seems focused on" or "keeps bringing up" '
-            'another player, and never say someone has "been acting odd/strange/'
-            'suspicious" or bring up their "movements" unless the discussion above '
-            "actually shows them doing that. Turn order is random and says nothing "
-            "about anyone's guilt or honesty, so never comment on who has or hasn't "
-            "spoken yet, or how much "
-            "someone has said. This also applies to the group as a whole -- never "
-            'claim something like "no one seems to remember where they were" or '
-            '"it\'s strange no one has said X" unless the discussion above actually '
-            "shows people being asked and failing to answer. If no one has addressed "
-            "a topic yet, that just means it hasn't come up -- it is not evidence of "
-            "anything. Players listed above as killed or lynched are dead and out of "
-            "the game -- never treat them as suspects who still need to explain "
-            "themselves or clarify their whereabouts, never press them for answers, "
-            "never say they are evading, dodging, or avoiding questions, never accuse "
-            "them of anything, never talk as if they might still speak or be voted "
-            "on, and never cite their earlier claims alongside a living player's as "
-            "if their story is still being compared or their credibility is still in "
-            "question -- their part in the game is over, so leave them out of "
-            "arguments about who is currently suspicious entirely. It's still fine "
-            "to discuss why or how a dead player died, and to ask living players "
-            "about their own whereabouts or actions -- that's discussing the "
-            "murder, not pressuring the dead player themselves.",
+            "actually said in Discussion so far -- never invent a claim about what "
+            "another villager did, said, or how they've been behaving, and never "
+            "comment on who has or hasn't spoken yet (turn order is random and "
+            "proves nothing).",
+            "",
+            "Players listed above as killed or lynched are dead and out of the "
+            "game -- never treat them as an active suspect (pressing them for "
+            "answers, comparing their story to a living player's, accusing "
+            "them, and so on). It's still fine to discuss why or how a dead "
+            "player died, and to ask living players about their own "
+            "whereabouts or actions.",
             "",
             "When referring to another player, always use their name -- never a pronoun.",
             "When referring to more than one player, always use all of their names -- never a pronoun.",
+            "When referring to every other player, always use a pronoun: them, they, etc",
             "",
             "Any statements, questions, or accusations must be consistent with what you previously said.",
             "",

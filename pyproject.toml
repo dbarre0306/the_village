@@ -22,6 +22,10 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+addopts = "-m 'not integration'"
+markers = [
+    "integration: hits a real LLM (slow, costs tokens); run explicitly with -m integration",
+]
 
 [tool.crewai]
 type = "flow"

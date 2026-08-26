@@ -22,7 +22,9 @@ class _HumanSpeaker(_Speaker):
         addressed_by: DiscussionMessage | None,
     ) -> DiscussionMessage | None:
         status = (
-            FlowStatus.WAITING_FOR_ANSWER if addressed_by else FlowStatus.WAITING_FOR_TURN
+            FlowStatus.WAITING_FOR_ANSWER
+            if addressed_by
+            else FlowStatus.WAITING_FOR_TURN
         )
         await self._bridge.outbox.put(status)
         player_input = await self._bridge.wait_for_input()

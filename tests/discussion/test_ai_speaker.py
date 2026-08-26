@@ -4,13 +4,7 @@ from unittest.mock import AsyncMock, patch
 from crewai import Agent
 
 from the_village.bridge import SessionBridge
-from the_village.discussion.ai_speaker import (
-    _AiSpeaker,
-    _build_dead_player_guardrail,
-    _reject_turn_order_commentary,
-    _reject_unfounded_behavior_claims,
-    _SpeakerOutput,
-)
+from the_village.discussion.ai_speaker import _AiSpeaker, _SpeakerOutput
 from the_village.discussion.speaker import DECLINED_TO_RESPOND, _AddressResolution
 from the_village.state import GameState, Player
 
@@ -47,45 +41,63 @@ def test_speaker_output_has_no_addressed_to_field():
     assert "addressed_to" not in _SpeakerOutput.model_fields
 
 
-def test_guardrail_rejects_comment_about_who_hasnt_spoken():
+def test_guardrail_logs_text_and_reason_on_rejection(caplog):
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    text = "Bruce hasn't explained his whereabouts."
     output = SimpleNamespace(
-        pydantic=_SpeakerOutput(
-            has_something_to_say=True,
-            text="It's strange that we haven't heard from Don yet.",
-        )
+        pydantic=_SpeakerOutput(has_something_to_say=True, text=text)
     )
-    passed, result = _reject_turn_order_commentary(output)
+    with patch("the_village.discussion.ai_speaker.LLMGuardrail") as mock_cls:
+        mock_cls.return_value = lambda o: (
+            False,
+            "Bruce is dead and out of the game.",
+        )
+        guardrail = speaker._build_guardrail()
+        with caplog.at_level("WARNING"):
+            passed, result = guardrail(output)
     assert passed is False
-    assert "turn order" in result.lower()
+    assert "A" in caplog.text
+    assert text in caplog.text
+    assert "Bruce is dead and out of the game." in caplog.text
 
 
-def test_guardrail_accepts_ordinary_speech():
+def test_guardrail_logs_increasing_attempt_number_across_retries(caplog):
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
     output = SimpleNamespace(
-        pydantic=_SpeakerOutput(
-            has_something_to_say=True,
-            text="I saw B leave the tavern late last night.",
-        )
+        pydantic=_SpeakerOutput(has_something_to_say=True, text="hi")
     )
-    passed, result = _reject_turn_order_commentary(output)
-    assert passed is True
-    assert result is output
+    with patch("the_village.discussion.ai_speaker.LLMGuardrail") as mock_cls:
+        mock_cls.return_value = lambda o: (False, "nope")
+        guardrail = speaker._build_guardrail()
+        with caplog.at_level("WARNING"):
+            guardrail(output)
+            guardrail(output)
+    assert "attempt 0" in caplog.text.lower()
+    assert "attempt 1" in caplog.text.lower()
 
 
-def test_guardrail_accepts_decline():
+def test_guardrail_does_not_log_when_llm_guardrail_passes(caplog):
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
     output = SimpleNamespace(
-        pydantic=_SpeakerOutput(has_something_to_say=False, text=None)
+        pydantic=_SpeakerOutput(has_something_to_say=True, text="hi")
     )
-    passed, result = _reject_turn_order_commentary(output)
+    with patch("the_village.discussion.ai_speaker.LLMGuardrail") as mock_cls:
+        mock_cls.return_value = lambda o: (True, o)
+        guardrail = speaker._build_guardrail()
+        with caplog.at_level("WARNING"):
+            passed, result = guardrail(output)
     assert passed is True
-    assert result is output
+    assert caplog.text == ""
 
 
-def test_speak_prompt_forbids_unfounded_behavior_claims():
+def test_speak_prompt_forbids_ungrounded_claims_and_turn_order_commentary():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
     prompt = speaker._build_speak_prompt(addressed_by=None)
-    assert 'seems focused on' in prompt
-    assert "been acting odd/strange/suspicious" in prompt
+    assert "never invent a claim about what another villager did, said, or how they've been behaving" in prompt
     assert "never comment on who has or hasn't spoken yet" in prompt
 
 
@@ -94,21 +106,7 @@ def test_speak_prompt_forbids_treating_dead_players_as_active_suspects():
     speaker = make_ai_speaker(state, "A")
     prompt = speaker._build_speak_prompt(addressed_by=None)
     assert "out of the game" in prompt
-    assert "press" in prompt
-
-
-def test_speak_prompt_forbids_comparing_dead_players_credibility_to_living():
-    state = make_discussion_state()
-    speaker = make_ai_speaker(state, "A")
-    prompt = speaker._build_speak_prompt(addressed_by=None)
-    assert "credibility is still in question" in prompt
-
-
-def test_speak_prompt_forbids_saying_dead_players_are_evading_questions():
-    state = make_discussion_state()
-    speaker = make_ai_speaker(state, "A")
-    prompt = speaker._build_speak_prompt(addressed_by=None)
-    assert "evading, dodging, or avoiding questions" in prompt
+    assert "never treat them as an active suspect" in prompt
 
 
 def test_speak_prompt_allows_discussing_the_dead_players_killing():
@@ -116,169 +114,6 @@ def test_speak_prompt_allows_discussing_the_dead_players_killing():
     speaker = make_ai_speaker(state, "A")
     prompt = speaker._build_speak_prompt(addressed_by=None)
     assert "still fine to discuss why or how a dead player died" in prompt
-
-
-def test_unfounded_behavior_guardrail_rejects_acting_odd_claim():
-    output = SimpleNamespace(
-        pydantic=_SpeakerOutput(
-            has_something_to_say=True,
-            text=(
-                "I can't help but think Lisa's been acting a bit odd lately. "
-                "Maybe we should look closer at her movements leading up to "
-                "Alice's murder."
-            ),
-        )
-    )
-    passed, result = _reject_unfounded_behavior_claims(output)
-    assert passed is False
-    assert "behaving" in result.lower()
-
-
-def test_unfounded_behavior_guardrail_rejects_seems_focused_on():
-    output = SimpleNamespace(
-        pydantic=_SpeakerOutput(
-            has_something_to_say=True,
-            text="B seems really focused on deflecting attention from himself.",
-        )
-    )
-    passed, result = _reject_unfounded_behavior_claims(output)
-    assert passed is False
-
-
-def test_unfounded_behavior_guardrail_rejects_keeps_bringing_up():
-    output = SimpleNamespace(
-        pydantic=_SpeakerOutput(
-            has_something_to_say=True,
-            text="B keeps bringing up Don, which feels intentional.",
-        )
-    )
-    passed, result = _reject_unfounded_behavior_claims(output)
-    assert passed is False
-
-
-def test_unfounded_behavior_guardrail_accepts_ordinary_speech():
-    output = SimpleNamespace(
-        pydantic=_SpeakerOutput(
-            has_something_to_say=True,
-            text="I saw B leave the tavern late last night.",
-        )
-    )
-    passed, result = _reject_unfounded_behavior_claims(output)
-    assert passed is True
-    assert result is output
-
-
-def test_unfounded_behavior_guardrail_accepts_decline():
-    output = SimpleNamespace(
-        pydantic=_SpeakerOutput(has_something_to_say=False, text=None)
-    )
-    passed, result = _reject_unfounded_behavior_claims(output)
-    assert passed is True
-    assert result is output
-
-
-def test_guardrail_pipeline_rejects_unfounded_behavior_claims():
-    state = make_discussion_state()
-    speaker = make_ai_speaker(state, "A")
-    guardrail = speaker._build_guardrail()
-    output = SimpleNamespace(
-        pydantic=_SpeakerOutput(
-            has_something_to_say=True,
-            text="B has been acting really suspicious lately.",
-        )
-    )
-    passed, result = guardrail(output)
-    assert passed is False
-
-
-def test_dead_player_guardrail_rejects_whereabouts_pressure():
-    guardrail = _build_dead_player_guardrail(["Joshua"])
-    output = SimpleNamespace(
-        pydantic=_SpeakerOutput(
-            has_something_to_say=True,
-            text=(
-                "It's concerning that Joshua is directing so much suspicion "
-                "toward Don while avoiding questions about his own "
-                "whereabouts today."
-            ),
-        )
-    )
-    passed, result = guardrail(output)
-    assert passed is False
-    assert "Joshua" in result
-    assert "dead" in result.lower()
-
-
-def test_dead_player_guardrail_rejects_where_was_phrasing():
-    guardrail = _build_dead_player_guardrail(["Joshua"])
-    output = SimpleNamespace(
-        pydantic=_SpeakerOutput(
-            has_something_to_say=True,
-            text="We need to look into where Joshua was today.",
-        )
-    )
-    passed, result = guardrail(output)
-    assert passed is False
-
-
-def test_dead_player_guardrail_rejects_evading_questions_phrasing():
-    guardrail = _build_dead_player_guardrail(["Don"])
-    output = SimpleNamespace(
-        pydantic=_SpeakerOutput(
-            has_something_to_say=True,
-            text=(
-                "We need to focus on why Don is evading questions while "
-                "making accusations."
-            ),
-        )
-    )
-    passed, result = guardrail(output)
-    assert passed is False
-    assert "Don" in result
-
-
-def test_dead_player_guardrail_accepts_discussion_of_the_killing_itself():
-    guardrail = _build_dead_player_guardrail(["Bruce"])
-    output = SimpleNamespace(
-        pydantic=_SpeakerOutput(
-            has_something_to_say=True,
-            text=(
-                "I was home alone reading last night, but that doesn't "
-                "explain why Bruce was killed. We need to think about who "
-                "might have had the opportunity to do this; can anyone "
-                "account for their whereabouts?"
-            ),
-        )
-    )
-    passed, result = guardrail(output)
-    assert passed is True
-    assert result is output
-
-
-def test_dead_player_guardrail_accepts_historical_mention():
-    guardrail = _build_dead_player_guardrail(["Joshua"])
-    output = SimpleNamespace(
-        pydantic=_SpeakerOutput(
-            has_something_to_say=True,
-            text="Joshua was killed by the werewolves last night.",
-        )
-    )
-    passed, result = guardrail(output)
-    assert passed is True
-    assert result is output
-
-
-def test_dead_player_guardrail_ignores_living_players():
-    guardrail = _build_dead_player_guardrail([])
-    output = SimpleNamespace(
-        pydantic=_SpeakerOutput(
-            has_something_to_say=True,
-            text="Where was Don last night? He needs to explain himself.",
-        )
-    )
-    passed, result = guardrail(output)
-    assert passed is True
-    assert result is output
 
 
 async def test_returns_none_on_scheduled_decline():
@@ -329,39 +164,102 @@ async def test_records_message_and_resolved_address():
     assert state.current_day.discussion == [message]
 
 
-def test_guardrail_logs_rejection(caplog):
+def test_guardrail_description_forbids_turn_order_commentary():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
-    guardrail = speaker._build_guardrail()
-    output = SimpleNamespace(
-        pydantic=_SpeakerOutput(
-            has_something_to_say=True,
-            text="It's strange that we haven't heard from Don yet.",
-        )
-    )
-    with caplog.at_level("WARNING"):
-        passed, result = guardrail(output)
-    assert passed is False
-    assert "A" in caplog.text
-    assert "guardrail" in caplog.text.lower()
-    assert result in caplog.text
-    assert "It's strange that we haven't heard from Don yet." in caplog.text
+    description = speaker._build_guardrail_description()
+    assert "turn order" in description.lower()
 
 
-def test_guardrail_does_not_log_on_pass(caplog):
+def test_guardrail_description_distinguishes_missing_content_from_turn_order():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
-    guardrail = speaker._build_guardrail()
-    output = SimpleNamespace(
-        pydantic=_SpeakerOutput(
-            has_something_to_say=True,
-            text="I saw B leave the tavern late last night.",
-        )
-    )
-    with caplog.at_level("WARNING"):
-        passed, result = guardrail(output)
-    assert passed is True
-    assert caplog.text == ""
+    description = speaker._build_guardrail_description()
+    assert "not turn-order commentary" in description.lower()
+    assert "request for content" in description.lower()
+
+
+def test_guardrail_description_allows_recapping_an_actual_turn_order_comment():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "grounded reportage" in description.lower()
+
+
+def test_guardrail_description_allows_empty_response():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "there is nothing to judge" in description.lower()
+
+
+def test_guardrail_description_forbids_unfounded_behavior_claims():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "acting oddly" in description.lower()
+    assert "without grounding it in something specific" in description.lower()
+
+
+def test_guardrail_description_names_the_dead_player():
+    state = make_discussion_state()
+    dead_player = next(p for p in state.players if p.name == "B")
+    dead_player.is_alive = False
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "B" in description
+    assert "dead" in description.lower()
+
+
+def test_guardrail_description_omits_dead_player_language_when_all_alive():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "dead" not in description.lower()
+
+
+def test_guardrail_description_allows_grounded_analysis_of_dead_players_past_actions():
+    state = make_discussion_state()
+    dead_player = next(p for p in state.players if p.name == "B")
+    dead_player.is_alive = False
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "investigative reasoning" in description.lower()
+
+
+def test_guardrail_description_allows_dead_players_opinion_about_another_player():
+    state = make_discussion_state()
+    dead_player = next(p for p in state.players if p.name == "B")
+    dead_player.is_alive = False
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "what they seemed to think about another player" in description.lower()
+
+
+def test_guardrail_description_allows_dead_player_as_time_reference():
+    state = make_discussion_state()
+    dead_player = next(p for p in state.players if p.name == "B")
+    dead_player.is_alive = False
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "time reference" in description.lower()
+    assert "alibi for when" in description.lower()
+
+
+def test_guardrail_description_allows_bare_factual_or_emotional_statement():
+    state = make_discussion_state()
+    dead_player = next(p for p in state.players if p.name == "B")
+    dead_player.is_alive = False
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "flat factual or emotional statement" in description.lower()
+
+
+def test_speak_task_guardrail_is_callable():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    task = speaker._build_speak_task(addressed_by=None)
+    assert callable(task.guardrail)
 
 
 async def test_returns_none_when_guardrail_keeps_failing_and_no_reply_owed():
