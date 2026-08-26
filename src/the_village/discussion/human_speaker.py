@@ -63,6 +63,7 @@ class _HumanSpeaker(_Speaker):
                 f'{self._player_name} just said: "{text}"',
                 "Who, if anyone, is this message directed at? A name that's "
                 "merely mentioned doesn't count -- only someone actually being "
-                "spoken to.",
+                "spoken to.  If the message is to everyone, there is no specific player "
+                "being addressed - leave addressed_to unset. ",
             ]
         )

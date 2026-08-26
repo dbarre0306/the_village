@@ -141,12 +141,12 @@ class _AiSpeaker(_Speaker):
             '(e.g. "you haven\'t said anything," "no one has spoken yet," '
             '"we haven\'t heard from you"). A statement that players '
             "haven't provided some specific piece of information (e.g. an "
-            'alibi, an answer, evidence) is not turn-order commentary, '
+            "alibi, an answer, evidence) is not turn-order commentary, "
             'even when phrased as "none of you have..." or "no one has '
-            'provided..." -- that\'s a request for content, not a comment '
+            "provided...\" -- that's a request for content, not a comment "
             "on participation.",
             "Recapping a turn-order comment that a specific player "
-            "actually made earlier in Discussion so far (e.g. \"Stephen "
+            'actually made earlier in Discussion so far (e.g. "Stephen '
             "questioned Della's silence earlier\") is grounded reportage "
             "of what was said, not a fresh turn-order complaint, and is "
             "valid.",
@@ -178,7 +178,7 @@ class _AiSpeaker(_Speaker):
                 "Everything else about a dead player is valid: discussing "
                 "why or how they died; asking a living player about their "
                 "own whereabouts or actions, even when the dead player's "
-                'name or death is used only as a time reference (e.g. '
+                "name or death is used only as a time reference (e.g. "
                 f'"where were you when {first_name} was killed", "do you '
                 f'have an alibi for when {first_name} died"); a flat '
                 "factual or emotional statement about them on its own "
@@ -186,7 +186,7 @@ class _AiSpeaker(_Speaker):
                 f'about {first_name}"); and analyzing their own past '
                 "actions, statements, or apparent beliefs from while they "
                 "were alive -- including what they seemed to think about "
-                'another player, living or dead -- as investigative '
+                "another player, living or dead -- as investigative "
                 f'reasoning about what already happened (e.g. "Don was '
                 'quick to accuse Lisa -- maybe he was deflecting", "Don '
                 'seemed to think Lisa was acting suspicious"), as long as '
@@ -267,7 +267,8 @@ class _AiSpeaker(_Speaker):
             f"Names of other players: {', '.join(self._names_of_other_living_players)}.",
             "",
             "Determine which of the other players, if anyone, the message you were just given as ",
-            "context is directed at. If the speaker had nothing to say, there ",
+            "context is directed at. If the message is to everyone, there is no specific player ",
+            "being addressed - leave addressed_to unset.  If the speaker had nothing to say, there ",
             "is nothing to analyze -- leave addressed_to unset.",
         ]
         return "\n".join(parts)
