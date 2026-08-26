@@ -86,6 +86,14 @@ def test_speak_prompt_forbids_unfounded_behavior_claims():
     assert "never comment on who has or hasn't spoken yet" in prompt
 
 
+def test_speak_prompt_forbids_treating_dead_players_as_active_suspects():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "out of the game" in prompt
+    assert "press" in prompt
+
+
 async def test_returns_none_on_scheduled_decline():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")

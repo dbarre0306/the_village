@@ -119,7 +119,10 @@ class _AiSpeaker(_Speaker):
             '"it\'s strange no one has said X" unless the discussion above actually '
             "shows people being asked and failing to answer. If no one has addressed "
             "a topic yet, that just means it hasn't come up -- it is not evidence of "
-            "anything.",
+            "anything. Players listed above as killed or lynched are dead and out of "
+            "the game -- never treat them as suspects who still need to explain "
+            "themselves or clarify their whereabouts, never press them for answers, "
+            "and never talk as if they might still speak or be voted on.",
             "",
             "When referring to another player, always use their name -- never a pronoun.",
             "When referring to more than one player, always use all of their names -- never a pronoun.",
