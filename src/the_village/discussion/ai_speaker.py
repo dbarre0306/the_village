@@ -108,6 +108,11 @@ class _AiSpeaker(_Speaker):
             "Discussion so far:",
             self._state.format_history(),
             "",
+            f"Today's discussion should focus on {self._state.current_day.player_found_dead}'s "
+            "killing, since that's what just happened -- but don't ignore the earlier "
+            "killings and lynchings listed in Known facts above; bring them up when "
+            "they're relevant.",
+            "",
             "Only treat something as true if it's listed in Known facts above or was "
             "actually said in Discussion so far -- never invent a sighting, alibi, or "
             "claim about what another villager did or how they've been behaving. For "
