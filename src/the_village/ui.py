@@ -694,7 +694,7 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                             "Moderator has stopped the discussion."
                             "</div>\n\n"
                             "---\n\n"
-                            "Who do you think is the werewolf that killed the victim?"
+                            "Who do you think is a werewolf?"
                         ),
                     ),
                     gr.update(),
