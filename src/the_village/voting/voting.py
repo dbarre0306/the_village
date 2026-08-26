@@ -16,6 +16,14 @@ class VoteOutcome(BaseModel):
     lynched: str | None = None
 
 
+def tally_votes(votes: list[VoteRecord]) -> dict[str, int]:
+    tally: dict[str, int] = {}
+    for vote in votes:
+        if vote.target_name is not None:
+            tally[vote.target_name] = tally.get(vote.target_name, 0) + 1
+    return tally
+
+
 class Voting:
 
     def __init__(
@@ -61,10 +69,7 @@ class Voting:
 
     def _tally(self) -> VoteOutcome:
         votes = self._state.current_day.votes
-        tally: dict[str, int] = {}
-        for vote in votes:
-            if vote.target_name is not None:
-                tally[vote.target_name] = tally.get(vote.target_name, 0) + 1
+        tally = tally_votes(votes)
 
         lynched: str | None = None
         if tally:

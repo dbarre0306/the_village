@@ -5,10 +5,19 @@ from unittest.mock import patch
 from crewai import Agent
 
 from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
-from the_village.state import Day, GameState, Player
+from the_village.state import Day, GameState, Player, VoteRecord
 from the_village.voting.ai_voter import _AiVoter, _VoteChoice
 from the_village.voting.human_voter import _HumanVoter
-from the_village.voting.voting import Voting
+from the_village.voting.voting import Voting, tally_votes
+
+
+def test_tally_votes_counts_targets_and_ignores_abstentions():
+    votes = [
+        VoteRecord(voter_name="Dana", target_name="A"),
+        VoteRecord(voter_name="B", target_name="A"),
+        VoteRecord(voter_name="C", target_name=None),
+    ]
+    assert tally_votes(votes) == {"A": 2}
 
 
 def _stub_agent(name: str) -> Agent:

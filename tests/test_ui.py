@@ -12,9 +12,10 @@ from the_village.ui import (
     cast_player_abstain,
     cast_player_vote,
     format_alive_panel,
+    format_completed_round_history,
     format_deaths_panel,
     format_discussion_transcript,
-    format_event_log,
+    format_latest_death_announcement,
     format_lynched_panel,
     format_vote_result,
     pass_discussion_turn,
@@ -36,19 +37,24 @@ def make_state_with_one_death() -> GameState:
     )
 
 
-def test_format_event_log_with_no_deaths():
-    state = GameState(user_player_name="Dana")
-    assert format_event_log(state) == "<strong>Nothing has happened yet.</strong>"
-
-
-def test_format_event_log_with_a_death():
-    state = make_state_with_one_death()
-    log = format_event_log(state)
-    assert (
-        log == "<strong>Tuesday morning: "
-        f'<span class="{ui.DEATH_LINE_CLASS}">'
-        "A was found dead, torn apart by a werewolf attack.</span></strong>"
+def test_format_latest_death_announcement_reports_only_the_most_recent_death():
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager", is_alive=False),
+        Player(name="B", player_type="villager", is_alive=False),
+    ]
+    state = GameState(
+        user_player_name="Dana",
+        players=players,
+        days=[
+            Day(day_number=1, player_found_dead="A"),
+            Day(day_number=2, player_found_dead="B"),
+        ],
     )
+    announcement = format_latest_death_announcement(state)
+    assert "Tuesday morning" in announcement
+    assert "B" in announcement
+    assert "A" not in announcement
 
 
 def test_format_deaths_panel_with_no_deaths():
@@ -101,7 +107,7 @@ async def test_begin_discussion_resolves_the_death_gate_and_streams_to_completio
     await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
 
     outputs = [
-        update async for update in begin_discussion(bridge, GameState())
+        update async for update in begin_discussion(bridge, _discussion_state())
     ]
 
     assert await waiter == PlayerInput()
@@ -115,7 +121,7 @@ async def test_begin_discussion_shows_waiting_indicator_before_first_speaker():
     await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
 
     outputs = [
-        update async for update in begin_discussion(bridge, GameState())
+        update async for update in begin_discussion(bridge, _discussion_state())
     ]
 
     assert "typing-indicator" in outputs[0][1]
@@ -169,7 +175,7 @@ async def test_begin_discussion_raises_gr_error_on_flow_failed():
     await bridge.outbox.put(FlowFailed(detail="boom"))
 
     with pytest.raises(gr.Error):
-        async for _ in begin_discussion(bridge, GameState()):
+        async for _ in begin_discussion(bridge, _discussion_state()):
             pass
 
     waiter.cancel()
@@ -182,6 +188,10 @@ def _discussion_state() -> GameState:
             Player(name="Dana", player_type="user"),
             Player(name="A", player_type="villager"),
         ],
+        # begin_discussion() always has a death to reveal by the time it's
+        # callable in production -- announce_death sets this before the
+        # Begin gate ever opens.
+        days=[Day(day_number=1, player_found_dead="A")],
     )
 
 
@@ -336,6 +346,130 @@ def test_format_discussion_transcript_with_no_messages():
     assert format_discussion_transcript(state) == ""
 
 
+def test_format_discussion_transcript_only_covers_the_current_day():
+    # Regression test: format_discussion_transcript previously concatenated
+    # every day's messages, so a new round's live transcript widget kept
+    # growing with prior rounds' content instead of showing just the round
+    # in progress (whose history now lives in format_completed_round_history
+    # instead).
+    state = GameState(
+        user_player_name="Dana",
+        players=[
+            Player(name="Dana", player_type="user"),
+            Player(name="A", player_type="villager"),
+        ],
+        days=[
+            Day(day_number=1, discussion=[DiscussionMessage(player_name="A", text="day one")]),
+            Day(day_number=2, discussion=[DiscussionMessage(player_name="A", text="day two")]),
+        ],
+    )
+    transcript = format_discussion_transcript(state)
+    assert "day two" in transcript
+    assert "day one" not in transcript
+
+
+def test_format_completed_round_history_with_no_completed_rounds():
+    state = GameState(user_player_name="Dana", days=[Day(day_number=1)])
+    assert format_completed_round_history(state) == ""
+
+
+def test_format_completed_round_history_includes_transcript_and_vote_result():
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager", is_alive=False),
+    ]
+    state = GameState(
+        user_player_name="Dana",
+        players=players,
+        days=[
+            Day(
+                day_number=1,
+                discussion=[DiscussionMessage(player_name="A", text="I'm innocent!")],
+                votes=[VoteRecord(voter_name="Dana", target_name="A")],
+                player_lynched="A",
+            ),
+            Day(day_number=2),  # the live, in-progress round -- excluded
+        ],
+    )
+    history = format_completed_round_history(state)
+    assert "### Monday" in history
+    assert "I'm innocent!" in history
+    assert "The Village Votes" in history
+    assert "was lynched by the village." in history
+    # This day has no player_found_dead set (only a lynching), so there's
+    # no night-strip to render for it.
+    assert ui.NIGHT_STRIP_CLASS not in history
+
+
+def test_format_completed_round_history_interleaves_night_strip_between_days():
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager", is_alive=False),
+        Player(name="B", player_type="villager", is_alive=False),
+    ]
+    state = GameState(
+        user_player_name="Dana",
+        players=players,
+        days=[
+            Day(day_number=1, player_found_dead="A"),
+            Day(day_number=2, player_found_dead="B"),
+            Day(day_number=3),  # the live, in-progress round -- excluded
+        ],
+    )
+    history = format_completed_round_history(state)
+    # Day two's leading death shows up as a night-strip transition, and it
+    # comes before day two's own chapter header.
+    night_strip_index = history.index(ui.NIGHT_STRIP_CLASS)
+    tuesday_index = history.index("### Tuesday")
+    assert night_strip_index < tuesday_index
+    assert "B" in history[night_strip_index:tuesday_index]
+
+
+def test_format_completed_round_history_renders_newest_day_first():
+    # The live card is a fixed position near the top of the page (see
+    # build_app), so a freshly completed day has to land immediately below
+    # it -- meaning newest-first here, not the chronological order a reader
+    # would expect from a book.
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager", is_alive=False),
+        Player(name="B", player_type="villager", is_alive=False),
+    ]
+    state = GameState(
+        user_player_name="Dana",
+        players=players,
+        days=[
+            Day(day_number=1, player_found_dead="A"),
+            Day(day_number=2, player_found_dead="B"),
+            Day(day_number=3),  # the live, in-progress round -- excluded
+        ],
+    )
+    history = format_completed_round_history(state)
+    assert history.index("### Tuesday") < history.index("### Monday")
+
+
+def test_format_completed_round_history_includes_day_ones_own_death():
+    # Regression: day one's death used to be excluded here as a special
+    # case -- now the live panel reveals every day's death uniformly
+    # (including day one's) behind its own Begin click, so the archive
+    # includes it too once that day is folded in.
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager", is_alive=False),
+    ]
+    state = GameState(
+        user_player_name="Dana",
+        players=players,
+        days=[
+            Day(day_number=1, player_found_dead="A"),
+            Day(day_number=2),  # the live, in-progress round -- excluded
+        ],
+    )
+    history = format_completed_round_history(state)
+    assert ui.NIGHT_STRIP_CLASS in history
+    assert "A" in history
+
+
 def test_format_discussion_transcript_lists_messages():
     state = GameState(
         user_player_name="Dana",
@@ -479,17 +613,14 @@ async def test_begin_voting_resolves_the_discussion_gate_and_reveals_the_ballot(
     outputs = [update async for update in begin_voting(bridge, state)]
 
     assert await waiter == PlayerInput()
-    # The immediate first yield is what actually sets the begin-button and
-    # title updates -- the second (final) yield leaves them as no-ops since
-    # nothing about them changes once WAITING_FOR_VOTE arrives.
-    _bridge0, begin_button_update, title_update, *_rest = outputs[0]
+    # The immediate first yield is what actually hides the begin-voting
+    # button -- the second (final) yield leaves it as a no-op since nothing
+    # about it changes once WAITING_FOR_VOTE arrives.
+    _bridge0, begin_button_update, *_rest = outputs[0]
     assert begin_button_update["visible"] is False
-    assert title_update["value"] == "### Monday's Voting"
-    assert title_update["visible"] is True
     (
         _bridge,
         _begin_button_update,
-        _title_update,
         row_update,
         *candidate_updates,
         status_update,
@@ -738,24 +869,32 @@ async def test_cast_player_vote_surfaces_next_death_and_reopens_discussion_gate(
     await events.__anext__()  # the VoteOutcome yield
     (
         _row_update,
-        _status_update,
+        status_update,
         alive_panel_value,
         _lynched_panel_value,
-        event_log_value,
         deaths_panel_value,
         begin_discussion_update,
         discussion_title_update,
-        voting_title_update,
         discussion_status_update,
+        _history_log_update,
+        discussion_transcript_update,
+        panel_death_line_update,
     ) = await events.__anext__()
 
     assert '>A</span>' not in alive_panel_value
-    assert "A" in event_log_value
     assert "A" in deaths_panel_value
     assert begin_discussion_update["visible"] is True
-    assert discussion_title_update["visible"] is False
-    assert voting_title_update["visible"] is False
+    # The panel's title is set to the new day immediately -- it's the death
+    # reveal and discussion that stay gated behind the next Begin click.
+    assert discussion_title_update["visible"] is True
+    assert discussion_title_update["value"] == "### Wednesday"
     assert discussion_status_update["visible"] is False
+    assert panel_death_line_update["visible"] is False
+    # The just-finished round's vote result moves into history_log, so the
+    # live vote_status widget (reused by the next round) is hidden instead
+    # of continuing to show it.
+    assert status_update["visible"] is False
+    assert discussion_transcript_update["value"] == ""
 
     with pytest.raises(StopAsyncIteration):
         await events.__anext__()
