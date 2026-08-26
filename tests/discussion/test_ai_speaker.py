@@ -8,6 +8,7 @@ from the_village.discussion.ai_speaker import (
     _AiSpeaker,
     _build_dead_player_guardrail,
     _reject_turn_order_commentary,
+    _reject_unfounded_behavior_claims,
     _SpeakerOutput,
 )
 from the_village.discussion.speaker import DECLINED_TO_RESPOND, _AddressResolution
@@ -84,6 +85,7 @@ def test_speak_prompt_forbids_unfounded_behavior_claims():
     speaker = make_ai_speaker(state, "A")
     prompt = speaker._build_speak_prompt(addressed_by=None)
     assert 'seems focused on' in prompt
+    assert "been acting odd/strange/suspicious" in prompt
     assert "never comment on who has or hasn't spoken yet" in prompt
 
 
@@ -114,6 +116,79 @@ def test_speak_prompt_allows_discussing_the_dead_players_killing():
     speaker = make_ai_speaker(state, "A")
     prompt = speaker._build_speak_prompt(addressed_by=None)
     assert "still fine to discuss why or how a dead player died" in prompt
+
+
+def test_unfounded_behavior_guardrail_rejects_acting_odd_claim():
+    output = SimpleNamespace(
+        pydantic=_SpeakerOutput(
+            has_something_to_say=True,
+            text=(
+                "I can't help but think Lisa's been acting a bit odd lately. "
+                "Maybe we should look closer at her movements leading up to "
+                "Alice's murder."
+            ),
+        )
+    )
+    passed, result = _reject_unfounded_behavior_claims(output)
+    assert passed is False
+    assert "behaving" in result.lower()
+
+
+def test_unfounded_behavior_guardrail_rejects_seems_focused_on():
+    output = SimpleNamespace(
+        pydantic=_SpeakerOutput(
+            has_something_to_say=True,
+            text="B seems really focused on deflecting attention from himself.",
+        )
+    )
+    passed, result = _reject_unfounded_behavior_claims(output)
+    assert passed is False
+
+
+def test_unfounded_behavior_guardrail_rejects_keeps_bringing_up():
+    output = SimpleNamespace(
+        pydantic=_SpeakerOutput(
+            has_something_to_say=True,
+            text="B keeps bringing up Don, which feels intentional.",
+        )
+    )
+    passed, result = _reject_unfounded_behavior_claims(output)
+    assert passed is False
+
+
+def test_unfounded_behavior_guardrail_accepts_ordinary_speech():
+    output = SimpleNamespace(
+        pydantic=_SpeakerOutput(
+            has_something_to_say=True,
+            text="I saw B leave the tavern late last night.",
+        )
+    )
+    passed, result = _reject_unfounded_behavior_claims(output)
+    assert passed is True
+    assert result is output
+
+
+def test_unfounded_behavior_guardrail_accepts_decline():
+    output = SimpleNamespace(
+        pydantic=_SpeakerOutput(has_something_to_say=False, text=None)
+    )
+    passed, result = _reject_unfounded_behavior_claims(output)
+    assert passed is True
+    assert result is output
+
+
+def test_guardrail_pipeline_rejects_unfounded_behavior_claims():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    guardrail = speaker._build_guardrail()
+    output = SimpleNamespace(
+        pydantic=_SpeakerOutput(
+            has_something_to_say=True,
+            text="B has been acting really suspicious lately.",
+        )
+    )
+    passed, result = guardrail(output)
+    assert passed is False
 
 
 def test_dead_player_guardrail_rejects_whereabouts_pressure():

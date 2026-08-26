@@ -35,6 +35,19 @@ _DEAD_PLAYER_SUSPECT_LANGUAGE_PATTERN = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 
+_UNFOUNDED_BEHAVIOR_CLAIM_PATTERN = re.compile(
+    r"""
+    (?:been\s+)?acting\s+(?:a\s+bit\s+|really\s+|so\s+)?
+        (?:odd|strange|weird|suspicious|off|nervous|shady)
+    | seem(?:s|ed)?\s+(?:a\s+bit\s+|really\s+|so\s+)?
+        (?:odd|strange|weird|suspicious|off|nervous|shady|focused\s+on)
+    | keeps?\s+(?:bringing\s+up|mentioning|watching|looking\s+at)
+    | behaving\s+(?:oddly|strangely|suspiciously)
+    | (?:her|his|their)\s+movements
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
 _DEAD_PLAYER_WINDOW: Final = 80
 
 
@@ -80,6 +93,21 @@ def _reject_turn_order_commentary(output: Any) -> tuple[bool, Any]:
             "order is random and not evidence of anything -- remove that "
             "commentary and say only things grounded in Known facts or "
             "what was actually said.",
+        )
+    return (True, output)
+
+
+def _reject_unfounded_behavior_claims(output: Any) -> tuple[bool, Any]:
+    speaker_output: _SpeakerOutput | None = output.pydantic
+    text = speaker_output.text if speaker_output else None
+    if text and _UNFOUNDED_BEHAVIOR_CLAIM_PATTERN.search(text):
+        return (
+            False,
+            "Your message makes a vague, unfounded claim about how another "
+            "player has been behaving (e.g. acting odd, seeming suspicious, "
+            "their movements). Only describe behavior that the discussion "
+            "above actually shows -- remove the vague claim or ground it in "
+            "something specific that was actually said.",
         )
     return (True, output)
 
@@ -182,6 +210,8 @@ class _AiSpeaker(_Speaker):
         def _guardrail(output: Any) -> tuple[bool, Any]:
             passed, result = _reject_turn_order_commentary(output)
             if passed:
+                passed, result = _reject_unfounded_behavior_claims(output)
+            if passed:
                 passed, result = reject_dead_player_as_active_suspect(output)
             if not passed:
                 speaker_output: _SpeakerOutput | None = output.pydantic
@@ -218,9 +248,11 @@ class _AiSpeaker(_Speaker):
             "actually said in Discussion so far -- never invent a sighting, alibi, or "
             "claim about what another villager did or how they've been behaving. For "
             'example, never say someone "seems focused on" or "keeps bringing up" '
-            "another player unless the discussion above actually shows them doing "
-            "that. Turn order is random and says nothing about anyone's guilt or "
-            "honesty, so never comment on who has or hasn't spoken yet, or how much "
+            'another player, and never say someone has "been acting odd/strange/'
+            'suspicious" or bring up their "movements" unless the discussion above '
+            "actually shows them doing that. Turn order is random and says nothing "
+            "about anyone's guilt or honesty, so never comment on who has or hasn't "
+            "spoken yet, or how much "
             "someone has said. This also applies to the group as a whole -- never "
             'claim something like "no one seems to remember where they were" or '
             '"it\'s strange no one has said X" unless the discussion above actually '
