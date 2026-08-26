@@ -327,6 +327,14 @@ def _chronicle_css() -> str:
     .{LIVE_DAY_CARD_CLASS} .{DISCUSSION_TITLE_CLASS}:first-child {{ margin-top: 8px; }}
     .{LIVE_DAY_CARD_CLASS} .{DISCUSSION_TRANSCRIPT_CLASS}:empty {{ display: none; }}
 
+    /* Separates the moderator's "discussion stopped" line from the
+       werewolf-guess prompt that follows it, in discussion_status. */
+    .{LIVE_DAY_CARD_CLASS} hr {{
+        border: none;
+        border-top: 2px dotted var(--parchment-edge);
+        margin: 16px 0;
+    }}
+
     .{DISCUSSION_TRANSCRIPT_CLASS} p {{ margin: 0 0 14px; }}
     """
 
@@ -667,7 +675,12 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                     gr.update(),
                     gr.update(visible=False),
                     gr.update(
-                        visible=True, value="The Moderator has ended the discussion."
+                        visible=True,
+                        value=(
+                            "Moderator has stopped the discussion.\n\n"
+                            "---\n\n"
+                            "Who do you think is the werewolf that killed the victim?"
+                        ),
                     ),
                     gr.update(),
                     gr.update(),
@@ -741,16 +754,13 @@ async def pass_discussion_turn(bridge: SessionBridge, state: GameState):
         yield update
 
 
-async def begin_voting(bridge: SessionBridge, state: GameState):
+async def start_voting(bridge: SessionBridge, state: GameState):
+    # Auto-triggered by discussion_status.change once discussion ends --
+    # there's no "Begin Voting" button to gate this anymore, so this only
+    # needs to resolve the flow's own wait_for_input() and start listening
+    # for the ballot to open.
     if not bridge.resolve_input(PlayerInput()):
-        return  # already resolved (e.g. double-click) -- no-op
-    yield (
-        bridge,
-        gr.update(visible=False),  # begin_voting_button
-        gr.update(),  # vote_button_row (shown once WAITING_FOR_VOTE arrives)
-        *([gr.update()] * MAX_VOTE_CANDIDATES),
-        gr.update(),  # vote_status
-    )
+        return  # already resolved (e.g. double-fire) -- no-op
     try:
         while True:
             item = await bridge.outbox.get()
@@ -759,7 +769,6 @@ async def begin_voting(bridge: SessionBridge, state: GameState):
             if item == FlowStatus.WAITING_FOR_VOTE:
                 yield (
                     bridge,
-                    gr.update(),
                     gr.update(visible=True),
                     *_vote_button_updates(state),
                     gr.update(visible=False),
@@ -772,7 +781,6 @@ async def begin_voting(bridge: SessionBridge, state: GameState):
                 # instead of silently discarding it.
                 yield (
                     bridge,
-                    gr.update(),
                     gr.update(),
                     *([gr.update()] * MAX_VOTE_CANDIDATES),
                     gr.update(value=format_vote_result(state, item), visible=True),
@@ -838,6 +846,7 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
         gr.update(),
         gr.update(),
         gr.update(),
+        gr.update(),
     )
     try:
         while True:
@@ -857,31 +866,26 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
                     gr.update(),
                     gr.update(),
                     gr.update(),
+                    gr.update(),
                 )
             elif item == FlowStatus.VOTING_COMPLETE:
-                # VillageFlow.run_next_night routes straight into the next
-                # night and re-arms announce_death, so the very next outbox
-                # item is the following morning's death announcement (a bare
-                # str) -- the same shape start_game() waits on for night
-                # one. It's only consumed here (to unblock the flow's own
-                # outbox draining); it isn't displayed until the player
-                # clicks Begin for the new round -- see begin_discussion.
-                death = await bridge.outbox.get()
-                if isinstance(death, FlowFailed):
-                    raise gr.Error("Something went wrong, please try again.")
-                weekday = WEEKDAYS[(state.day_number - 1) % 7]
+                # The outcome stays on screen (vote_status keeps showing who
+                # was lynched) until the player clicks Continue -- see
+                # continue_to_next_day, which is what actually advances the
+                # round.
                 yield (
                     gr.update(),
-                    gr.update(visible=False),
-                    format_alive_panel(state),
                     gr.update(),
-                    format_deaths_panel(state),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
                     gr.update(visible=True),
-                    gr.update(value=f"### {weekday}", visible=True),
-                    gr.update(visible=False),
-                    gr.update(value=format_completed_round_history(state)),
-                    gr.update(value=""),
-                    gr.update(visible=False),
                 )
                 return
     except gr.Error:
@@ -894,6 +898,38 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
 async def cast_player_abstain(bridge: SessionBridge, state: GameState):
     async for update in cast_player_vote(bridge, state, None):
         yield update
+
+
+async def continue_to_next_day(bridge: SessionBridge, state: GameState):
+    try:
+        # VillageFlow.run_next_night routes straight into the next night and
+        # re-arms announce_death, so the very next outbox item is the
+        # following morning's death announcement (a bare str) -- the same
+        # shape start_game() waits on for night one. It's only consumed here
+        # (to unblock the flow's own outbox draining); it isn't displayed
+        # until the player clicks Begin for the new round -- see
+        # begin_discussion.
+        death = await bridge.outbox.get()
+        if isinstance(death, FlowFailed):
+            raise gr.Error("Something went wrong, please try again.")
+        weekday = WEEKDAYS[(state.day_number - 1) % 7]
+        yield (
+            gr.update(visible=False),  # vote_status
+            format_alive_panel(state),
+            format_deaths_panel(state),
+            gr.update(visible=True),  # begin_discussion_button
+            gr.update(value=f"### {weekday}", visible=True),  # discussion_title
+            gr.update(visible=False),  # discussion_status
+            gr.update(value=format_completed_round_history(state)),  # history_log
+            gr.update(value=""),  # discussion_transcript
+            gr.update(visible=False),  # panel_death_line
+            gr.update(visible=False),  # continue_button
+        )
+    except gr.Error:
+        raise
+    except Exception as exc:
+        logger.exception("Advancing to the next day failed")
+        raise gr.Error("Something went wrong, please try again.") from exc
 
 
 async def start_game(player_name: str):
@@ -979,17 +1015,17 @@ def build_app() -> gr.Blocks:
                             send_button = gr.Button("Post Message")
                             pass_button = gr.Button("I have nothing to say")
                     discussion_status = gr.Markdown(visible=False)
-                    begin_voting_button = gr.Button(
-                        "Begin Voting",
-                        elem_classes=[BEGIN_DISCUSSION_BUTTON_CLASS],
-                        visible=False,
-                    )
                     with gr.Row(visible=False) as vote_button_row:
                         candidate_buttons = [
                             gr.Button(visible=False) for _ in range(MAX_VOTE_CANDIDATES)
                         ]
                         abstain_button = gr.Button("Abstain")
                     vote_status = gr.Markdown(visible=False)
+                    continue_button = gr.Button(
+                        "Continue",
+                        elem_classes=[BEGIN_DISCUSSION_BUTTON_CLASS],
+                        visible=False,
+                    )
                 # Every day once it's finished, newest first -- see
                 # format_completed_round_history.
                 history_log = gr.Markdown(elem_classes=[HISTORY_LOG_CLASS])
@@ -1052,23 +1088,19 @@ def build_app() -> gr.Blocks:
             concurrency_limit=None,
         )
 
-        begin_voting_button.click(
-            fn=begin_voting,
+        # Voting is no longer gated behind a "Begin Voting" click -- as soon
+        # as discussion_status's text changes (set by _stream_bridge when
+        # FlowStatus.DISCUSSION_COMPLETE arrives), the ballot starts opening
+        # on its own.
+        discussion_status.change(
+            fn=start_voting,
             inputs=[session_bridge, game_state],
             outputs=[
                 session_bridge,
-                begin_voting_button,
                 vote_button_row,
                 *candidate_buttons,
                 vote_status,
             ],
-            concurrency_limit=None,
-        )
-
-        discussion_status.change(
-            fn=lambda status_text: gr.update(visible=bool(status_text)),
-            inputs=[discussion_status],
-            outputs=[begin_voting_button],
         )
 
         vote_outputs = [
@@ -1083,6 +1115,7 @@ def build_app() -> gr.Blocks:
             history_log,
             discussion_transcript,
             panel_death_line,
+            continue_button,
         ]
 
         # SessionBridge.resolve_input()'s no-pending-future guard (see
@@ -1102,6 +1135,24 @@ def build_app() -> gr.Blocks:
             fn=cast_player_abstain,
             inputs=[session_bridge, game_state],
             outputs=vote_outputs,
+            concurrency_limit=None,
+        )
+
+        continue_button.click(
+            fn=continue_to_next_day,
+            inputs=[session_bridge, game_state],
+            outputs=[
+                vote_status,
+                alive_panel,
+                deaths_panel,
+                begin_discussion_button,
+                discussion_title,
+                discussion_status,
+                history_log,
+                discussion_transcript,
+                panel_death_line,
+                continue_button,
+            ],
             concurrency_limit=None,
         )
 

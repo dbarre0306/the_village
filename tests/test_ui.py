@@ -8,9 +8,9 @@ from the_village.bridge import FlowFailed, FlowStatus, PlayerInput, SessionBridg
 from the_village.state import Day, DiscussionMessage, GameState, Player, VoteRecord
 from the_village.ui import (
     begin_discussion,
-    begin_voting,
     cast_player_abstain,
     cast_player_vote,
+    continue_to_next_day,
     format_alive_panel,
     format_completed_round_history,
     format_deaths_panel,
@@ -21,6 +21,7 @@ from the_village.ui import (
     pass_discussion_turn,
     send_discussion_turn,
     start_game,
+    start_voting,
 )
 from the_village.voting import VoteOutcome
 
@@ -596,7 +597,10 @@ def test_vote_button_updates_labels_living_candidates_and_hides_extra_slots():
     assert updates[2].visible is False
 
 
-async def test_begin_voting_resolves_the_discussion_gate_and_reveals_the_ballot():
+async def test_start_voting_resolves_the_discussion_gate_and_reveals_the_ballot():
+    # start_voting is auto-triggered by discussion_status.change now that
+    # there's no "Begin Voting" button, so its only yield is the ballot
+    # reveal -- there's no button to hide first.
     state = GameState(
         user_player_name="Dana",
         players=[
@@ -610,21 +614,16 @@ async def test_begin_voting_resolves_the_discussion_gate_and_reveals_the_ballot(
     await asyncio.sleep(0)
     await bridge.outbox.put(FlowStatus.WAITING_FOR_VOTE)
 
-    outputs = [update async for update in begin_voting(bridge, state)]
+    outputs = [update async for update in start_voting(bridge, state)]
 
     assert await waiter == PlayerInput()
-    # The immediate first yield is what actually hides the begin-voting
-    # button -- the second (final) yield leaves it as a no-op since nothing
-    # about it changes once WAITING_FOR_VOTE arrives.
-    _bridge0, begin_button_update, *_rest = outputs[0]
-    assert begin_button_update["visible"] is False
+    assert len(outputs) == 1
     (
         _bridge,
-        _begin_button_update,
         row_update,
         *candidate_updates,
         status_update,
-    ) = outputs[-1]
+    ) = outputs[0]
     assert row_update["visible"] is True
     assert len(candidate_updates) == ui.MAX_VOTE_CANDIDATES
     assert candidate_updates[0].value == "A"
@@ -632,10 +631,10 @@ async def test_begin_voting_resolves_the_discussion_gate_and_reveals_the_ballot(
     assert status_update["visible"] is False
 
 
-async def test_begin_voting_returns_on_voting_complete_instead_of_hanging():
+async def test_start_voting_returns_on_voting_complete_instead_of_hanging():
     # Not reachable today (night.py always keeps the human alive through
     # night one), but if Voting.run() ever completes without a _HumanVoter
-    # ever pausing here, begin_voting must not block forever on an empty
+    # ever pausing here, start_voting must not block forever on an empty
     # queue waiting for a WAITING_FOR_VOTE that will never arrive.
     state = GameState(
         user_player_name="Dana",
@@ -650,15 +649,14 @@ async def test_begin_voting_returns_on_voting_complete_instead_of_hanging():
     await asyncio.sleep(0)
     await bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
 
-    outputs = [update async for update in begin_voting(bridge, state)]
+    outputs = [update async for update in start_voting(bridge, state)]
 
     assert await waiter == PlayerInput()
-    # Only the immediate first yield happens -- VOTING_COMPLETE returns
-    # without a second yield.
-    assert len(outputs) == 1
+    # VOTING_COMPLETE returns without ever yielding.
+    assert outputs == []
 
 
-async def test_begin_voting_renders_a_vote_outcome_before_voting_complete():
+async def test_start_voting_renders_a_vote_outcome_before_voting_complete():
     state = GameState(
         user_player_name="Dana",
         players=[
@@ -674,31 +672,31 @@ async def test_begin_voting_renders_a_vote_outcome_before_voting_complete():
     await bridge.outbox.put(outcome)
     await bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
 
-    outputs = [update async for update in begin_voting(bridge, state)]
+    outputs = [update async for update in start_voting(bridge, state)]
 
     assert await waiter == PlayerInput()
-    # First yield is the immediate ballot-hiding update; second is the
-    # rendered outcome; VOTING_COMPLETE then returns with no further yield.
-    assert len(outputs) == 2
-    *_rest, status_update = outputs[1]
+    # The outcome yield is the only one -- VOTING_COMPLETE then returns
+    # with no further yield.
+    assert len(outputs) == 1
+    *_rest, status_update = outputs[0]
     assert status_update["visible"] is True
     assert status_update["value"] == ui.format_vote_result(state, outcome)
 
 
-async def test_begin_voting_is_a_noop_when_already_resolved():
-    bridge = SessionBridge()  # nothing pending -- simulates a double-click
-    outputs = [update async for update in begin_voting(bridge, GameState())]
+async def test_start_voting_is_a_noop_when_already_resolved():
+    bridge = SessionBridge()  # nothing pending -- simulates a double-fire
+    outputs = [update async for update in start_voting(bridge, GameState())]
     assert outputs == []
 
 
-async def test_begin_voting_raises_gr_error_on_flow_failed():
+async def test_start_voting_raises_gr_error_on_flow_failed():
     bridge = SessionBridge()
     waiter = asyncio.create_task(bridge.wait_for_input())
     await asyncio.sleep(0)
     await bridge.outbox.put(FlowFailed(detail="boom"))
 
     with pytest.raises(gr.Error):
-        async for _ in begin_voting(bridge, GameState()):
+        async for _ in start_voting(bridge, GameState()):
             pass
 
     waiter.cancel()
@@ -844,7 +842,10 @@ async def test_cast_player_vote_reveals_outcome_and_updates_panels():
     await events.aclose()
 
 
-async def test_cast_player_vote_surfaces_next_death_and_reopens_discussion_gate():
+async def test_cast_player_vote_reveals_continue_button_on_voting_complete():
+    # The round no longer auto-advances once the outcome is known -- it
+    # stops with the Continue button revealed and waits for the player to
+    # click it (see continue_to_next_day below).
     state = _voting_state()
     bridge = SessionBridge()
     waiter = asyncio.create_task(bridge.wait_for_input())
@@ -852,26 +853,34 @@ async def test_cast_player_vote_surfaces_next_death_and_reopens_discussion_gate(
 
     outcome = VoteOutcome(day_number=2, votes=[], tally={}, lynched=None)
 
-    async def feed_next_night():
-        # VillageFlow.run_voting/run_next_night mutate this same shared
-        # GameState and advance to a new day before putting the next
-        # morning's death (a bare str) on the outbox -- mirror that here.
-        await bridge.outbox.put(outcome)
-        await bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
-        state.days.append(Day(day_number=3, player_found_dead="A"))
-        next(p for p in state.players if p.name == "A").is_alive = False
-        await bridge.outbox.put("A")
-
     events = cast_player_vote(bridge, state, None)
     await events.__anext__()  # the "Tallying..." yield; also resolves waiter
     await waiter
-    await feed_next_night()
+    await bridge.outbox.put(outcome)
+    await bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
     await events.__anext__()  # the VoteOutcome yield
+
+    final_event = await events.__anext__()
+    *_rest, continue_button_update = final_event
+    assert continue_button_update["visible"] is True
+
+    with pytest.raises(StopAsyncIteration):
+        await events.__anext__()
+
+
+async def test_continue_to_next_day_surfaces_next_death_and_reopens_discussion_gate():
+    state = _voting_state()
+    # VillageFlow.run_voting/run_next_night mutate this same shared
+    # GameState and advance to a new day before putting the next morning's
+    # death (a bare str) on the outbox -- mirror that here.
+    state.days.append(Day(day_number=3, player_found_dead="A"))
+    next(p for p in state.players if p.name == "A").is_alive = False
+    bridge = SessionBridge()
+    await bridge.outbox.put("A")
+
     (
-        _row_update,
         status_update,
         alive_panel_value,
-        _lynched_panel_value,
         deaths_panel_value,
         begin_discussion_update,
         discussion_title_update,
@@ -879,7 +888,8 @@ async def test_cast_player_vote_surfaces_next_death_and_reopens_discussion_gate(
         _history_log_update,
         discussion_transcript_update,
         panel_death_line_update,
-    ) = await events.__anext__()
+        continue_button_update,
+    ) = await continue_to_next_day(bridge, state).__anext__()
 
     assert '>A</span>' not in alive_panel_value
     assert "A" in deaths_panel_value
@@ -895,9 +905,7 @@ async def test_cast_player_vote_surfaces_next_death_and_reopens_discussion_gate(
     # of continuing to show it.
     assert status_update["visible"] is False
     assert discussion_transcript_update["value"] == ""
-
-    with pytest.raises(StopAsyncIteration):
-        await events.__anext__()
+    assert continue_button_update["visible"] is False
 
 
 async def test_cast_player_vote_raises_gr_error_on_flow_failed():
