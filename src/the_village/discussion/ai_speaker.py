@@ -99,6 +99,7 @@ class _AiSpeaker(_Speaker):
     def _build_speak_prompt(self, addressed_by: DiscussionMessage | None) -> str:
         parts = [
             "Known facts:",
+            self._state.format_current_day(),
             self._state.format_deaths(),
             self._state.format_lynchings(),
             "",

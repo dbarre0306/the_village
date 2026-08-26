@@ -119,6 +119,11 @@ def test_last_player_to_speak_returns_the_decliner_so_they_dont_speak_again_righ
     assert state.last_player_to_speak() == "Bram"
 
 
+def test_format_current_day_names_the_weekday_for_the_current_day_number():
+    state = GameState(user_player_name="Dana", days=[Day(day_number=2)])
+    assert state.format_current_day() == "Today is Tuesday."
+
+
 def test_format_deaths_with_no_deaths():
     state = GameState(user_player_name="Dana")
     assert state.format_deaths() == "(No one has been killed by the werewolves yet.)"

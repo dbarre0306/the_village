@@ -97,6 +97,9 @@ class GameState(BaseModel):
     def is_last_player_to_speak(self, player_name: str) -> bool:
         return player_name == self.last_player_to_speak()
 
+    def format_current_day(self) -> str:
+        return f"Today is {_weekday(self.day_number)}."
+
     def format_deaths(self) -> str:
         dead_days = [day for day in self.days if day.player_found_dead]
         if not dead_days:

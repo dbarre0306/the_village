@@ -58,6 +58,7 @@ class _AiVoter(_Voter):
         return "\n".join(
             [
                 "Known facts:",
+                self._state.format_current_day(),
                 self._state.format_deaths(),
                 self._state.format_lynchings(),
                 "",

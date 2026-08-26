@@ -74,6 +74,7 @@ class WereWolfPack:
         return "\n".join(
             [
                 "Known facts:",
+                state.format_current_day(),
                 state.format_deaths(),
                 state.format_lynchings(),
                 "",
