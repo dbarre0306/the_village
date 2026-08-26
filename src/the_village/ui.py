@@ -44,6 +44,7 @@ VOTE_CANDIDATE_BUTTON_CLASS = "vote-candidate-button"
 HISTORY_LOG_CLASS = "history-log"
 NIGHT_STRIP_CLASS = "night-strip"
 LIVE_DAY_CARD_CLASS = "live-day-card"
+MODERATOR_NOTICE_CLASS = "moderator-notice"
 
 # Matches roster.py's fixed count of 6 sampled AI villagers -- the vote
 # ballot pre-allocates this many button slots since Gradio's layout is
@@ -333,6 +334,16 @@ def _chronicle_css() -> str:
         border: none;
         border-top: 2px dotted var(--parchment-edge);
         margin: 16px 0;
+    }}
+
+    /* Makes the moderator's interruption read as a break in the scene,
+       not just another line of prose. */
+    .{MODERATOR_NOTICE_CLASS} {{
+        display: block;
+        font-family: 'Fraunces', Georgia, serif;
+        font-weight: 600;
+        font-size: 1.3em;
+        color: var(--ember);
     }}
 
     .{DISCUSSION_TRANSCRIPT_CLASS} p {{ margin: 0 0 14px; }}
@@ -677,7 +688,9 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                     gr.update(
                         visible=True,
                         value=(
-                            "Moderator has stopped the discussion.\n\n"
+                            f'<div class="{MODERATOR_NOTICE_CLASS}">'
+                            "Moderator has stopped the discussion."
+                            "</div>\n\n"
                             "---\n\n"
                             "Who do you think is the werewolf that killed the victim?"
                         ),
