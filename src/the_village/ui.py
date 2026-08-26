@@ -33,6 +33,7 @@ SPEAKER_COLORS = [
 RESULT_SCREEN_CLASS = "result-screen"
 DISCUSSION_TRANSCRIPT_CLASS = "discussion-transcript"
 DISCUSSION_INPUT_ROW_CLASS = "discussion-input-row"
+DISCUSSION_BUTTON_COLUMN_CLASS = "discussion-button-column"
 PINNED_BAR_CLASS = "pinned-bar"
 CHIP_LIST_CLASS = "chip-list"
 VILLAGER_CHIP_CLASS = "villager-chip"
@@ -151,6 +152,7 @@ def _layout_css() -> str:
     }}
     .{TYPING_INDICATOR_CLASS} span:nth-child(2) {{ animation-delay: 0.15s; }}
     .{TYPING_INDICATOR_CLASS} span:nth-child(3) {{ animation-delay: 0.3s; }}
+    .{DISCUSSION_BUTTON_COLUMN_CLASS} {{ --layout-gap: 4px; }}
     @keyframes typing-bounce {{
         0%, 80%, 100% {{ opacity: 0.4; transform: scale(0.8); }}
         40% {{ opacity: 1; transform: scale(1); }}
@@ -1076,7 +1078,9 @@ def build_app() -> gr.Blocks:
                         visible=False, elem_classes=[DISCUSSION_INPUT_ROW_CLASS]
                     ) as discussion_input_row:
                         discussion_textbox = gr.Textbox(label="Say something", scale=3)
-                        with gr.Column(scale=1):
+                        with gr.Column(
+                            scale=1, elem_classes=[DISCUSSION_BUTTON_COLUMN_CLASS]
+                        ):
                             send_button = gr.Button("Post Message")
                             pass_button = gr.Button("I have nothing to say")
                     discussion_status = gr.Markdown(visible=False)
