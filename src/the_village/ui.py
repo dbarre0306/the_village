@@ -785,23 +785,34 @@ async def start_voting(bridge: SessionBridge, state: GameState):
                     gr.update(visible=True),
                     *_vote_button_updates(state),
                     gr.update(visible=False),
+                    gr.update(),
                 )
                 return
             elif isinstance(item, VoteOutcome):
-                # Not reachable today (night.py always keeps the human alive
-                # through night one), but if Voting.run() ever completes
-                # without a _HumanVoter ever pausing here, show the outcome
-                # instead of silently discarding it.
+                # Happens once the human dies on an earlier night: no
+                # _HumanVoter ever pauses on WAITING_FOR_VOTE, so Voting.run()
+                # completes entirely from AI votes and this handler -- not
+                # cast_player_vote -- is the one draining the outcome. Show
+                # it instead of silently discarding it.
                 yield (
                     bridge,
                     gr.update(),
                     *([gr.update()] * MAX_VOTE_CANDIDATES),
                     gr.update(value=format_vote_result(state, item), visible=True),
+                    gr.update(),
                 )
             elif item == FlowStatus.VOTING_COMPLETE:
-                # Nothing left for this handler to show -- the vote is
-                # already fully decided. Return instead of looping forever
-                # on an empty queue.
+                # cast_player_vote is what normally reveals continue_button
+                # on VOTING_COMPLETE, but it never runs in the human-is-dead
+                # path above -- reveal it here instead, or the round has no
+                # way forward.
+                yield (
+                    bridge,
+                    gr.update(),
+                    *([gr.update()] * MAX_VOTE_CANDIDATES),
+                    gr.update(),
+                    gr.update(visible=True),
+                )
                 return
     except gr.Error:
         raise
@@ -1113,6 +1124,7 @@ def build_app() -> gr.Blocks:
                 vote_button_row,
                 *candidate_buttons,
                 vote_status,
+                continue_button,
             ],
         )
 

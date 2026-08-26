@@ -623,19 +623,25 @@ async def test_start_voting_resolves_the_discussion_gate_and_reveals_the_ballot(
         row_update,
         *candidate_updates,
         status_update,
+        continue_update,
     ) = outputs[0]
     assert row_update["visible"] is True
     assert len(candidate_updates) == ui.MAX_VOTE_CANDIDATES
     assert candidate_updates[0].value == "A"
     assert candidate_updates[0].visible is True
     assert status_update["visible"] is False
+    # continue_button is only revealed by cast_player_vote in this path
+    # (the human is alive and about to vote), so left untouched here.
+    assert continue_update == gr.update()
 
 
-async def test_start_voting_returns_on_voting_complete_instead_of_hanging():
-    # Not reachable today (night.py always keeps the human alive through
-    # night one), but if Voting.run() ever completes without a _HumanVoter
-    # ever pausing here, start_voting must not block forever on an empty
-    # queue waiting for a WAITING_FOR_VOTE that will never arrive.
+async def test_start_voting_reveals_continue_button_on_voting_complete_instead_of_hanging():
+    # Happens once the human dies on an earlier night: no _HumanVoter ever
+    # pauses here, so Voting.run() completes entirely from AI votes with no
+    # WAITING_FOR_VOTE ever arriving. start_voting must not block forever on
+    # the empty queue, and -- since cast_player_vote never runs in this path
+    # -- it must reveal continue_button itself or the round has no way
+    # forward.
     state = GameState(
         user_player_name="Dana",
         players=[
@@ -652,8 +658,9 @@ async def test_start_voting_returns_on_voting_complete_instead_of_hanging():
     outputs = [update async for update in start_voting(bridge, state)]
 
     assert await waiter == PlayerInput()
-    # VOTING_COMPLETE returns without ever yielding.
-    assert outputs == []
+    assert len(outputs) == 1
+    *_rest, continue_update = outputs[0]
+    assert continue_update["visible"] is True
 
 
 async def test_start_voting_renders_a_vote_outcome_before_voting_complete():
@@ -675,11 +682,15 @@ async def test_start_voting_renders_a_vote_outcome_before_voting_complete():
     outputs = [update async for update in start_voting(bridge, state)]
 
     assert await waiter == PlayerInput()
-    # The outcome yield is the only one -- VOTING_COMPLETE then returns
-    # with no further yield.
-    assert len(outputs) == 1
-    *_rest, status_update = outputs[0]
+    # The outcome yield shows the result; VOTING_COMPLETE then yields once
+    # more to reveal continue_button, since cast_player_vote never runs in
+    # this path to do it.
+    assert len(outputs) == 2
+    *_rest, status_update, _continue_update = outputs[0]
     assert status_update["visible"] is True
+    assert status_update["value"] == ui.format_vote_result(state, outcome)
+    *_rest, _status_update, continue_update = outputs[1]
+    assert continue_update["visible"] is True
     assert status_update["value"] == ui.format_vote_result(state, outcome)
 
 
