@@ -862,7 +862,10 @@ async def begin_discussion(bridge: SessionBridge, state: GameState):
         format_discussion_transcript(
             state, limit=bridge.revealed_discussion_messages, waiting=True
         ),
-        gr.update(),
+        gr.update(
+            label=f"{state.user_player_name}, please say something "
+            "(unless you have nothing to say)"
+        ),
         gr.update(),
         gr.update(),
         gr.update(visible=False),
@@ -1253,7 +1256,10 @@ def build_app() -> gr.Blocks:
                     with gr.Row(
                         visible=False, elem_classes=[DISCUSSION_INPUT_ROW_CLASS]
                     ) as discussion_input_row:
-                        discussion_textbox = gr.Textbox(label="Say something", scale=3)
+                        discussion_textbox = gr.Textbox(
+                            label="Say something (unless you have nothing to say)",
+                            scale=3,
+                        )
                         with gr.Column(
                             scale=1, elem_classes=[DISCUSSION_BUTTON_COLUMN_CLASS]
                         ):
