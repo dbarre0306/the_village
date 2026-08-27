@@ -7,6 +7,8 @@ from enum import Enum
 
 from crewai import Agent
 
+from the_village.state import Winner
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,12 +26,20 @@ class PlayerInput:
 
 
 @dataclass
+class GameOverResult:
+    winner: Winner
+    werewolf_names: list[str]
+
+
+@dataclass
 class SessionBridge:
     """The sole channel between a session's background Flow task and Gradio.
 
     `outbox` carries Flow -> UI updates (DiscussionMessage | VoteOutcome |
-    str | FlowStatus -- the death announcement is a bare str, the victim's
-    name; VoteOutcome is the vote reveal, put on once everyone has voted);
+    GameOverResult | str | FlowStatus -- the death announcement is a bare
+    str, the victim's name; VoteOutcome is the vote reveal, put on once
+    everyone has voted; GameOverResult is the last item ever put on a
+    given session's outbox, once a winner is decided);
     `pending_input` carries the one UI -> Flow value a paused Flow step is
     waiting on. Reused for every pause point across the whole session (the
     death-announcement gate, every discussion turn) rather than built fresh

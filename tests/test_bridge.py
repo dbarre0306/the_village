@@ -1,6 +1,6 @@
 import asyncio
 
-from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
+from the_village.bridge import FlowStatus, GameOverResult, PlayerInput, SessionBridge
 
 
 def test_flow_status_includes_voting_states():
@@ -70,3 +70,9 @@ async def test_run_flow_does_not_touch_the_outbox_on_success():
     await run_flow(fine(), bridge)
 
     assert bridge.outbox.empty()
+
+
+def test_game_over_result_carries_winner_and_werewolf_names():
+    result = GameOverResult(winner="villagers", werewolf_names=["A", "B"])
+    assert result.winner == "villagers"
+    assert result.werewolf_names == ["A", "B"]
