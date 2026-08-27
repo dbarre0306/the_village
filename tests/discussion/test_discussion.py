@@ -8,8 +8,8 @@ from crewai import Agent
 from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
 from the_village.discussion.ai_speaker import _SpeakerOutput
 from the_village.discussion.discussion import NUMBER_OF_ROUNDS, Discussion
-from the_village.discussion.speaker import DECLINED_TO_RESPOND, _AddressResolution
-from the_village.state import GameState, Player
+from the_village.discussion.speaker import DECLINED_TO_RESPOND, _AddressResolution, _Speaker
+from the_village.state import DiscussionMessage, GameState, Player
 
 
 def make_discussion_state() -> GameState:
@@ -223,3 +223,70 @@ async def test_pauses_for_player_and_resumes():
 
 def test_number_of_rounds_is_two():
     assert NUMBER_OF_ROUNDS == 2
+
+
+async def test_user_is_never_first_to_speak_at_the_start_of_a_discussion():
+    """Even when the shuffle would put the human player first, the human
+    must not open a discussion cold before hearing from anyone else."""
+    bridge = SessionBridge()
+    state = make_discussion_state()
+
+    speak_order: list[str] = []
+    original_speak = _Speaker.speak
+
+    async def recording_speak(self, addressed_by=None):
+        speak_order.append(self._player_name)
+        return await original_speak(self, addressed_by)
+
+    async def auto_pass(*_args, **_kwargs):
+        return PlayerInput(text=None)
+
+    with (
+        patch("crewai.Crew.akickoff", new=AsyncMock(return_value=_decline_result())),
+        patch.object(SessionBridge, "wait_for_input", auto_pass),
+        patch.object(_Speaker, "speak", recording_speak),
+        patch("the_village.discussion.discussion.NUMBER_OF_ROUNDS", 1),
+    ):
+        discussion = Discussion(
+            state=state,
+            bridge=bridge,
+            player_agents=_stub_agents(["A", "B", "C", "D"]),
+            analyst_agent=_stub_agent(),
+            rng=NoShuffleRandom(),
+        )
+        await discussion.run()
+
+    assert speak_order[0] != "Dana"
+
+
+def test_swap_never_lands_the_human_first_when_an_ai_alternative_exists():
+    """When the last-speaker-repeat rule forces a swap, the replacement
+    should prefer an AI player over the human -- otherwise the human can
+    randomly end up first as a side effect of a swap meant to displace
+    someone else."""
+    players = [
+        Player(name="A", player_type="villager"),
+        Player(name="Dana", player_type="user"),
+        Player(name="B", player_type="villager"),
+        Player(name="C", player_type="werewolf", is_pack_leader=True),
+        Player(name="D", player_type="werewolf"),
+    ]
+    state = GameState(user_player_name="Dana", players=players)
+    # "A" spoke last in a previous round, so "A" must not lead off this
+    # round -- with no shuffling, "A" is first and "Dana" is the very next
+    # candidate the naive swap would reach for.
+    state.current_day.discussion.append(
+        DiscussionMessage(player_name="A", text="I have a theory.")
+    )
+
+    discussion = Discussion(
+        state=state,
+        bridge=SessionBridge(),
+        player_agents=_stub_agents(["A", "B", "C", "D"]),
+        analyst_agent=_stub_agent(),
+        rng=NoShuffleRandom(),
+    )
+
+    ordered = discussion._build_shuffled_living_players()
+
+    assert ordered[0] != "Dana"

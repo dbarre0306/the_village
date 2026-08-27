@@ -109,19 +109,41 @@ class Discussion:
                 return []  # don't allow the player to speak again
             return living_players
 
-        # If a player was the last to speak in a previous round, that player
-        # must not be the first player to speak in this round.
-        if living_players[0] == last_player_to_speak:
+        disallowed_first_speaker = self._disallowed_first_speaker(
+            living_players, last_player_to_speak
+        )
+        if living_players[0] == disallowed_first_speaker:
             self._swap_first_player_with_another_player(living_players)
 
         return living_players
 
+    def _disallowed_first_speaker(
+        self, living_players: list[str], last_player_to_speak: str | None
+    ) -> str | None:
+        # If a player was the last to speak in a previous round, that player
+        # must not be the first player to speak in this round. And the human
+        # player must never open a discussion cold, before anyone else has
+        # spoken.
+        if last_player_to_speak is None and self._state.is_human_player(
+            living_players[0]
+        ):
+            return living_players[0]
+        return last_player_to_speak
+
     def _swap_first_player_with_another_player(self, living_players):
-        swap_index = self._rng.randrange(1, len(living_players))
+        swap_index = self._swap_candidate_index(living_players)
         living_players[0], living_players[swap_index] = (
             living_players[swap_index],
             living_players[0],
         )
+
+    def _swap_candidate_index(self, living_players: list[str]) -> int:
+        candidate_indexes = [
+            index
+            for index in range(1, len(living_players))
+            if not self._state.is_human_player(living_players[index])
+        ] or list(range(1, len(living_players)))
+        return candidate_indexes[self._rng.randrange(0, len(candidate_indexes))]
 
     async def _handle_replies(self, message: DiscussionMessage | None) -> None:
         if message is None:
