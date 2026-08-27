@@ -49,6 +49,7 @@ NIGHT_STRIP_CLASS = "night-strip"
 LIVE_DAY_CARD_CLASS = "live-day-card"
 PANEL_DEATH_LINE_CLASS = "panel-death-line"
 MODERATOR_NOTICE_CLASS = "moderator-notice"
+BALLOT_QUESTION_CLASS = "ballot-question"
 
 # Matches roster.py's fixed count of 6 sampled AI villagers -- the vote
 # ballot pre-allocates this many button slots since Gradio's layout is
@@ -197,6 +198,7 @@ def _chronicle_css() -> str:
         --ember: #b8452f;
         --moonlight: #c9d6e8;
         --lantern: #d99a3d;
+        --amethyst: #7a4988;
         --death-color: var(--ember);
     }}
 
@@ -295,7 +297,7 @@ def _chronicle_css() -> str:
     .{HISTORY_LOG_CLASS} h5,
     .{LIVE_DAY_CARD_CLASS} h5 {{
         font-family: 'IBM Plex Sans', sans-serif;
-        font-size: 0.78em;
+        font-size: 1.3em;
         font-weight: 600;
         letter-spacing: 0.08em;
         text-transform: uppercase;
@@ -378,6 +380,20 @@ def _chronicle_css() -> str:
         font-weight: 600;
         font-size: 1.3em;
         color: var(--ember);
+    }}
+
+    /* The ballot question: the moment the player has to point a finger at
+       someone. Larger and italic so it reads as a dramatic beat, not just
+       another line of body text. */
+    .{BALLOT_QUESTION_CLASS} {{
+        display: block;
+        font-family: 'Fraunces', Georgia, serif;
+        font-weight: 600;
+        font-style: italic;
+        font-size: 1.5em;
+        color: var(--amethyst);
+        text-align: center;
+        margin: 4px 0;
     }}
 
     .{DISCUSSION_TRANSCRIPT_CLASS} p {{ margin: 0 0 14px; }}
@@ -475,10 +491,16 @@ def _discussion_complete_notice(state: GameState) -> str:
     #
     # A dead human player never gets a ballot (Voting._build_voters only
     # builds voters for living players -- see voting.py), so asking them
-    # "Who do you think is a werewolf?" is misleading; skip the question
-    # entirely once they're out of the game.
+    # "The wolf is among you. Who do you think it is?" is misleading; skip
+    # the question entirely once they're out of the game.
     is_human_alive = state.user_player_name in state.names_of_living_players()
-    ballot_question = "Who do you think is a werewolf?\n\n" if is_human_alive else ""
+    ballot_question = (
+        f'<div class="{BALLOT_QUESTION_CLASS}">'
+        "The wolf is among you. Who do you think it is?"
+        "</div>\n\n"
+        if is_human_alive
+        else ""
+    )
     return (
         f'<div class="{MODERATOR_NOTICE_CLASS}">'
         "The moderator has stopped the discussion."
@@ -491,10 +513,10 @@ def _discussion_complete_notice(state: GameState) -> str:
 
 def _voting_results_notice(state: GameState) -> str:
     # Swaps in for _discussion_complete_notice's ballot question once the
-    # outcome is known -- the vote is over, so "Who do you think is a
-    # werewolf?" no longer applies and would otherwise sit there unchanged
-    # (discussion_status is not touched again after this) through the tally
-    # and past the final lynch result.
+    # outcome is known -- the vote is over, so "The wolf is among you. Who
+    # do you think it is?" no longer applies and would otherwise sit there
+    # unchanged (discussion_status is not touched again after this) through
+    # the tally and past the final lynch result.
     #
     # Rendered as the same h5 used for this label in the archived history
     # panel (see format_completed_round_history) -- picks up that rule's
