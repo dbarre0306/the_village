@@ -57,7 +57,8 @@ def test_day_number_does_not_advance():
 
 @pytest.mark.parametrize("seed", range(50))
 def test_player_is_never_killed_and_stays_alive_across_seeds(seed):
-    state = build_initial_roster("Alice", random.Random(seed))
+    players = build_initial_roster("Alice", random.Random(seed))
+    state = GameState(user_player_name="Alice", players=players)
     kill_first_victim(state, random.Random(seed))
 
     assert state.current_day.player_found_dead != "Alice"
