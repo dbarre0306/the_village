@@ -62,13 +62,14 @@ class _AiVoter(_Voter):
                 self._state.format_deaths(),
                 self._state.format_lynchings(),
                 "",
-                f"Living villagers you may vote to lynch: {', '.join(candidates)}.",
+                f"Living players you may vote to lynch: {', '.join(candidates)}.",
                 "",
                 "Discussion so far:",
                 self._state.format_history(),
                 "",
                 "It's time to vote. Decide who you believe is responsible for "
                 "the killing and vote to lynch them, or leave your vote unset "
-                "to abstain. You may not vote for yourself.",
+                "to abstain. You may not vote for yourself.  If you vote for someone "
+                "that player must be a living player.",
             ]
         )

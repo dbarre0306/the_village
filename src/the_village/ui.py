@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import NamedTuple
 
 import gradio as gr
 
@@ -43,6 +44,7 @@ DISCUSSION_TITLE_CLASS = "discussion-title"
 DEATH_LINE_CLASS = "death-line"
 VOTE_CANDIDATE_BUTTON_CLASS = "vote-candidate-button"
 HISTORY_LOG_CLASS = "history-log"
+DAY_PANEL_CLASS = "day-panel"
 NIGHT_STRIP_CLASS = "night-strip"
 LIVE_DAY_CARD_CLASS = "live-day-card"
 PANEL_DEATH_LINE_CLASS = "panel-death-line"
@@ -240,19 +242,19 @@ def _chronicle_css() -> str:
        :not(.prose) so it lands on the outer box exactly once instead of
        nesting two copies of the same box inside each other. */
 
-    /* The permanent record: every finished day, newest first, as a
-       continuous parchment scroll broken by chapter headers and
-       night-strip transitions. Hidden entirely until the first day has a
-       chapter to show. */
-    .{HISTORY_LOG_CLASS}:not(.prose) {{
+    /* The permanent record: every finished day, oldest first, as its own
+       parchment panel with a chapter header and night-strip transitions.
+       .history-log itself is just a transparent layout container -- hidden
+       entirely until the first day has a panel to show. */
+    .{HISTORY_LOG_CLASS}:not(.prose):not(:has(.{DAY_PANEL_CLASS})) {{
+        display: none;
+    }}
+    .{DAY_PANEL_CLASS} {{
         background: var(--parchment);
         border: 1px solid var(--parchment-edge);
         border-radius: 10px;
         padding: 4px 28px 20px;
         margin-bottom: 20px;
-    }}
-    .{HISTORY_LOG_CLASS}:not(.prose):not(:has(h3)) {{
-        display: none;
     }}
 
     /* Gradio's own `.gradio-container-X .prose h1..h5` rule (two classes
@@ -336,13 +338,14 @@ def _chronicle_css() -> str:
         opacity: 0.8;
     }}
 
-    /* The current round: a single fixed card near the top of the page --
-       titled with the day of the week. Day one is gated behind one "Begin"
-       click that reveals the night's death and the day's discussion in
-       place; every later day starts the same reveal immediately on
-       Continue instead. Finished days pile up *below* it in history_log,
-       so this card never moves and there's never a hunt for where to
-       click next. */
+    /* The current round: a single fixed card at the bottom of the page --
+       titled with the day of the week. Every day, including day one, is
+       gated behind a "Begin" click that reveals the night's death and the
+       day's discussion in place; once that round's voting completes, the
+       card resets straight into this same Begin-gated state for the next
+       day, no click needed to advance the round itself. Finished days pile
+       up *above* it in history_log, so this card never moves and there's
+       never a hunt for where to click next. */
     .{LIVE_DAY_CARD_CLASS} {{
         background: var(--parchment);
         border: 1px solid var(--parchment-edge);
@@ -378,10 +381,10 @@ def _chronicle_css() -> str:
 
 
 def _autoscroll_js() -> str:
-    # The live day card is pinned near the top of the page (see build_app)
-    # and finished days pile up *below* it, newest first -- so scrolling to
-    # the bottom of the page on new content would scroll past the live
-    # round into old history. Instead, follow the live card's own bottom
+    # The live day card sits at the bottom of the page (see build_app), with
+    # finished days piled up *above* it, each in its own panel oldest first
+    # -- so scrolling to a fixed spot on new content wouldn't track the live
+    # round as the page grows. Instead, follow the live card's own bottom
     # edge as it grows, the way a chat app follows its newest message.
     #
     # Discussion turns and the vote tally both stream in as separate yields,
@@ -465,12 +468,35 @@ def _discussion_complete_notice(state: GameState) -> str:
     # flow forever at run_discussion's post-discussion wait_for_input(). A
     # hidden per-day marker keeps the value distinct round to round without
     # altering what's rendered.
+    #
+    # A dead human player never gets a ballot (Voting._build_voters only
+    # builds voters for living players -- see voting.py), so asking them
+    # "Who do you think is a werewolf?" is misleading; skip the question
+    # entirely once they're out of the game.
+    is_human_alive = state.user_player_name in state.names_of_living_players()
+    ballot_question = "Who do you think is a werewolf?\n\n" if is_human_alive else ""
     return (
         f'<div class="{MODERATOR_NOTICE_CLASS}">'
         "Moderator has stopped the discussion."
         "</div>\n\n"
         "---\n\n"
-        "Who do you think is a werewolf?\n\n"
+        f"{ballot_question}"
+        f'<span style="display:none">day {state.day_number}</span>'
+    )
+
+
+def _voting_results_notice(state: GameState) -> str:
+    # Swaps in for _discussion_complete_notice's ballot question once the
+    # outcome is known -- the vote is over, so "Who do you think is a
+    # werewolf?" no longer applies and would otherwise sit there unchanged
+    # (discussion_status is not touched again after this) through the tally
+    # and past the final lynch result.
+    return (
+        f'<div class="{MODERATOR_NOTICE_CLASS}">'
+        "Moderator has stopped the discussion."
+        "</div>\n\n"
+        "---\n\n"
+        "Voting Results\n\n"
         f'<span style="display:none">day {state.day_number}</span>'
     )
 
@@ -631,15 +657,13 @@ def format_completed_round_history(state: GameState) -> str:
     # and for all rather than staying in the live widgets, which get reused
     # (and reset) for each new round.
     #
-    # Rendered newest-first (reversed) so a freshly completed day lands
-    # immediately below the live card -- the live card is a fixed position
-    # near the top of the page, so this is what makes each new day appear
-    # to stack "above" the last one instead of appending to the bottom of
-    # an ever-growing scroll.
+    # Rendered oldest-first (chronological), each day in its own panel --
+    # newly completed days append at the bottom of the stack rather than
+    # appearing directly under the live card.
     dead_day_index = {id(day): index for index, day in enumerate(_dead_days(state))}
     completed_days = state.days[:-1]
     blocks = []
-    for day in reversed(completed_days):
+    for day in completed_days:
         weekday = WEEKDAYS[(day.day_number - 1) % 7]
         section = []
         section.append(f"### {weekday}")
@@ -657,7 +681,13 @@ def format_completed_round_history(state: GameState) -> str:
             )
             section.append("##### The Village Votes")
             section.append(format_vote_result(state, outcome))
-        blocks.append("\n\n".join(section))
+        # Blank lines around the div tags are required so the markdown
+        # renderer treats them as a raw HTML block (per CommonMark's type-6
+        # HTML block rule) and resumes parsing the day's own markdown
+        # (headers, paragraphs) normally in between, instead of swallowing
+        # the whole panel as unparsed HTML.
+        panel_body = "\n\n".join(section)
+        blocks.append(f'<div class="{DAY_PANEL_CLASS}">\n\n{panel_body}\n\n</div>')
     return "\n\n".join(blocks)
 
 
@@ -715,9 +745,18 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                 item == FlowStatus.WAITING_FOR_TURN
                 or item == FlowStatus.WAITING_FOR_ANSWER
             ):
+                # Whose turn it is is now known -- it's the player's, about
+                # to type into the input row this same yield opens. Render
+                # the transcript without a waiting/pending placeholder so a
+                # stale "someone is about to speak" indicator (queued by
+                # begin_discussion's own first yield, for the earlier dead
+                # time before anyone's turn was known) doesn't linger
+                # alongside it.
                 yield (
                     bridge,
-                    gr.update(),
+                    format_discussion_transcript(
+                        state, limit=bridge.revealed_discussion_messages
+                    ),
                     gr.update(value=""),
                     gr.update(visible=True),
                     gr.update(),
@@ -754,6 +793,9 @@ async def begin_discussion(bridge: SessionBridge, state: GameState):
     # -- reset the reveal counter so a new round's pacing starts from that
     # day's first message rather than continuing the previous round's count.
     bridge.revealed_discussion_messages = 0
+    # A new round's discussion-complete notice needs to be able to trigger
+    # start_voting again -- see SessionBridge.voting_started.
+    bridge.voting_started = False
     yield (
         bridge,
         format_discussion_transcript(
@@ -764,8 +806,10 @@ async def begin_discussion(bridge: SessionBridge, state: GameState):
         gr.update(),
         gr.update(visible=False),
         # The panel's weekday title is already visible (set by start_game or
-        # cast_player_vote) -- clicking Begin only needs to reveal this
+        # _next_day_setup) -- clicking Begin only needs to reveal this
         # round's death and let the discussion below it start streaming.
+        # This is now day one's flow reused as-is for every day: nothing
+        # here needs to know or care which day it's being called for.
         gr.update(value=format_latest_death_announcement(state), visible=True),
     )
     async for update in _stream_bridge(bridge, state):
@@ -812,6 +856,26 @@ async def start_voting(bridge: SessionBridge, state: GameState):
     # there's no "Begin Voting" button to gate this anymore, so this only
     # needs to resolve the flow's own wait_for_input() and start listening
     # for the ballot to open.
+    #
+    # discussion_status.change() fires a second time later in the same
+    # round, when this function's own VoteOutcome branch rewrites
+    # discussion_status to the "Voting Results" label -- that spurious
+    # re-entry must return here, before resolve_input(), or it can resolve
+    # a *later* pause point (the next day's announce_death) that has
+    # nothing to do with it. See SessionBridge.voting_started.
+    if bridge.voting_started:
+        # A generator invocation that yields nothing at all (a bare return
+        # before any yield) appears to leave Gradio's bound outputs in a
+        # blank/pending state rather than untouched -- yielding an explicit
+        # no-op tuple, even though nothing here actually changes, avoids
+        # that. Matches this event's outputs list: session_bridge,
+        # vote_button_row, *candidate_buttons, vote_status,
+        # discussion_status, alive_panel, deaths_panel,
+        # begin_discussion_button, discussion_title, history_log,
+        # discussion_transcript, panel_death_line.
+        yield (gr.update(),) * (11 + MAX_VOTE_CANDIDATES)
+        return
+    bridge.voting_started = True
     if not bridge.resolve_input(PlayerInput()):
         return  # already resolved (e.g. double-fire) -- no-op
     try:
@@ -826,6 +890,13 @@ async def start_voting(bridge: SessionBridge, state: GameState):
                     *_vote_button_updates(state),
                     gr.update(visible=False),
                     gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
                 )
                 return
             elif isinstance(item, VoteOutcome):
@@ -833,25 +904,54 @@ async def start_voting(bridge: SessionBridge, state: GameState):
                 # _HumanVoter ever pauses on WAITING_FOR_VOTE, so Voting.run()
                 # completes entirely from AI votes and this handler -- not
                 # cast_player_vote -- is the one draining the outcome. Show
-                # it instead of silently discarding it.
+                # it instead of silently discarding it. discussion_status
+                # also needs the swap to _voting_results_notice here (it's
+                # the same swap cast_player_vote does in the human-alive
+                # path) since nothing else touches it in this path.
                 yield (
                     bridge,
                     gr.update(),
                     *([gr.update()] * MAX_VOTE_CANDIDATES),
                     gr.update(value=format_vote_result(state, item), visible=True),
+                    gr.update(value=_voting_results_notice(state)),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
                     gr.update(),
                 )
             elif item == FlowStatus.VOTING_COMPLETE:
-                # cast_player_vote is what normally reveals continue_button
-                # on VOTING_COMPLETE, but it never runs in the human-is-dead
-                # path above -- reveal it here instead, or the round has no
-                # way forward.
+                # cast_player_vote is what normally advances into the next
+                # day's Begin-gated panel on VOTING_COMPLETE, but it never
+                # runs in the human-is-dead path above -- do it here instead,
+                # or the round has no way forward. See _next_day_setup.
+                # _next_day_setup then blocks on the werewolf pack's
+                # kill-selection LLM call (via bridge.outbox.get()), which
+                # can take several seconds with nothing yielded in between --
+                # yield a no-op heartbeat first so the frontend has a fresh
+                # update to hold onto rather than sitting on a stale pending
+                # state that long.
+                yield (bridge,) + (gr.update(),) * 16
+                next_day = await _next_day_setup(bridge, state)
                 yield (
                     bridge,
                     gr.update(),
                     *([gr.update()] * MAX_VOTE_CANDIDATES),
-                    gr.update(),
-                    gr.update(visible=True),
+                    gr.update(visible=False),
+                    gr.update(visible=False),
+                    next_day.alive_panel,
+                    next_day.deaths_panel,
+                    # Gradio unmounts a hidden component entirely (see the
+                    # comment on discussion_input_row in _autofocus_js), so
+                    # its label has to be resent here, not just `visible`,
+                    # or the remounted button comes back blank.
+                    gr.update(value="Begin", visible=True),
+                    next_day.discussion_title,
+                    next_day.history_log,
+                    gr.update(value=""),
+                    gr.update(visible=False),
                 )
                 return
     except gr.Error:
@@ -893,11 +993,42 @@ def format_vote_result(state: GameState, outcome: VoteOutcome) -> str:
     return "\n\n".join(lines)
 
 
+class _NextDayPanel(NamedTuple):
+    alive_panel: str
+    deaths_panel: str
+    discussion_title: dict
+    history_log: dict
+
+
+async def _next_day_setup(bridge: SessionBridge, state: GameState) -> _NextDayPanel:
+    # VillageFlow.run_next_night routes straight into the next night and
+    # re-arms announce_death, so the very next outbox item is the following
+    # morning's death announcement (a bare str) -- the same shape start_game
+    # waits on for night one. Draining it here (without resolving anything)
+    # lets the flow keep running in the background while announce_death
+    # stays paused at its own wait_for_input() -- resolving that pause is
+    # begin_discussion_button.click's job, same as day one, so every day
+    # gates its death reveal and discussion behind the same "Begin" click.
+    death = await bridge.outbox.get()
+    if isinstance(death, FlowFailed):
+        raise gr.Error("Something went wrong, please try again.")
+    weekday = WEEKDAYS[(state.day_number - 1) % 7]
+    return _NextDayPanel(
+        alive_panel=format_alive_panel(state),
+        deaths_panel=format_deaths_panel(state),
+        discussion_title=gr.update(value=f"### {weekday}", visible=True),
+        history_log=gr.update(value=format_completed_round_history(state)),
+    )
+
+
 async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str | None):
     if not bridge.resolve_input(PlayerInput(text=target)):
         return
     # Hide the ballot the instant the player votes, before the AI kickoffs
-    # that Voting.run() drives inside the background Flow task resolve.
+    # that Voting.run() drives inside the background Flow task resolve. The
+    # ballot question is answered the moment the player picks -- swap it for
+    # the results label here too, rather than waiting for the outcome to
+    # arrive later.
     yield (
         gr.update(visible=False),
         gr.update(value="Tallying the votes…", visible=True),
@@ -906,8 +1037,7 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
         gr.update(),
         gr.update(),
         gr.update(),
-        gr.update(),
-        gr.update(),
+        gr.update(value=_voting_results_notice(state)),
         gr.update(),
         gr.update(),
         gr.update(),
@@ -926,30 +1056,38 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
                     gr.update(),
                     gr.update(),
                     gr.update(),
-                    gr.update(),
-                    gr.update(),
+                    gr.update(value=_voting_results_notice(state)),
                     gr.update(),
                     gr.update(),
                     gr.update(),
                 )
             elif item == FlowStatus.VOTING_COMPLETE:
-                # The outcome stays on screen (vote_status keeps showing who
-                # was lynched) until the player clicks Continue -- see
-                # continue_to_next_day, which is what actually advances the
-                # round.
+                # The round auto-advances into the next day's panel as soon
+                # as the outcome is known, in the same Begin-gated state day
+                # one starts in -- see _next_day_setup. _next_day_setup then
+                # blocks on the werewolf pack's kill-selection LLM call
+                # (via bridge.outbox.get()), which can take several seconds
+                # with nothing yielded in between -- yield a no-op heartbeat
+                # first so the frontend has a fresh update to hold onto
+                # rather than sitting on a stale pending state that long.
+                yield (gr.update(),) * 11
+                next_day = await _next_day_setup(bridge, state)
                 yield (
                     gr.update(),
+                    gr.update(visible=False),
+                    next_day.alive_panel,
                     gr.update(),
-                    gr.update(),
-                    gr.update(),
-                    gr.update(),
-                    gr.update(),
-                    gr.update(),
-                    gr.update(),
-                    gr.update(),
-                    gr.update(),
-                    gr.update(),
-                    gr.update(visible=True),
+                    next_day.deaths_panel,
+                    # Gradio unmounts a hidden component entirely (see the
+                    # comment on discussion_input_row in _autofocus_js), so
+                    # its label has to be resent here, not just `visible`,
+                    # or the remounted button comes back blank.
+                    gr.update(value="Begin", visible=True),
+                    next_day.discussion_title,
+                    gr.update(visible=False),
+                    next_day.history_log,
+                    gr.update(value=""),
+                    gr.update(visible=False),
                 )
                 return
     except gr.Error:
@@ -962,75 +1100,6 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
 async def cast_player_abstain(bridge: SessionBridge, state: GameState):
     async for update in cast_player_vote(bridge, state, None):
         yield update
-
-
-async def continue_to_next_day(bridge: SessionBridge, state: GameState):
-    try:
-        # VillageFlow.run_next_night routes straight into the next night and
-        # re-arms announce_death, so the very next outbox item is the
-        # following morning's death announcement (a bare str) -- the same
-        # shape start_game() waits on for night one. The Begin button only
-        # gates day one; every later day's discussion starts immediately
-        # once this resolves announce_death's wait_for_input(), the same
-        # way begin_discussion does for day one -- see that function for
-        # why resolving right after this get() is safe (no click needed
-        # in between).
-        death = await bridge.outbox.get()
-        if isinstance(death, FlowFailed):
-            raise gr.Error("Something went wrong, please try again.")
-        if not bridge.resolve_input(PlayerInput()):
-            return  # already resolved (e.g. double-click) -- no-op
-        bridge.revealed_discussion_messages = 0
-        weekday = WEEKDAYS[(state.day_number - 1) % 7]
-        yield (
-            bridge,
-            gr.update(visible=False),  # vote_status
-            format_alive_panel(state),
-            format_deaths_panel(state),
-            gr.update(visible=False),  # begin_discussion_button
-            gr.update(value=f"### {weekday}", visible=True),  # discussion_title
-            format_discussion_transcript(
-                state, limit=bridge.revealed_discussion_messages, waiting=True
-            ),  # discussion_transcript
-            gr.update(),  # discussion_textbox
-            gr.update(),  # discussion_input_row
-            gr.update(visible=False),  # discussion_status
-            gr.update(value=format_completed_round_history(state)),  # history_log
-            gr.update(
-                value=format_latest_death_announcement(state), visible=True
-            ),  # panel_death_line
-            gr.update(visible=False),  # continue_button
-        )
-        async for update in _stream_bridge(bridge, state):
-            (
-                stream_bridge,
-                transcript,
-                textbox,
-                input_row,
-                status,
-                begin_button,
-                death_line,
-            ) = update
-            yield (
-                stream_bridge,
-                gr.update(),  # vote_status
-                gr.update(),  # alive_panel
-                gr.update(),  # deaths_panel
-                begin_button,
-                gr.update(),  # discussion_title
-                transcript,
-                textbox,
-                input_row,
-                status,
-                gr.update(),  # history_log
-                death_line,
-                gr.update(),  # continue_button
-            )
-    except gr.Error:
-        raise
-    except Exception as exc:
-        logger.exception("Advancing to the next day failed")
-        raise gr.Error("Something went wrong, please try again.") from exc
 
 
 async def start_game(player_name: str):
@@ -1089,16 +1158,24 @@ def build_app() -> gr.Blocks:
                     gr.Markdown("### Lynched by the Village")
                     lynched_panel = gr.Markdown()
             with gr.Column():
+                # Every day once it's finished, each in its own panel,
+                # oldest first -- see format_completed_round_history. Placed
+                # above the live card so the whole page reads in
+                # chronological order top to bottom (Monday, Tuesday, ...,
+                # then whatever day is currently in progress).
+                history_log = gr.Markdown(elem_classes=[HISTORY_LOG_CLASS])
                 # The current round: one fixed card, always in this same
-                # spot. Its title is set once per round (by start_game or
-                # cast_player_vote) and stays visible. Only day one gates
-                # that night's death and discussion behind a "Begin" click
-                # -- every later day reveals them immediately once Continue
-                # is clicked (see continue_to_next_day). When the round
-                # ends, its content is folded into history_log (below it,
-                # newest day first) and this card resets for the next day
-                # -- so a new day always appears to stack "above" the last
-                # one without ever moving itself.
+                # spot at the bottom of the stack. Its title is set once per
+                # round (by start_game or _next_day_setup) and stays
+                # visible. Every day gates its death reveal and discussion
+                # behind the same "Begin" click -- as soon as the previous
+                # day's voting completes, this card resets into that same
+                # Begin-gated state automatically (see _next_day_setup), no
+                # click needed to advance the round itself. When a round
+                # ends, its content is folded into history_log (just above
+                # it, as its own panel appended at the end) -- so the live
+                # card stays put at the bottom while finished days pile up
+                # above it, oldest first.
                 with gr.Column(elem_classes=[LIVE_DAY_CARD_CLASS]):
                     discussion_title = gr.Markdown(
                         visible=False, elem_classes=[DISCUSSION_TITLE_CLASS]
@@ -1128,14 +1205,6 @@ def build_app() -> gr.Blocks:
                         ]
                         abstain_button = gr.Button("Abstain")
                     vote_status = gr.Markdown(visible=False)
-                    continue_button = gr.Button(
-                        "Continue",
-                        elem_classes=[BEGIN_DISCUSSION_BUTTON_CLASS],
-                        visible=False,
-                    )
-                # Every day once it's finished, newest first -- see
-                # format_completed_round_history.
-                history_log = gr.Markdown(elem_classes=[HISTORY_LOG_CLASS])
 
         start_button.click(
             fn=start_game,
@@ -1199,6 +1268,12 @@ def build_app() -> gr.Blocks:
         # as discussion_status's text changes (set by _stream_bridge when
         # FlowStatus.DISCUSSION_COMPLETE arrives), the ballot starts opening
         # on its own.
+        # discussion_status is both the trigger for this event and one of
+        # its outputs (see start_voting's VoteOutcome branch, which swaps
+        # its ballot question for a "Voting Results" label once the
+        # human-is-dead path's outcome is known) -- safe against re-firing
+        # itself since start_voting's bridge.resolve_input() guard makes any
+        # re-entry from that second .change() a no-op.
         discussion_status.change(
             fn=start_voting,
             inputs=[session_bridge, game_state],
@@ -1207,7 +1282,14 @@ def build_app() -> gr.Blocks:
                 vote_button_row,
                 *candidate_buttons,
                 vote_status,
-                continue_button,
+                discussion_status,
+                alive_panel,
+                deaths_panel,
+                begin_discussion_button,
+                discussion_title,
+                history_log,
+                discussion_transcript,
+                panel_death_line,
             ],
         )
 
@@ -1223,14 +1305,16 @@ def build_app() -> gr.Blocks:
             history_log,
             discussion_transcript,
             panel_death_line,
-            continue_button,
         ]
 
         # SessionBridge.resolve_input()'s no-pending-future guard (see
         # begin_discussion_button.click above) is what protects a
         # double-click here now -- cast_player_vote/cast_player_abstain no
         # longer call vote-casting logic directly, they resolve the bridge
-        # and let VillageFlow.run_voting drive the AI kickoffs.
+        # and let VillageFlow.run_voting drive the AI kickoffs. Once voting
+        # completes, cast_player_vote advances straight into the next day's
+        # Begin-gated panel itself (see _next_day_setup) -- there's no
+        # separate "Continue" step to wire up here anymore.
         for button in candidate_buttons:
             button.click(
                 fn=cast_player_vote,
@@ -1243,27 +1327,6 @@ def build_app() -> gr.Blocks:
             fn=cast_player_abstain,
             inputs=[session_bridge, game_state],
             outputs=vote_outputs,
-            concurrency_limit=None,
-        )
-
-        continue_button.click(
-            fn=continue_to_next_day,
-            inputs=[session_bridge, game_state],
-            outputs=[
-                session_bridge,
-                vote_status,
-                alive_panel,
-                deaths_panel,
-                begin_discussion_button,
-                discussion_title,
-                discussion_transcript,
-                discussion_textbox,
-                discussion_input_row,
-                discussion_status,
-                history_log,
-                panel_death_line,
-                continue_button,
-            ],
             concurrency_limit=None,
         )
 

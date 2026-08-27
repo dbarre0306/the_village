@@ -46,6 +46,16 @@ class SessionBridge:
     # to the live GameState -- and can race ahead of the UI's pacing --
     # without waiting for the UI to consume the corresponding outbox item.
     revealed_discussion_messages: int = 0
+    # ui.py's discussion_status.change() -> start_voting binding fires again
+    # when start_voting itself later rewrites discussion_status (swapping
+    # the ballot question for a "Voting Results" label once the outcome is
+    # known) -- that second, spurious invocation must not call
+    # resolve_input(): by the time it runs, a *later* pause point (the next
+    # day's announce_death) may already be the one pending, and resolving it
+    # with an empty PlayerInput() would silently skip that day's Begin gate.
+    # ui.py sets this True on a round's first (real) start_voting call and
+    # resets it False when begin_discussion starts the next round.
+    voting_started: bool = False
 
     async def wait_for_input(self) -> PlayerInput:
         self.pending_input = asyncio.get_event_loop().create_future()
