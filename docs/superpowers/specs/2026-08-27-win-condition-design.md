@@ -98,16 +98,19 @@ async def run_discussion(self):
 @listen(run_discussion)
 async def run_voting(self):
     outcome = await Voting(...).run()
-    self.state.winner = self.state.determine_winner()
-    if not self.state.winner:
-        self.state.advance_day()
     await self.bridge.outbox.put(outcome)
     await self.bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
 
 @router(run_voting)
-async def run_next_night(self):
+async def check_winner_after_lynching(self):
+    self.state.winner = self.state.determine_winner()
     if self.state.winner:
         return "game_over"
+    self.state.advance_day()
+    return "continue_night"
+
+@router("continue_night")
+async def run_next_night(self):
     await WereWolfPack(self.state, self._player_agents).kill_next_victim()
     return "night_fell"
 
@@ -121,7 +124,10 @@ async def finish_game(self):
     )
 ```
 
-This checks the winner at exactly the two places a death happens:
+This checks the winner at exactly the two places a death happens, with a
+dedicated router for each — `check_winner_after_kill` and
+`check_winner_after_lynching` are deliberately symmetric: same shape,
+same responsibility, differing only in which death they follow:
 
 - **Night kill** — `check_winner_after_kill` runs right after
   `announce_death`'s pause resolves (i.e. after the player clicks
@@ -129,13 +135,18 @@ This checks the winner at exactly the two places a death happens:
   per the confirmed UX. If no winner, it emits `"discussion"` (renamed
   from an earlier `"continue_after_kill"` working name) and
   `run_discussion` proceeds exactly as before.
-- **Lynch** — `run_voting` computes the winner immediately after tallying
-  and, only when there isn't one, advances the day (so a game-ending
-  lynch doesn't create a dangling extra `Day`). `run_next_night`'s router
-  then branches on the stored `state.winner` before doing the next
-  night's kill — matching the confirmed UX where a lynch-triggered ending
-  resolves right after the vote result, with no extra click (mirroring
-  how voting already auto-advances to the next day today).
+- **Lynch** — `run_voting` goes back to doing only what its name says:
+  tally the vote and report the outcome. `check_winner_after_lynching`
+  determines the winner immediately afterward and, only when there isn't
+  one, advances the day (so a game-ending lynch doesn't create a
+  dangling extra `Day`) and hands off to `run_next_night` via a
+  dedicated `"continue_night"` signal — matching the confirmed UX where
+  a lynch-triggered ending resolves right after the vote result, with no
+  extra click (mirroring how voting already auto-advances to the next
+  day today). This also guards `run_next_night` from ever running with
+  zero living werewolves: `determine_winner()` returns `"villagers"`
+  whenever none remain, so `"continue_night"` is only ever emitted when
+  at least one werewolf is still alive to act.
 
 `finish_game` is the flow's new terminal step; nothing listens after it,
 so `VillageFlow.kickoff_async()` now completes naturally once a winner is
