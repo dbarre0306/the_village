@@ -7,6 +7,7 @@ import gradio as gr
 from the_village.bridge import (
     FlowFailed,
     FlowStatus,
+    GameOverResult,
     PlayerInput,
     SessionBridge,
     run_flow,
@@ -680,18 +681,24 @@ def format_discussion_transcript(
     return "\n\n".join(lines)
 
 
-def format_completed_round_history(state: GameState) -> str:
-    # state.current_day (the live, still-in-progress round) is excluded --
-    # its discussion/vote widgets render that content live elsewhere on the
-    # page. Every prior day is fully resolved, so it's folded in here once
-    # and for all rather than staying in the live widgets, which get reused
-    # (and reset) for each new round.
+def format_completed_round_history(
+    state: GameState, include_current_day: bool = False
+) -> str:
+    # state.current_day (the live, still-in-progress round) is excluded by
+    # default -- its discussion/vote widgets render that content live
+    # elsewhere on the page. Every prior day is fully resolved, so it's
+    # folded in here once and for all rather than staying in the live
+    # widgets, which get reused (and reset) for each new round.
+    # include_current_day=True overrides that for the game-over panel,
+    # whose final round never advances into a new Day (see
+    # VillageFlow.check_winner_after_lynching) and so would otherwise never
+    # get folded into the permanent record at all.
     #
     # Rendered oldest-first (chronological), each day in its own panel --
     # newly completed days append at the bottom of the stack rather than
     # appearing directly under the live card.
     dead_day_index = {id(day): index for index, day in enumerate(_dead_days(state))}
-    completed_days = state.days[:-1]
+    completed_days = state.days if include_current_day else state.days[:-1]
     blocks = []
     for day in completed_days:
         weekday = WEEKDAYS[(day.day_number - 1) % 7]
@@ -1062,6 +1069,21 @@ def format_vote_result(state: GameState, outcome: VoteOutcome) -> str:
     else:
         lines.append("**No one voted to lynch anyone — no one was lynched.**")
     return "\n\n".join(lines)
+
+
+def format_game_over(result: GameOverResult, state: GameState) -> str:
+    headline = (
+        "The Villagers Win!" if result.winner == "villagers" else "The Werewolves Win!"
+    )
+    chips = "".join(
+        f'<span class="{VILLAGER_CHIP_CLASS}" '
+        f'style="color: var(--speaker-{_speaker_color_index(name, state)})">{name}</span>'
+        for name in result.werewolf_names
+    )
+    return (
+        f"### {headline}\n\n"
+        f'The werewolves were: <div class="{CHIP_LIST_CLASS}">{chips}</div>'
+    )
 
 
 class _NextDayPanel(NamedTuple):

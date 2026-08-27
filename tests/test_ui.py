@@ -4,7 +4,7 @@ import gradio as gr
 import pytest
 
 from the_village import ui
-from the_village.bridge import FlowFailed, FlowStatus, PlayerInput, SessionBridge
+from the_village.bridge import FlowFailed, FlowStatus, GameOverResult, PlayerInput, SessionBridge
 from the_village.state import Day, DiscussionMessage, GameState, Player, VoteRecord
 from the_village.ui import (
     begin_discussion,
@@ -14,6 +14,7 @@ from the_village.ui import (
     format_completed_round_history,
     format_deaths_panel,
     format_discussion_transcript,
+    format_game_over,
     format_latest_death_announcement,
     format_lynched_panel,
     format_vote_result,
@@ -603,6 +604,50 @@ def test_format_completed_round_history_includes_day_ones_own_death():
     history = format_completed_round_history(state)
     assert ui.NIGHT_STRIP_CLASS in history
     assert "A" in history
+
+
+def test_format_completed_round_history_excludes_current_day_by_default():
+    state = GameState(
+        user_player_name="Dana",
+        players=[Player(name="Dana", player_type="user")],
+        days=[Day(day_number=1, player_found_dead="A")],
+    )
+    assert format_completed_round_history(state) == ""
+
+
+def test_format_completed_round_history_includes_the_current_day_when_requested():
+    state = GameState(
+        user_player_name="Dana",
+        players=[Player(name="Dana", player_type="user")],
+        days=[Day(day_number=1, player_found_dead="A")],
+    )
+    rendered = format_completed_round_history(state, include_current_day=True)
+    assert "Monday" in rendered
+    assert "A" in rendered
+
+
+def test_format_game_over_announces_villagers_win():
+    state = GameState(
+        user_player_name="Dana",
+        players=[
+            Player(name="Dana", player_type="user"),
+            Player(name="W", player_type="werewolf", is_alive=False),
+        ],
+    )
+    result = GameOverResult(winner="villagers", werewolf_names=["W"])
+    rendered = format_game_over(result, state)
+    assert "The Villagers Win!" in rendered
+    assert ">W</span>" in rendered
+
+
+def test_format_game_over_announces_werewolves_win():
+    state = GameState(
+        user_player_name="Dana",
+        players=[Player(name="Dana", player_type="user")],
+    )
+    result = GameOverResult(winner="werewolves", werewolf_names=[])
+    rendered = format_game_over(result, state)
+    assert "The Werewolves Win!" in rendered
 
 
 def test_format_discussion_transcript_lists_messages():
