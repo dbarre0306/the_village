@@ -26,7 +26,7 @@ def _stub_agent() -> Agent:
 def _make_state_with_dead_player() -> GameState:
     players = [
         Player(name="Dana", player_type="user"),
-        Player(name="Corin", player_type="villager", is_alive=False),
+        Player(name="Emma", player_type="villager", is_alive=False),
         Player(name="A", player_type="villager"),
         Player(name="B", player_type="villager"),
     ]
@@ -43,9 +43,9 @@ def _judge(description: str, text: str) -> tuple[bool, str | None]:
 
 def test_guardrail_allows_generic_group_whereabouts_question():
     """Regression: with the pre-fix wording, this message -- which never
-    names Corin -- was rejected by the real LLM judge on every retry, with
+    names Emma -- was rejected by the real LLM judge on every retry, with
     a different invented rationale each time (turn-order commentary, a
-    vague behavior claim, then that "everyone" implicates Corin)."""
+    vague behavior claim, then that "everyone" implicates Emma)."""
     state = _make_state_with_dead_player()
     speaker = _AiSpeaker(state, SessionBridge(), "A", _stub_agent(), _stub_agent())
     description = speaker._build_guardrail_description()
@@ -64,7 +64,7 @@ def test_guardrail_rejects_explicit_dead_player_credibility_comparison():
     text = (
         "Della, I was at home last night, just like everyone else. But "
         "it's interesting how quickly you jumped to question me when we "
-        "should be focusing on Corin's inconsistent story."
+        "should be focusing on Emma's inconsistent story."
     )
     passed, result = _judge(description, text)
     assert passed is False

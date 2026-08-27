@@ -188,8 +188,8 @@ class _AiSpeaker(_Speaker):
                 "were alive -- including what they seemed to think about "
                 "another player, living or dead -- as investigative "
                 f'reasoning about what already happened (e.g. "Don was '
-                'quick to accuse Lisa -- maybe he was deflecting", "Don '
-                'seemed to think Lisa was acting suspicious"), as long as '
+                'quick to accuse Martha -- maybe he was deflecting", "Don '
+                'seemed to think Martha was acting suspicious"), as long as '
                 "it's grounded in Discussion so far or Known facts."
             )
         return "\n\n".join(parts)
