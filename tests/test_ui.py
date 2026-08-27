@@ -229,7 +229,7 @@ async def test_send_discussion_turn_is_a_noop_on_blank_message():
     outputs = [
         update async for update in send_discussion_turn(bridge, GameState(), "   ")
     ]
-    assert outputs == [(gr.skip(),) * 7]
+    assert outputs == [(gr.skip(),) * 10]
 
 
 async def test_send_discussion_turn_resolves_pending_input():
@@ -271,6 +271,38 @@ async def test_begin_discussion_raises_gr_error_on_flow_failed():
             pass
 
     waiter.cancel()
+
+
+async def test_begin_discussion_shows_the_results_panel_on_game_over():
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
+    result = GameOverResult(winner="werewolves", werewolf_names=["A"])
+    await bridge.outbox.put(result)
+
+    state = _discussion_state()
+    outputs = [update async for update in begin_discussion(bridge, state)]
+
+    assert await waiter == PlayerInput()
+    (
+        _bridge,
+        _discussion_transcript,
+        _discussion_textbox,
+        discussion_input_row,
+        discussion_status,
+        begin_discussion_button,
+        panel_death_line,
+        history_log,
+        game_over_panel,
+        game_over_status,
+    ) = outputs[-1]
+    assert discussion_input_row["visible"] is False
+    assert discussion_status["visible"] is False
+    assert begin_discussion_button["visible"] is False
+    assert panel_death_line["visible"] is False
+    assert "A" in history_log["value"]
+    assert game_over_panel["visible"] is True
+    assert "The Werewolves Win!" in game_over_status["value"]
 
 
 def _discussion_state() -> GameState:

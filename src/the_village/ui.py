@@ -774,11 +774,34 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                     gr.update(),
                     gr.update(),
                     gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
                 )
             item = await bridge.outbox.get()
             logger.debug("_stream_bridge: bridge=%s got item=%r", id(bridge), item)
             if isinstance(item, FlowFailed):
                 raise gr.Error("Something went wrong, please try again.")
+            if isinstance(item, GameOverResult):
+                yield (
+                    bridge,
+                    format_discussion_transcript(
+                        state, limit=bridge.revealed_discussion_messages
+                    ),
+                    gr.update(),
+                    gr.update(visible=False),
+                    gr.update(visible=False),
+                    gr.update(visible=False),
+                    gr.update(visible=False),
+                    gr.update(
+                        value=format_completed_round_history(
+                            state, include_current_day=True
+                        )
+                    ),
+                    gr.update(visible=True),
+                    gr.update(value=format_game_over(item, state)),
+                )
+                return
             if isinstance(item, DiscussionMessage):
                 # Pace AI turns to reading speed with a "typing" placeholder;
                 # the player's own message (already visible to them as they
@@ -797,6 +820,9 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                         gr.update(),
                         gr.update(),
                         gr.update(),
+                        gr.update(),
+                        gr.update(),
+                        gr.update(),
                     )
                     await asyncio.sleep(SPEAKER_THINKING_DELAY_SECONDS)
                 bridge.revealed_discussion_messages += 1
@@ -808,6 +834,9 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                     transcript,
                     gr.update(value=""),
                     gr.update(visible=False),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
                     gr.update(),
                     gr.update(),
                     gr.update(),
@@ -832,6 +861,9 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                     gr.update(),
                     gr.update(),
                     gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
                 )
                 return
             elif item == FlowStatus.DISCUSSION_COMPLETE:
@@ -849,6 +881,9 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                         visible=True,
                         value=_discussion_complete_notice(state),
                     ),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
                     gr.update(),
                     gr.update(),
                 )
@@ -889,6 +924,9 @@ async def begin_discussion(bridge: SessionBridge, state: GameState):
         # This is now day one's flow reused as-is for every day: nothing
         # here needs to know or care which day it's being called for.
         gr.update(value=format_latest_death_announcement(state), visible=True),
+        gr.update(),
+        gr.update(),
+        gr.update(),
     )
     async for update in _stream_bridge(bridge, state):
         yield update
@@ -896,7 +934,7 @@ async def begin_discussion(bridge: SessionBridge, state: GameState):
 
 async def send_discussion_turn(bridge: SessionBridge, state: GameState, message: str):
     if not message.strip():
-        yield (gr.skip(),) * 7
+        yield (gr.skip(),) * 10
         return
     if not bridge.resolve_input(PlayerInput(text=message.strip())):
         return
@@ -905,6 +943,9 @@ async def send_discussion_turn(bridge: SessionBridge, state: GameState, message:
         gr.update(),
         gr.update(),
         gr.update(visible=False),
+        gr.update(),
+        gr.update(),
+        gr.update(),
         gr.update(),
         gr.update(),
         gr.update(),
@@ -921,6 +962,9 @@ async def pass_discussion_turn(bridge: SessionBridge, state: GameState):
         gr.update(),
         gr.update(),
         gr.update(visible=False),
+        gr.update(),
+        gr.update(),
+        gr.update(),
         gr.update(),
         gr.update(),
         gr.update(),
@@ -1301,6 +1345,11 @@ def build_app() -> gr.Blocks:
                         ]
                         abstain_button = gr.Button("Abstain")
                     vote_status = gr.Markdown(visible=False)
+                with gr.Column(
+                    visible=False, elem_classes=[DAY_PANEL_CLASS]
+                ) as game_over_panel:
+                    game_over_status = gr.Markdown()
+                    play_again_button = gr.Button("Play Again")
 
         start_button.click(
             fn=start_game,
@@ -1326,6 +1375,9 @@ def build_app() -> gr.Blocks:
             discussion_status,
             begin_discussion_button,
             panel_death_line,
+            history_log,
+            game_over_panel,
+            game_over_status,
         ]
 
         # SessionBridge.resolve_input() is the per-session no-pending-future
