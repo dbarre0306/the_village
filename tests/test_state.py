@@ -160,3 +160,81 @@ def test_format_history_includes_prior_days_in_order():
     assert (
         state.format_history() == "A: yesterday's message\nB: today's message"
     )
+
+
+def test_game_state_winner_defaults_to_none():
+    state = GameState()
+    assert state.winner is None
+
+
+def test_living_werewolves_count_excludes_the_dead():
+    players = [
+        Player(name="A", player_type="werewolf"),
+        Player(name="B", player_type="werewolf", is_alive=False),
+    ]
+    state = GameState(players=players)
+    assert state.living_werewolves_count() == 1
+
+
+def test_living_non_werewolves_count_includes_the_user():
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager"),
+        Player(name="B", player_type="villager", is_alive=False),
+    ]
+    state = GameState(players=players)
+    assert state.living_non_werewolves_count() == 2
+
+
+def test_determine_winner_is_none_when_werewolves_are_outnumbered():
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager"),
+        Player(name="B", player_type="werewolf"),
+    ]
+    state = GameState(players=players)
+    assert state.determine_winner() is None
+
+
+def test_determine_winner_is_werewolves_at_parity():
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="werewolf"),
+    ]
+    state = GameState(players=players)
+    assert state.determine_winner() == "werewolves"
+
+
+def test_determine_winner_is_werewolves_when_a_mislynch_tips_the_balance():
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager", is_alive=False),  # mislynched
+        Player(name="B", player_type="werewolf"),
+    ]
+    state = GameState(players=players)
+    assert state.determine_winner() == "werewolves"
+
+
+def test_determine_winner_is_villagers_once_every_werewolf_is_dead():
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager"),
+        Player(name="B", player_type="werewolf", is_alive=False),
+    ]
+    state = GameState(players=players)
+    assert state.determine_winner() == "villagers"
+
+
+def test_determine_winner_is_villagers_with_no_werewolves_in_the_roster():
+    state = GameState(players=[Player(name="Dana", player_type="user")])
+    assert state.determine_winner() == "villagers"
+
+
+def test_werewolf_names_lists_all_werewolves_dead_or_alive():
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="werewolf", is_alive=False),
+        Player(name="B", player_type="werewolf"),
+    ]
+    state = GameState(players=players)
+    assert state.werewolf_names() == ["A", "B"]

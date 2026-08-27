@@ -8,6 +8,8 @@ WEREWOLF: Final = "werewolf"
 
 PlayerType = Literal["user", "villager", "werewolf"]
 
+Winner = Literal["villagers", "werewolves"]
+
 WEEKDAYS = [
     "Monday",
     "Tuesday",
@@ -61,6 +63,7 @@ class GameState(BaseModel):
     user_player_name: str = ""
     players: list[Player] = []
     days: list[Day] = Field(default_factory=lambda: [Day(day_number=1)])
+    winner: Winner | None = None
 
     @property
     def day_number(self) -> int:
@@ -91,6 +94,24 @@ class GameState(BaseModel):
 
     def names_of_other_living_players(self, player_name: str) -> list[str]:
         return [name for name in self.names_of_living_players() if name != player_name]
+
+    def living_werewolves_count(self) -> int:
+        return sum(1 for player in self.players if player.is_werewolf and player.is_alive)
+
+    def living_non_werewolves_count(self) -> int:
+        return sum(
+            1 for player in self.players if player.is_not_werewolf and player.is_alive
+        )
+
+    def determine_winner(self) -> Winner | None:
+        if self.living_werewolves_count() == 0:
+            return "villagers"
+        if self.living_werewolves_count() >= self.living_non_werewolves_count():
+            return "werewolves"
+        return None
+
+    def werewolf_names(self) -> list[str]:
+        return [player.name for player in self.players if player.is_werewolf]
 
     def last_player_to_speak(self) -> str | None:
         if not self.current_day.discussion:
