@@ -6,7 +6,7 @@ from crewai import Agent
 from crewai.flow import Flow, listen, router, start
 
 from the_village.agents import build_agent, build_conversation_analyst_agent
-from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
+from the_village.bridge import FlowStatus, GameOverResult, PlayerInput, SessionBridge
 from the_village.discussion import Discussion
 from the_village.pick_victim import WereWolfPack, kill_first_victim
 from the_village.roster import build_initial_roster
@@ -43,7 +43,12 @@ class VillageFlow(Flow[GameState]):
         await self.bridge.outbox.put(self.state.current_day.player_found_dead)
         await self.bridge.wait_for_input()
 
-    @listen(announce_death)
+    @router(announce_death)
+    async def check_winner_after_kill(self):
+        self.state.winner = self.state.determine_winner()
+        return "game_over" if self.state.winner else "discussion"
+
+    @listen("discussion")
     async def run_discussion(self):
         logger.debug(
             "VillageFlow.run_discussion: flow=%s bridge=%s entering",
@@ -83,14 +88,30 @@ class VillageFlow(Flow[GameState]):
             id(self.bridge),
             outcome,
         )
-        self.state.advance_day()
         await self.bridge.outbox.put(outcome)
         await self.bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
 
     @router(run_voting)
+    async def check_winner_after_lynching(self):
+        self.state.winner = self.state.determine_winner()
+        if self.state.winner:
+            return "game_over"
+        self.state.advance_day()
+        return "continue_night"
+
+    @router("continue_night")
     async def run_next_night(self):
         await WereWolfPack(self.state, self._player_agents).kill_next_victim()
         return "night_fell"
+
+    @listen("game_over")
+    async def finish_game(self):
+        await self.bridge.outbox.put(
+            GameOverResult(
+                winner=self.state.winner,
+                werewolf_names=self.state.werewolf_names(),
+            )
+        )
 
     def _build_ai_agents(self):
         return {
@@ -99,30 +120,19 @@ class VillageFlow(Flow[GameState]):
         }
 
 
-# VillageFlow's day/night cycle has no win condition yet and loops forever,
-# so the CLI smoke test below has to stop itself after a few days rather
-# than waiting for the flow to finish on its own.
-_AUTO_PLAY_MAX_DAYS = 3
-
-
-async def _auto_play_consumer(bridge: SessionBridge, max_days: int) -> None:
+async def _auto_play_consumer(bridge: SessionBridge) -> None:
     """Drains the outbox and auto-passes every pause point, unattended.
 
     Used by the CLI kickoff() (crewai run/test), which has no live Gradio
     session to answer pauses -- every AI/player turn auto-declines (and the
-    player auto-abstains from voting) so the flow reaches completion as a
-    smoke test rather than hanging forever. Returns once `max_days` votes
-    have completed; the caller cancels the (otherwise endless) flow task.
+    player auto-abstains from voting) so the flow reaches its natural
+    GameOverResult ending as a smoke test.
     """
-    days_voted = 0
     while True:
         item = await bridge.outbox.get()
         print(item)
-        if item == FlowStatus.VOTING_COMPLETE:
-            days_voted += 1
-            if days_voted >= max_days:
-                return
-            continue
+        if isinstance(item, GameOverResult):
+            return
         if item in (
             FlowStatus.WAITING_FOR_TURN,
             FlowStatus.WAITING_FOR_ANSWER,
@@ -138,15 +148,8 @@ async def _kickoff_async():
     flow_task = asyncio.create_task(
         village_flow.kickoff_async(inputs={"user_player_name": "TestPlayer"})
     )
-    consumer_task = asyncio.create_task(
-        _auto_play_consumer(bridge, _AUTO_PLAY_MAX_DAYS)
-    )
-    await consumer_task
-    flow_task.cancel()
-    try:
-        await flow_task
-    except asyncio.CancelledError:
-        pass
+    await _auto_play_consumer(bridge)
+    await flow_task
     print(village_flow.state.model_dump_json(indent=2))
 
 

@@ -26,8 +26,9 @@ async def _run_one_session(player_name: str) -> str:
         ):
             bridge.resolve_input(PlayerInput(text=None))
 
-    # The flow loops into the next night/day forever from here (no win
-    # condition yet), so cancel it instead of awaiting completion.
+    # This test only plays to the first VOTING_COMPLETE -- the default
+    # 7-player roster needs 3 kills to reach werewolf parity, so the game
+    # genuinely isn't over yet; cancel rather than waiting for a natural end.
     flow_task.cancel()
     try:
         await flow_task

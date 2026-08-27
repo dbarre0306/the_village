@@ -2,7 +2,8 @@
 import asyncio
 from unittest.mock import patch
 
-from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
+from the_village.bridge import FlowStatus, GameOverResult, PlayerInput, SessionBridge
+from the_village.state import Player
 from the_village.village_flow import VillageFlow
 from the_village.voting import VoteOutcome
 
@@ -80,12 +81,20 @@ async def test_village_flow_reaches_voting_complete_with_an_outcome():
             elif isinstance(item, VoteOutcome):
                 outcome = item
             elif item == FlowStatus.VOTING_COMPLETE:
+                # check_winner_after_lynching's advance_day() runs as a
+                # separate flow step after VOTING_COMPLETE is already on the
+                # outbox -- draining the next night's death (queued only
+                # after advance_day() has run) guarantees it's happened
+                # before the assertions below, avoiding a race against the
+                # background flow task.
+                await bridge.outbox.get()
                 break
             elif item in (FlowStatus.WAITING_FOR_TURN, FlowStatus.WAITING_FOR_ANSWER):
                 bridge.resolve_input(PlayerInput(text=None))
 
-        # The flow loops into the next night/day forever from here (no win
-        # condition yet), so cancel it instead of awaiting completion.
+        # The default 7-player roster needs 3 kills to reach werewolf
+        # parity, so the game genuinely isn't over yet at this point --
+        # cancel rather than waiting for a natural end this test won't reach.
         task.cancel()
         try:
             await task
@@ -121,8 +130,9 @@ async def test_village_flow_kills_and_announces_a_second_victim_after_voting():
             elif item in (FlowStatus.WAITING_FOR_TURN, FlowStatus.WAITING_FOR_ANSWER):
                 bridge.resolve_input(PlayerInput(text=None))
 
-        # The flow loops into the next night/day forever from here (no win
-        # condition yet), so cancel it instead of awaiting completion.
+        # The default 7-player roster needs 3 kills to reach werewolf
+        # parity, so the game genuinely isn't over yet at this point --
+        # cancel rather than waiting for a natural end this test won't reach.
         task.cancel()
         try:
             await task
@@ -136,3 +146,80 @@ async def test_village_flow_kills_and_announces_a_second_victim_after_voting():
     killed = next(v for v in state.players if v.name == second_death)
     assert killed.player_type in ("villager", "user")
     assert killed.is_alive is False
+
+
+async def test_village_flow_ends_the_game_when_a_night_kill_reaches_werewolf_parity():
+    # 3 living non-werewolves (Dana, A, D) vs 2 werewolves -- one villager
+    # dying tonight brings it to 2 vs 2, ending the game right after the
+    # death is announced and "Begin" is clicked, before discussion starts.
+    custom_roster = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager"),
+        Player(name="D", player_type="villager"),
+        Player(name="B", player_type="werewolf", is_pack_leader=True),
+        Player(name="C", player_type="werewolf"),
+    ]
+    bridge = SessionBridge()
+    flow = VillageFlow(bridge=bridge)
+
+    with patch(
+        "the_village.village_flow.build_initial_roster", return_value=custom_roster
+    ):
+        task = asyncio.create_task(
+            flow.kickoff_async(inputs={"user_player_name": "Dana"})
+        )
+
+        await bridge.outbox.get()  # the night's death announcement
+        bridge.resolve_input(PlayerInput())  # -> Begin
+
+        result = await bridge.outbox.get()
+
+        await task  # the flow reaches its natural end -- no cancellation needed
+
+    assert isinstance(result, GameOverResult)
+    assert result.winner == "werewolves"
+    assert set(result.werewolf_names) == {"B", "C"}
+    assert flow.state.winner == "werewolves"
+
+
+async def test_village_flow_ends_the_game_when_a_lynch_eliminates_the_last_werewolf():
+    # 3 living non-werewolves (Dana, A, D) vs 1 werewolf (W) -- night one's
+    # kill removes one villager (2 vs 1, game continues); the human then
+    # votes to lynch W, leaving zero living werewolves.
+    custom_roster = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager"),
+        Player(name="D", player_type="villager"),
+        Player(name="W", player_type="werewolf", is_pack_leader=True),
+    ]
+    bridge = SessionBridge()
+    flow = VillageFlow(bridge=bridge)
+
+    with patch(
+        "the_village.village_flow.build_initial_roster", return_value=custom_roster
+    ), patch("crewai.Crew.akickoff", new=_decline_and_abstain_akickoff):
+        task = asyncio.create_task(
+            flow.kickoff_async(inputs={"user_player_name": "Dana"})
+        )
+
+        await bridge.outbox.get()  # night one's death announcement
+        bridge.resolve_input(PlayerInput())  # -> begin discussion
+
+        result = None
+        while result is None:
+            item = await bridge.outbox.get()
+            if item == FlowStatus.DISCUSSION_COMPLETE:
+                bridge.resolve_input(PlayerInput())  # -> begin voting
+            elif item == FlowStatus.WAITING_FOR_VOTE:
+                bridge.resolve_input(PlayerInput(text="W"))  # vote to lynch the werewolf
+            elif isinstance(item, GameOverResult):
+                result = item
+            elif item in (FlowStatus.WAITING_FOR_TURN, FlowStatus.WAITING_FOR_ANSWER):
+                bridge.resolve_input(PlayerInput(text=None))
+
+        await task
+
+    assert result.winner == "villagers"
+    assert result.werewolf_names == ["W"]
+    assert flow.state.winner == "villagers"
+    assert flow.state.day_number == 1  # no dangling extra Day once the game ended

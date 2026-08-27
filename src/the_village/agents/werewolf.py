@@ -7,18 +7,26 @@ from the_village.state import Player
 
 def _build_werewolf_agent(player: Player, all_players: list[Player]) -> Agent:
     packmate = next(
-        p.name
-        for p in all_players
-        if p.player_type == "werewolf" and p.name != player.name
+        (
+            p.name
+            for p in all_players
+            if p.player_type == "werewolf" and p.name != player.name
+        ),
+        None,
     )
     goal = (
         "Blend in as an innocent villager while steering the group's "
         "suspicion toward someone else, without revealing that you're a "
         "werewolf."
     )
+    packmate_sentence = (
+        f"Your fellow werewolf is {packmate} — you know this, no one else does. "
+        if packmate is not None
+        else ""
+    )
     backstory = (
         f"Your name is {player.name}. You are secretly a werewolf. You are deceptive and cunning. "
-        f"Your fellow werewolf is {packmate} — you know this, no one else does. You want someone else "
+        f"{packmate_sentence}You want someone else "
         "blamed for the killing, so you actively steer suspicion toward other villagers — voicing "
         "doubts about their behavior, questioning their alibi (but only if they have given an alibi), "
         "or agreeing with and amplifying accusations "
