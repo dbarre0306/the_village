@@ -59,7 +59,10 @@ def test_format_latest_death_announcement_reports_only_the_most_recent_death():
 
 def test_format_deaths_panel_with_no_deaths():
     state = GameState(user_player_name="Dana")
-    assert format_deaths_panel(state) == '<div class="chip-list">No one has been killed yet.</div>'
+    assert (
+        format_deaths_panel(state)
+        == '<div class="chip-list">No one has been killed yet.</div>'
+    )
 
 
 def test_format_deaths_panel_with_a_death():
@@ -106,9 +109,7 @@ async def test_begin_discussion_resolves_the_death_gate_and_streams_to_completio
     await asyncio.sleep(0)
     await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
 
-    outputs = [
-        update async for update in begin_discussion(bridge, _discussion_state())
-    ]
+    outputs = [update async for update in begin_discussion(bridge, _discussion_state())]
 
     assert await waiter == PlayerInput()
     assert len(outputs) == 2  # immediate "hide button" yield, then completion
@@ -127,7 +128,9 @@ async def test_discussion_complete_status_value_differs_across_rounds():
     waiter_one = asyncio.create_task(bridge_one.wait_for_input())
     await asyncio.sleep(0)
     await bridge_one.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
-    outputs_one = [update async for update in begin_discussion(bridge_one, day_one_state)]
+    outputs_one = [
+        update async for update in begin_discussion(bridge_one, day_one_state)
+    ]
     await waiter_one
     status_one = outputs_one[-1][4]["value"]
 
@@ -137,7 +140,9 @@ async def test_discussion_complete_status_value_differs_across_rounds():
     waiter_two = asyncio.create_task(bridge_two.wait_for_input())
     await asyncio.sleep(0)
     await bridge_two.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
-    outputs_two = [update async for update in begin_discussion(bridge_two, day_two_state)]
+    outputs_two = [
+        update async for update in begin_discussion(bridge_two, day_two_state)
+    ]
     await waiter_two
     status_two = outputs_two[-1][4]["value"]
 
@@ -168,7 +173,9 @@ def test_discussion_complete_notice_omits_the_ballot_question_when_human_is_dead
         ],
         days=[Day(day_number=1)],
     )
-    assert "Who do you think is a werewolf?" not in ui._discussion_complete_notice(state)
+    assert "Who do you think is a werewolf?" not in ui._discussion_complete_notice(
+        state
+    )
 
 
 async def test_begin_discussion_shows_waiting_indicator_before_first_speaker():
@@ -177,9 +184,7 @@ async def test_begin_discussion_shows_waiting_indicator_before_first_speaker():
     await asyncio.sleep(0)
     await bridge.outbox.put(FlowStatus.DISCUSSION_COMPLETE)
 
-    outputs = [
-        update async for update in begin_discussion(bridge, _discussion_state())
-    ]
+    outputs = [update async for update in begin_discussion(bridge, _discussion_state())]
 
     assert "typing-indicator" in outputs[0][1]
     waiter.cancel()
@@ -197,9 +202,7 @@ async def test_begin_discussion_clears_waiting_indicator_when_human_speaks_first
     await asyncio.sleep(0)
     await bridge.outbox.put(FlowStatus.WAITING_FOR_TURN)
 
-    outputs = [
-        update async for update in begin_discussion(bridge, _discussion_state())
-    ]
+    outputs = [update async for update in begin_discussion(bridge, _discussion_state())]
 
     transcript_value = ""
     for update in outputs:
@@ -218,7 +221,9 @@ async def test_begin_discussion_is_a_noop_when_already_resolved():
 
 async def test_send_discussion_turn_is_a_noop_on_blank_message():
     bridge = SessionBridge()
-    outputs = [update async for update in send_discussion_turn(bridge, GameState(), "   ")]
+    outputs = [
+        update async for update in send_discussion_turn(bridge, GameState(), "   ")
+    ]
     assert outputs == [(gr.skip(),) * 7]
 
 
@@ -337,7 +342,9 @@ async def test_ai_turn_shows_pending_placeholder_before_revealing_message(monkey
     transcripts = [update[1] for update in outputs if isinstance(update[1], str)]
 
     pending_index = next(
-        i for i, t in enumerate(transcripts) if "typing-indicator" in t and "A:</span>" in t
+        i
+        for i, t in enumerate(transcripts)
+        if "typing-indicator" in t and "A:</span>" in t
     )
     assert "hi there" not in transcripts[pending_index]
     assert "hi there" in transcripts[pending_index + 1]
@@ -345,7 +352,9 @@ async def test_ai_turn_shows_pending_placeholder_before_revealing_message(monkey
     waiter.cancel()
 
 
-async def test_ai_turn_reveal_is_pinned_to_its_own_item_when_runner_races_ahead(monkeypatch):
+async def test_ai_turn_reveal_is_pinned_to_its_own_item_when_runner_races_ahead(
+    monkeypatch,
+):
     # Regression: DiscussionRunner appends directly to the shared, live
     # GameState and doesn't wait for the UI to consume each outbox item
     # before continuing (see discussion.py's _resolve_address_chain, which
@@ -389,7 +398,9 @@ async def test_ai_turn_reveal_is_pinned_to_its_own_item_when_runner_races_ahead(
     waiter.cancel()
 
 
-async def test_player_message_shows_immediately_without_placeholder_or_sleep(monkeypatch):
+async def test_player_message_shows_immediately_without_placeholder_or_sleep(
+    monkeypatch,
+):
     sleep_calls = []
     real_sleep = asyncio.sleep
 
@@ -441,8 +452,14 @@ def test_format_discussion_transcript_only_covers_the_current_day():
             Player(name="A", player_type="villager"),
         ],
         days=[
-            Day(day_number=1, discussion=[DiscussionMessage(player_name="A", text="day one")]),
-            Day(day_number=2, discussion=[DiscussionMessage(player_name="A", text="day two")]),
+            Day(
+                day_number=1,
+                discussion=[DiscussionMessage(player_name="A", text="day one")],
+            ),
+            Day(
+                day_number=2,
+                discussion=[DiscussionMessage(player_name="A", text="day two")],
+            ),
         ],
     )
     transcript = format_discussion_transcript(state)
@@ -584,7 +601,12 @@ def test_format_discussion_transcript_lists_messages():
             Player(name="Dana", player_type="user"),
             Player(name="A", player_type="villager"),
         ],
-        days=[Day(day_number=1, discussion=[DiscussionMessage(player_name="A", text="hello")])],
+        days=[
+            Day(
+                day_number=1,
+                discussion=[DiscussionMessage(player_name="A", text="hello")],
+            )
+        ],
     )
     transcript = format_discussion_transcript(state)
     assert "A:</span> hello" in transcript
@@ -598,7 +620,12 @@ def test_format_discussion_transcript_with_pending_speaker_hides_its_message():
             Player(name="Dana", player_type="user"),
             Player(name="A", player_type="villager"),
         ],
-        days=[Day(day_number=1, discussion=[DiscussionMessage(player_name="A", text="hello")])],
+        days=[
+            Day(
+                day_number=1,
+                discussion=[DiscussionMessage(player_name="A", text="hello")],
+            )
+        ],
     )
     transcript = format_discussion_transcript(state, limit=0, pending_speaker="A")
     assert "hello" not in transcript
@@ -643,7 +670,12 @@ def test_format_discussion_transcript_with_waiting_keeps_prior_messages():
             Player(name="Dana", player_type="user"),
             Player(name="A", player_type="villager"),
         ],
-        days=[Day(day_number=1, discussion=[DiscussionMessage(player_name="A", text="hello")])],
+        days=[
+            Day(
+                day_number=1,
+                discussion=[DiscussionMessage(player_name="A", text="hello")],
+            )
+        ],
     )
     transcript = format_discussion_transcript(state, limit=1, waiting=True)
     assert "hello" in transcript
@@ -696,10 +728,14 @@ def test_vote_button_updates_labels_living_candidates_and_hides_extra_slots():
     assert len(updates) == ui.MAX_VOTE_CANDIDATES
     assert updates[0].value == "A"
     assert updates[0].visible is True
-    assert f"speaker-btn-{ui._speaker_color_index('A', state)}" in updates[0].elem_classes
+    assert (
+        f"speaker-btn-{ui._speaker_color_index('A', state)}" in updates[0].elem_classes
+    )
     assert updates[1].value == "B"
     assert updates[1].visible is True
-    assert f"speaker-btn-{ui._speaker_color_index('B', state)}" in updates[1].elem_classes
+    assert (
+        f"speaker-btn-{ui._speaker_color_index('B', state)}" in updates[1].elem_classes
+    )
     assert updates[2].visible is False
 
 
@@ -956,7 +992,9 @@ def test_colored_name_wraps_name_in_speaker_color_span():
             Player(name="A", player_type="villager"),
         ],
     )
-    assert ui._colored_name("A", state) == '<span style="color: var(--speaker-1)">A</span>'
+    assert (
+        ui._colored_name("A", state) == '<span style="color: var(--speaker-1)">A</span>'
+    )
 
 
 def test_format_vote_result_lists_breakdown_and_lynch_outcome():
@@ -974,7 +1012,9 @@ def test_format_vote_result_lists_breakdown_and_lynch_outcome():
         tally={"A": 1},
         lynched="A",
     )
-    state = GameState(user_player_name="Dana", players=players, days=[Day(day_number=2)])
+    state = GameState(
+        user_player_name="Dana", players=players, days=[Day(day_number=2)]
+    )
 
     result = format_vote_result(state, outcome)
 
@@ -1093,10 +1133,13 @@ async def test_cast_player_vote_reveals_outcome_and_updates_panels():
         await events.__anext__()
     )
 
-    assert f"{ui._colored_name('A', state)} was lynched by the village." in status_update["value"]
+    assert (
+        f"{ui._colored_name('A', state)} was lynched by the village."
+        in status_update["value"]
+    )
     assert "Dana" in alive_panel_value
-    assert '>A</span>' not in alive_panel_value
-    assert '>A</span>' in lynched_panel_value
+    assert ">A</span>" not in alive_panel_value
+    assert ">A</span>" in lynched_panel_value
     await events.aclose()
 
 
@@ -1127,7 +1170,9 @@ async def test_cast_player_vote_replaces_the_ballot_question_with_a_results_labe
 
     assert "Who do you think is a werewolf?" not in discussion_status_update["value"]
     assert "Voting Results" in discussion_status_update["value"]
-    assert "Moderator has stopped the discussion." in discussion_status_update["value"]
+    assert (
+        "The moderator has stopped the discussion." in discussion_status_update["value"]
+    )
     await events.aclose()
 
 
@@ -1170,7 +1215,7 @@ async def test_cast_player_vote_advances_to_next_days_begin_gated_panel_on_votin
         panel_death_line_update,
     ) = await events.__anext__()
 
-    assert '>A</span>' not in alive_panel_value
+    assert ">A</span>" not in alive_panel_value
     assert "A" in deaths_panel_value
     # Every day is Begin-gated now, including this one -- the button comes
     # back instead of staying hidden. Its label must be resent too, not just

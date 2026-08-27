@@ -477,7 +477,7 @@ def _discussion_complete_notice(state: GameState) -> str:
     ballot_question = "Who do you think is a werewolf?\n\n" if is_human_alive else ""
     return (
         f'<div class="{MODERATOR_NOTICE_CLASS}">'
-        "Moderator has stopped the discussion."
+        "The moderator has stopped the discussion."
         "</div>\n\n"
         "---\n\n"
         f"{ballot_question}"
@@ -493,7 +493,7 @@ def _voting_results_notice(state: GameState) -> str:
     # and past the final lynch result.
     return (
         f'<div class="{MODERATOR_NOTICE_CLASS}">'
-        "Moderator has stopped the discussion."
+        "The moderator has stopped the discussion."
         "</div>\n\n"
         "---\n\n"
         "Voting Results\n\n"
