@@ -267,8 +267,9 @@ class _AiSpeaker(_Speaker):
             f"Names of other players: {', '.join(self._names_of_other_living_players)}.",
             "",
             "Determine which of the other players, if anyone, the message you were just given as ",
-            "context is directed at. If the message is to everyone, there is no specific player ",
-            "being addressed - leave addressed_to unset.  If the speaker had nothing to say, there ",
+            "context is directed at. If the message is to everyone, then there is no specific player ",
+            "being addressed - leave addressed_to unset.  If the message is addressed to multiple ",
+            "players, then leave addressed_to to unset. If the speaker had nothing to say, there ",
             "is nothing to analyze -- leave addressed_to unset.",
         ]
         return "\n".join(parts)
