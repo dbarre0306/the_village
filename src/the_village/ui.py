@@ -750,17 +750,24 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
             # being generated (unpredictable latency, unlike the fixed
             # SPEAKER_THINKING_DELAY_SECONDS pacing once a message has
             # already arrived) or the flow resolving to the player's turn.
-            yield (
-                bridge,
-                format_discussion_transcript(
-                    state, limit=bridge.revealed_discussion_messages, waiting=True
-                ),
-                gr.update(value=""),
-                gr.update(visible=False),
-                gr.update(),
-                gr.update(),
-                gr.update(),
-            )
+            # Only relevant when the next item isn't already queued -- e.g.
+            # right after revealing the player's own already-known message,
+            # where the next status can be sitting on the outbox before this
+            # loop even comes back around, and flashing "someone is about to
+            # speak" for a wait that never actually happens is stale, not
+            # informative.
+            if bridge.outbox.empty():
+                yield (
+                    bridge,
+                    format_discussion_transcript(
+                        state, limit=bridge.revealed_discussion_messages, waiting=True
+                    ),
+                    gr.update(value=""),
+                    gr.update(visible=False),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                )
             item = await bridge.outbox.get()
             logger.debug("_stream_bridge: bridge=%s got item=%r", id(bridge), item)
             if isinstance(item, FlowFailed):
