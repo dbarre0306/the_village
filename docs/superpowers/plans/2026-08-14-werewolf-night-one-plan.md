@@ -25,11 +25,13 @@
 ### Task 1: Core data model + pytest setup
 
 **Files:**
+
 - Create: `src/the_village/state.py`
 - Modify: `pyproject.toml` (add `pytest` dev dependency, add `[tool.pytest.ini_options]`)
 - Test: `tests/test_state.py`
 
 **Interfaces:**
+
 - Produces: `PlayerType` (`Literal["user", "villager", "werewolf"]`), `WEEKDAYS: list[str]`, `Villager(BaseModel)` with fields `name: str`, `player_type: PlayerType`, `is_pack_leader: bool = False`, `is_alive: bool = True`; `Death(BaseModel)` with fields `name: str`, `day_number: int`; `GameState(BaseModel)` with fields `player_name: str = ""`, `day_number: int = 1`, `villagers: list[Villager] = []`, `deaths: list[Death] = []`.
 
 - [ ] **Step 1: Add pytest as a dev dependency**
@@ -141,10 +143,12 @@ git commit -m "feat: add GameState data model and pytest setup"
 ### Task 2: Roster setup logic
 
 **Files:**
+
 - Create: `src/the_village/roster.py`
 - Test: `tests/test_roster.py`
 
 **Interfaces:**
+
 - Consumes: `GameState`, `Villager` from `src/the_village/state.py` (Task 1).
 - Produces: `VILLAGER_NAME_POOL: list[str]` (12 names); `build_initial_roster(player_name: str, rng: random.Random | None = None) -> GameState`.
 
@@ -225,7 +229,7 @@ from the_village.state import GameState, Villager
 VILLAGER_NAME_POOL = [
     "Alice",
     "Bram",
-    "Corin",
+    "Emma",
     "Della",
     "Edwin",
     "Fiora",
@@ -279,10 +283,12 @@ git commit -m "feat: add roster setup and werewolf assignment logic"
 ### Task 3: Night-one kill logic
 
 **Files:**
+
 - Create: `src/the_village/night.py`
 - Test: `tests/test_night.py`
 
 **Interfaces:**
+
 - Consumes: `GameState`, `Villager`, `Death` from `src/the_village/state.py` (Task 1).
 - Produces: `resolve_night_one(state: GameState, rng: random.Random | None = None) -> GameState` (mutates and returns `state`).
 
@@ -396,10 +402,12 @@ git commit -m "feat: add night-one random kill resolution logic"
 ### Task 4: VillageFlow wiring
 
 **Files:**
+
 - Modify: `src/the_village/main.py` (replace the existing stub `VillageFlow`)
 - Test: `tests/test_flow.py`
 
 **Interfaces:**
+
 - Consumes: `GameState` (Task 1); `build_initial_roster` (Task 2); `resolve_night_one` (Task 3).
 - Produces: `VillageFlow(Flow[GameState])` with `@start() setup_game` and `@listen(setup_game) run_night_one` methods; `kickoff()` (module-level function, CLI smoke test); `plot()` (unchanged from existing stub).
 
@@ -498,11 +506,13 @@ git commit -m "feat: wire VillageFlow to run roster setup and night-one kill"
 ### Task 5: Gradio UI
 
 **Files:**
+
 - Create: `src/the_village/ui.py`
 - Modify: `pyproject.toml` (add `gradio` dependency, add `app` script entry)
 - Test: `tests/test_ui.py`
 
 **Interfaces:**
+
 - Consumes: `VillageFlow` (Task 4); `GameState`, `Death`, `WEEKDAYS` (Task 1).
 - Produces: `format_event_log(state: GameState) -> str`; `format_deaths_panel(state: GameState) -> str`; `start_game(player_name: str) -> tuple`; `build_app() -> gradio.Blocks`; `main()` (launches the app).
 
@@ -663,6 +673,7 @@ Expected: PASS (all tests from Tasks 1-5)
 Run: `uv run app`
 
 In a browser, go to the printed local URL (typically `http://127.0.0.1:7860`):
+
 1. Leave the name field blank and click "Start Game" — confirm an inline error is shown and no result screen appears.
 2. Enter a name (e.g. "Dana") and click "Start Game" — confirm the start screen is replaced by a two-column result screen.
 3. Confirm the left column ("Events") shows a line like "Monday morning: `<name>` was found dead."

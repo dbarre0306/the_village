@@ -26,9 +26,9 @@ Scope for this design:
 Explicitly out of scope (future work):
 
 - The day 2+ game loop itself (looping discussion → vote → night
-   repeatedly, and win-condition checks) — only today's data model is
-   shaped to support it, same precedent the discussion design set for
-   itself.
+  repeatedly, and win-condition checks) — only today's data model is
+  shaped to support it, same precedent the discussion design set for
+  itself.
 - Any werewolf-specific vote coordination beyond what their existing
   discussion persona already implies (see "Voting AI" below).
 - Persisting `GameState` across server restarts — in-memory for the
@@ -169,7 +169,7 @@ Additions to the existing result screen:
   (6, per `roster.py`'s `VILLAGER_NAME_POOL` sample), each round relabeled
   to a currently-living AI villager's name and hidden if there's no
   living villager left to fill that slot — plus one static "Abstain"
-  button. This is a ballot for the *player* to cast their own vote;
+  button. This is a ballot for the _player_ to cast their own vote;
   clicking a villager's button casts the player's vote for that person.
   AI villagers never see or interact with these buttons — their votes are
   decided independently via `cast_votes()`.
@@ -179,11 +179,11 @@ Additions to the existing result screen:
   blocking pattern `start_game` already uses for `flow.kickoff()`), then
   renders the reveal:
   - Full breakdown: one line per `VoteRecord`, e.g. `"Alice voted for
-    Bruce."` / `"Corin abstained."`
+Bruce."` / `"Emma abstained."`
   - Tally counts per target.
   - Outcome line: `"<name> was lynched by the village."` /
     `"The vote was tied — no one was lynched."` / `"No one voted to lynch
-    anyone — no one was lynched."`
+anyone — no one was lynched."`
   - Updates the living-villagers panel (`format_alive_panel`, unchanged —
     it already reads `villager.is_alive`) and a new "Lynched by the
     Village" panel, chip-styled the same as the existing "Killed by

@@ -52,7 +52,7 @@ many times. CrewAI's `human_input=True` mechanism exists for this kind of
 pause, but it is built around blocking on terminal `input()`, not a web
 request/response cycle; bending it to Gradio would fight the framework
 harder than it's worth. Instead, discussion is driven directly by the
-Gradio UI as a new module, `discussion.py`, invoked *after* `VillageFlow`
+Gradio UI as a new module, `discussion.py`, invoked _after_ `VillageFlow`
 has already completed (night one is already resolved by the time
 "Begin Discussion" is clickable).
 
@@ -76,8 +76,8 @@ class DiscussionMessage(BaseModel):
 ```
 
 `addressed_to` means "who this message specifically calls out" — set for
-both direct questions ("Corin, where were you?") and accusations ("I think
-it's Corin") alike. It is not restricted to grammatical questions.
+both direct questions ("Emma, where were you?") and accusations ("I think
+it's Emma") alike. It is not restricted to grammatical questions.
 
 `day_number` mirrors `Death.day_number` and records which day's discussion
 this message belongs to.
@@ -118,7 +118,7 @@ class DiscussionRunner:
 `DiscussionRunner` holds a reference to `GameState` and appends each new
 `DiscussionMessage` straight onto `state.discussion` as it's produced —
 there is no separate transcript to copy over at completion. `budgets` and
-`passed` are the only state that's genuinely scoped to the *current* day's
+`passed` are the only state that's genuinely scoped to the _current_ day's
 in-progress round-robin (whose turn budget is left, who's permanently
 passed today) and don't belong on `GameState`; they're rebuilt fresh each
 time `start_discussion()` runs for a new day.
@@ -143,7 +143,7 @@ is excluded — they're dead and don't participate.
 
 - Each participant starts with a budget of 3 "initiating" turns (a
   statement, question, or accusation).
-- A **round** = shuffle the currently *active* participants (budget > 0
+- A **round** = shuffle the currently _active_ participants (budget > 0
   and not in `passed`), producing this round's speaking order.
 - On a normal rotation turn, a participant either speaks (budget −1,
   optionally sets `addressed_to`) or **passes**. Passing on a normal turn
@@ -163,7 +163,7 @@ they're the only active participant left (unavoidable).
 
 ### Questions and accusations (`addressed_to`)
 
-If a message sets `addressed_to` (a question *or* an accusation naming
+If a message sets `addressed_to` (a question _or_ an accusation naming
 another living participant), that participant gets exactly **one**
 immediate, free reply — no budget cost, jumps ahead of the normal
 rotation — before the rotation resumes where it left off. If that reply
@@ -173,7 +173,7 @@ next natural turn. This bounds the state machine and prevents back-and-forth
 ping-ponging between two participants. **This no-chain rule applies
 uniformly, even when the bonus reply happens to name the player**: it does
 not pause the discussion or set up a special "you've been asked" state for
-the player. Only a *primary* message — one produced by the normal rotation,
+the player. Only a _primary_ message — one produced by the normal rotation,
 never a bonus reply itself — can pause the discussion for the player. This
 keeps the pause/resume behavior triggered by exactly one thing (a
 rotation-turn message naming the player), rather than by any point in a
@@ -272,7 +272,7 @@ Additions to the existing result screen:
 - `gr.State` for `DiscussionRunner | None`.
 - A "Begin Discussion" button, the only new visible control until clicked.
 - A discussion transcript `gr.Markdown` panel, rendered as `"**Speaker:**
-  message"` lines per entry — same formatting convention as the existing
+message"` lines per entry — same formatting convention as the existing
   `format_event_log`.
 - A player-input row: `Textbox`, an optional "Address to" `Dropdown` of
   currently living participant names, a "Send" button, and a "Pass"
@@ -286,7 +286,7 @@ Additions to the existing result screen:
   `advance(runner)`, yield-updating the transcript, until a pause/complete
   status arrives — then shows or hides the input row accordingly.
 - `Send` / `Pass` → generator handler calls `advance(runner,
-  player_input=..., player_pass=...)`, same incremental-yield pattern.
+player_input=..., player_pass=...)`, same incremental-yield pattern.
 
 ## Error Handling
 
