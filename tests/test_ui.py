@@ -493,8 +493,15 @@ def test_format_completed_round_history_includes_transcript_and_vote_result():
     history = format_completed_round_history(state)
     assert "### Monday" in history
     assert "I'm innocent!" in history
+    assert "The moderator has stopped the discussion." in history
     assert "The Village Votes" in history
     assert "was lynched by the village." in history
+    # The moderator's notice is never dropped once the round is archived --
+    # it sits right before the vote recap heading, which supplies its own
+    # divider line via CSS (no separate "---" needed here).
+    notice_index = history.index("The moderator has stopped the discussion.")
+    votes_index = history.index("The Village Votes", notice_index)
+    assert notice_index < votes_index
     # This day has no player_found_dead set (only a lynching), so there's
     # no night-strip to render for it.
     assert ui.NIGHT_STRIP_CLASS not in history
@@ -896,7 +903,7 @@ async def test_start_voting_renders_a_vote_outcome_before_voting_complete():
     assert status_update["value"] == ui.format_vote_result(state, outcome)
     # discussion_status swaps its ballot question for the results label here
     # too -- cast_player_vote never runs in this human-is-dead path to do it.
-    assert "Voting Results" in discussion_status_update["value"]
+    assert "The Village Votes" in discussion_status_update["value"]
     assert "Who do you think is a werewolf?" not in discussion_status_update["value"]
     (
         _bridge,
@@ -928,7 +935,7 @@ async def test_start_voting_is_a_noop_when_already_resolved():
 async def test_start_voting_second_invocation_does_not_resolve_a_later_pending_input():
     # discussion_status.change() fires again later in the same round when
     # start_voting's own VoteOutcome branch rewrites discussion_status to
-    # the "Voting Results" label. That second, spurious invocation must not
+    # "The Village Votes" label. That second, spurious invocation must not
     # resolve whatever pause point happens to be pending by then (e.g. the
     # next day's announce_death) -- doing so would silently skip that day's
     # Begin gate. See SessionBridge.voting_started.
@@ -1103,7 +1110,7 @@ async def test_cast_player_vote_resolves_the_ballot_and_hides_controls_before_th
     # The ballot question is answered the moment the player picks -- it
     # shouldn't linger through tallying until the outcome arrives.
     assert "Who do you think is a werewolf?" not in discussion_status_update["value"]
-    assert "Voting Results" in discussion_status_update["value"]
+    assert "The Village Votes" in discussion_status_update["value"]
     await events.aclose()
 
 
@@ -1169,7 +1176,7 @@ async def test_cast_player_vote_replaces_the_ballot_question_with_a_results_labe
     discussion_status_update = outcome_event[7]
 
     assert "Who do you think is a werewolf?" not in discussion_status_update["value"]
-    assert "Voting Results" in discussion_status_update["value"]
+    assert "The Village Votes" in discussion_status_update["value"]
     assert (
         "The moderator has stopped the discussion." in discussion_status_update["value"]
     )

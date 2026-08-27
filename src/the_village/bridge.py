@@ -48,7 +48,7 @@ class SessionBridge:
     revealed_discussion_messages: int = 0
     # ui.py's discussion_status.change() -> start_voting binding fires again
     # when start_voting itself later rewrites discussion_status (swapping
-    # the ballot question for a "Voting Results" label once the outcome is
+    # the ballot question for "The Village Votes" label once the outcome is
     # known) -- that second, spurious invocation must not call
     # resolve_input(): by the time it runs, a *later* pause point (the next
     # day's announce_death) may already be the one pending, and resolving it

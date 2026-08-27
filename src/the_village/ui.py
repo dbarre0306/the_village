@@ -218,8 +218,10 @@ def _chronicle_css() -> str:
        color. Scoped to the two parchment containers as a whole (not just
        the transcript/title classes within them) so it also covers plain
        Markdown status lines like discussion_status and vote_status that
-       carry no elem_classes of their own -- h5 is excluded here since
-       history_log's own h5 rule further down needs to win instead.
+       carry no elem_classes of their own -- h5 is excluded in both
+       containers since their shared h5 rule further down (covering both
+       history_log's archived "The Village Votes" heading and the same
+       label live in discussion_status) needs to win instead.
        Deliberately spelled out one selector per tag rather than
        `:is(p, h1, ...)`: Gradio's CSS scoping rewrites custom stylesheets by
        prefixing every selector (and every argument *inside* a `:is()`
@@ -231,7 +233,7 @@ def _chronicle_css() -> str:
     .{HISTORY_LOG_CLASS} h3, .{HISTORY_LOG_CLASS} h4, .{HISTORY_LOG_CLASS} h6,
     .{HISTORY_LOG_CLASS} li, .{HISTORY_LOG_CLASS} strong,
     .{LIVE_DAY_CARD_CLASS} p, .{LIVE_DAY_CARD_CLASS} h1, .{LIVE_DAY_CARD_CLASS} h2,
-    .{LIVE_DAY_CARD_CLASS} h3, .{LIVE_DAY_CARD_CLASS} h4, .{LIVE_DAY_CARD_CLASS} h5,
+    .{LIVE_DAY_CARD_CLASS} h3, .{LIVE_DAY_CARD_CLASS} h4,
     .{LIVE_DAY_CARD_CLASS} h6, .{LIVE_DAY_CARD_CLASS} li, .{LIVE_DAY_CARD_CLASS} strong {{
         color: var(--ink);
     }}
@@ -290,7 +292,8 @@ def _chronicle_css() -> str:
     .{PANEL_DEATH_LINE_CLASS}:not(.prose) {{ margin-top: -24px; }}
     .{PANEL_DEATH_LINE_CLASS} .{NIGHT_STRIP_CLASS} {{ margin-top: 8px; }}
 
-    .{HISTORY_LOG_CLASS} h5 {{
+    .{HISTORY_LOG_CLASS} h5,
+    .{LIVE_DAY_CARD_CLASS} h5 {{
         font-family: 'IBM Plex Sans', sans-serif;
         font-size: 0.78em;
         font-weight: 600;
@@ -359,7 +362,8 @@ def _chronicle_css() -> str:
     .{LIVE_DAY_CARD_CLASS} .{DISCUSSION_TRANSCRIPT_CLASS}:empty {{ display: none; }}
 
     /* Separates the moderator's "discussion stopped" line from the
-       werewolf-guess prompt that follows it, in discussion_status. */
+       werewolf-guess prompt/"The Village Votes" label that follows it, in
+       discussion_status. */
     .{LIVE_DAY_CARD_CLASS} hr {{
         border: none;
         border-top: 2px dotted var(--parchment-edge);
@@ -491,12 +495,16 @@ def _voting_results_notice(state: GameState) -> str:
     # werewolf?" no longer applies and would otherwise sit there unchanged
     # (discussion_status is not touched again after this) through the tally
     # and past the final lynch result.
+    #
+    # Rendered as the same h5 used for this label in the archived history
+    # panel (see format_completed_round_history) -- picks up that rule's
+    # uppercase/ember styling and dashed top-border, so no separate "---"
+    # divider is needed here (one would double up with the h5's own border).
     return (
         f'<div class="{MODERATOR_NOTICE_CLASS}">'
         "The moderator has stopped the discussion."
         "</div>\n\n"
-        "---\n\n"
-        "Voting Results\n\n"
+        "##### The Village Votes\n\n"
         f'<span style="display:none">day {state.day_number}</span>'
     )
 
@@ -679,6 +687,17 @@ def format_completed_round_history(state: GameState) -> str:
                 tally=tally_votes(day.votes),
                 lynched=day.player_lynched,
             )
+            # The live discussion_status notice announcing this is folded
+            # into the permanent record too, rather than vanishing once the
+            # round resets into the next day's Begin-gated panel. No extra
+            # "---" divider is needed before the heading below -- the
+            # history-log h5 rule already gives "The Village Votes" its own
+            # dashed top-border, so adding one here would double it up.
+            section.append(
+                f'<div class="{MODERATOR_NOTICE_CLASS}">'
+                "The moderator has stopped the discussion."
+                "</div>"
+            )
             section.append("##### The Village Votes")
             section.append(format_vote_result(state, outcome))
         # Blank lines around the div tags are required so the markdown
@@ -859,7 +878,7 @@ async def start_voting(bridge: SessionBridge, state: GameState):
     #
     # discussion_status.change() fires a second time later in the same
     # round, when this function's own VoteOutcome branch rewrites
-    # discussion_status to the "Voting Results" label -- that spurious
+    # discussion_status to the "The Village Votes" label -- that spurious
     # re-entry must return here, before resolve_input(), or it can resolve
     # a *later* pause point (the next day's announce_death) that has
     # nothing to do with it. See SessionBridge.voting_started.
@@ -1270,7 +1289,7 @@ def build_app() -> gr.Blocks:
         # on its own.
         # discussion_status is both the trigger for this event and one of
         # its outputs (see start_voting's VoteOutcome branch, which swaps
-        # its ballot question for a "Voting Results" label once the
+        # its ballot question for "The Village Votes" label once the
         # human-is-dead path's outcome is known) -- safe against re-firing
         # itself since start_voting's bridge.resolve_input() guard makes any
         # re-entry from that second .change() a no-op.
