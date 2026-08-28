@@ -1069,16 +1069,16 @@ async def start_voting(bridge: SessionBridge, state: GameState):
                         *([gr.update()] * MAX_VOTE_CANDIDATES),
                         gr.update(visible=False),
                         gr.update(visible=False),
-                        gr.update(),
-                        gr.update(),
+                        format_alive_panel(state),
+                        format_deaths_panel(state),
                         gr.update(visible=False),
-                        gr.update(),
+                        gr.update(visible=False),
                         gr.update(
                             value=format_completed_round_history(
                                 state, include_current_day=True
                             )
                         ),
-                        gr.update(),
+                        gr.update(value=""),
                         gr.update(visible=False),
                         gr.update(visible=True),
                         gr.update(value=format_game_over(next_step, state)),
@@ -1257,14 +1257,14 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
                         gr.update(),
                         gr.update(),
                         gr.update(visible=False),
-                        gr.update(),
+                        gr.update(visible=False),
                         gr.update(visible=False),
                         gr.update(
                             value=format_completed_round_history(
                                 state, include_current_day=True
                             )
                         ),
-                        gr.update(),
+                        gr.update(value=""),
                         gr.update(visible=False),
                         gr.update(visible=True),
                         gr.update(value=format_game_over(next_step, state)),

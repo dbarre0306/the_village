@@ -1404,9 +1404,10 @@ async def test_start_voting_shows_the_results_panel_when_the_lynch_ends_the_game
         user_player_name="Dana",
         players=[
             Player(name="Dana", player_type="user", is_alive=False),
+            Player(name="A", player_type="villager", is_alive=True),
             Player(name="W", player_type="werewolf", is_alive=False),
         ],
-        days=[Day(day_number=1, player_lynched="W")],
+        days=[Day(day_number=1, player_found_dead="Dana", player_lynched="W")],
     )
     bridge = SessionBridge()
     waiter = asyncio.create_task(bridge.wait_for_input())
@@ -1425,12 +1426,12 @@ async def test_start_voting_shows_the_results_panel_when_the_lynch_ends_the_game
         *_candidate_updates,
         vote_status_update,
         discussion_status_update,
-        _alive_panel_update,
-        _deaths_panel_update,
+        alive_panel_value,
+        deaths_panel_value,
         begin_button_update,
-        _discussion_title_update,
+        discussion_title_update,
         history_log_update,
-        _discussion_transcript_update,
+        discussion_transcript_update,
         panel_death_line_update,
         game_over_panel_update,
         game_over_status_update,
@@ -1442,6 +1443,19 @@ async def test_start_voting_shows_the_results_panel_when_the_lynch_ends_the_game
     assert "W" in history_log_update["value"]
     assert game_over_panel_update["visible"] is True
     assert "The Villagers Win!" in game_over_status_update["value"]
+    # Finding 1: the final round's transcript and heading are folded into
+    # history_log above -- the now-defunct live discussion card must not
+    # keep showing them a second time.
+    assert discussion_transcript_update["value"] == ""
+    assert discussion_title_update["visible"] is False
+    # Finding 2: this is the human-already-dead path -- nothing else in
+    # start_voting refreshes these panels here, so they must be refreshed
+    # in this branch or a villagers-win screen can still list the
+    # just-lynched werewolf as living.
+    assert "A" in alive_panel_value
+    assert ">W</span>" not in alive_panel_value
+    assert ">Dana</span>" not in alive_panel_value
+    assert "Dana" in deaths_panel_value
 
 
 async def test_cast_player_vote_shows_the_results_panel_when_the_lynch_ends_the_game():
@@ -1474,10 +1488,10 @@ async def test_cast_player_vote_shows_the_results_panel_when_the_lynch_ends_the_
         _lynched_panel_value,
         _deaths_panel_value,
         begin_button_update,
-        _discussion_title_update,
+        discussion_title_update,
         discussion_status_update,
         history_log_update,
-        _discussion_transcript_update,
+        discussion_transcript_update,
         panel_death_line_update,
         game_over_panel_update,
         game_over_status_update,
@@ -1491,6 +1505,11 @@ async def test_cast_player_vote_shows_the_results_panel_when_the_lynch_ends_the_
     assert "W" in history_log_update["value"]
     assert game_over_panel_update["visible"] is True
     assert "The Villagers Win!" in game_over_status_update["value"]
+    # Finding 1: the final round's transcript and heading are folded into
+    # history_log above -- the now-defunct live discussion card must not
+    # keep showing them a second time.
+    assert discussion_transcript_update["value"] == ""
+    assert discussion_title_update["visible"] is False
 
     with pytest.raises(StopAsyncIteration):
         await events.__anext__()
