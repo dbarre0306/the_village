@@ -95,6 +95,34 @@ def test_format_alive_panel_with_no_villagers():
     assert format_alive_panel(state) == '<div class="chip-list">No one is left.</div>'
 
 
+def test_format_deaths_panel_hides_current_day_death_when_requested():
+    # The current day's kill lands in state the instant WereWolfPack picks a
+    # victim -- well before the player has clicked "Begin" to reveal it (see
+    # _next_day_setup/start_game). include_current_day_death=False is what
+    # keeps it out of this panel until that click.
+    state = make_state_with_one_death()
+    assert (
+        format_deaths_panel(state, include_current_day_death=False)
+        == '<div class="chip-list">No one has been killed yet.</div>'
+    )
+
+
+def test_format_deaths_panel_still_shows_earlier_days_deaths_when_hiding_current_day():
+    state = make_state_with_one_death()
+    state.players.append(Player(name="B", player_type="villager", is_alive=False))
+    state.days.append(Day(day_number=3, player_found_dead="B"))
+    result = format_deaths_panel(state, include_current_day_death=False)
+    assert "A" in result
+    assert "B" not in result
+
+
+def test_format_alive_panel_hides_current_day_death_when_requested():
+    state = make_state_with_one_death()
+    result = format_alive_panel(state, include_current_day_death=False)
+    assert ">A</span>" in result
+    assert "Dana (me)" in result
+
+
 async def test_start_game_rejects_blank_name():
     with pytest.raises(gr.Error):
         async for _ in start_game("   "):
@@ -248,7 +276,7 @@ async def test_send_discussion_turn_is_a_noop_on_blank_message():
     outputs = [
         update async for update in send_discussion_turn(bridge, GameState(), "   ")
     ]
-    assert outputs == [(gr.skip(),) * 12]
+    assert outputs == [(gr.skip(),) * 14]
 
 
 async def test_send_discussion_turn_resolves_pending_input():
@@ -316,6 +344,8 @@ async def test_begin_discussion_shows_the_results_panel_on_game_over():
         game_over_status,
         discussion_title,
         live_day_card,
+        _alive_panel,
+        _deaths_panel,
     ) = outputs[-1]
     assert discussion_input_row["visible"] is False
     assert discussion_status["visible"] is False
@@ -1359,8 +1389,11 @@ async def test_cast_player_vote_advances_to_next_days_begin_gated_panel_on_votin
         live_day_card_update,
     ) = await events.__anext__()
 
-    assert ">A</span>" not in alive_panel_value
-    assert "A" in deaths_panel_value
+    # The next night's kill is already in state by this point, but stays
+    # hidden from these two panels until the player clicks "Begin" for the
+    # new day (see _next_day_setup and begin_discussion).
+    assert ">A</span>" in alive_panel_value
+    assert "A" not in deaths_panel_value
     # Every day is Begin-gated now, including this one -- the button comes
     # back instead of staying hidden. Its label must be resent too, not just
     # visible=True -- see the matching assertion (and comment) in

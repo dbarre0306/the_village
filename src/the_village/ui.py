@@ -141,7 +141,6 @@ def _layout_css() -> str:
         font-size: 0.85em;
     }}
     .{VILLAGER_CHIP_CLASS}.dead {{
-        text-decoration: line-through;
         opacity: 0.6;
     }}
     .{TYPING_INDICATOR_CLASS} {{
@@ -625,8 +624,18 @@ def format_latest_death_announcement(state: GameState) -> str:
     return _format_night_line(dead_days[-1], len(dead_days) - 1)
 
 
-def format_deaths_panel(state: GameState) -> str:
-    dead_days = [day for day in state.days if day.player_found_dead]
+def format_deaths_panel(state: GameState, include_current_day_death: bool = True) -> str:
+    # The current day's kill lands in state (and thus here) the instant
+    # WereWolfPack picks a victim -- well before the player has clicked
+    # "Begin" to reveal it (see begin_discussion). include_current_day_death
+    # lets the pre-Begin renders (start_game, _next_day_setup) keep hiding
+    # it until that click.
+    dead_days = [
+        day
+        for day in state.days
+        if day.player_found_dead
+        and (include_current_day_death or day is not state.current_day)
+    ]
     if not dead_days:
         return f'<div class="{CHIP_LIST_CLASS}">No one has been killed yet.</div>'
     chips = "".join(
@@ -681,8 +690,19 @@ def _vote_button_updates(state: GameState) -> list:
     return updates
 
 
-def format_alive_panel(state: GameState) -> str:
-    alive = [player for player in state.players if player.is_alive]
+def format_alive_panel(state: GameState, include_current_day_death: bool = True) -> str:
+    # Player.is_alive flips to False the instant WereWolfPack picks a
+    # victim, same as player_found_dead above -- mirror
+    # include_current_day_death's hiding here so the panel doesn't shrink by
+    # one before the death itself is revealed.
+    hidden_victim = (
+        None if include_current_day_death else state.current_day.player_found_dead
+    )
+    alive = [
+        player
+        for player in state.players
+        if player.is_alive or player.name == hidden_victim
+    ]
     if not alive:
         return f'<div class="{CHIP_LIST_CLASS}">No one is left.</div>'
     chips = "".join(
@@ -841,6 +861,8 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                     gr.update(),
                     gr.update(),
                     gr.update(),
+                    gr.update(),
+                    gr.update(),
                 )
             item = await bridge.outbox.get()
             logger.debug("_stream_bridge: bridge=%s got item=%r", id(bridge), item)
@@ -877,6 +899,10 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                     # still renders as its own collapsed, parchment-backed
                     # sliver of a panel.
                     gr.update(visible=False),
+                    # begin_discussion's own first yield already revealed
+                    # this round's death here -- nothing left to update.
+                    gr.update(),
+                    gr.update(),
                 )
                 return
             if isinstance(item, DiscussionMessage):
@@ -902,6 +928,8 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                         gr.update(),
                         gr.update(),
                         gr.update(),
+                        gr.update(),
+                        gr.update(),
                     )
                     await asyncio.sleep(SPEAKER_THINKING_DELAY_SECONDS)
                 bridge.revealed_discussion_messages += 1
@@ -913,6 +941,8 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                     transcript,
                     gr.update(value=""),
                     gr.update(visible=False),
+                    gr.update(),
+                    gr.update(),
                     gr.update(),
                     gr.update(),
                     gr.update(),
@@ -947,6 +977,8 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                     gr.update(),
                     gr.update(),
                     gr.update(),
+                    gr.update(),
+                    gr.update(),
                 )
                 return
             elif item == FlowStatus.DISCUSSION_COMPLETE:
@@ -964,6 +996,8 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                         visible=True,
                         value=_discussion_complete_notice(state),
                     ),
+                    gr.update(),
+                    gr.update(),
                     gr.update(),
                     gr.update(),
                     gr.update(),
@@ -1014,6 +1048,11 @@ async def begin_discussion(bridge: SessionBridge, state: GameState):
         gr.update(),
         gr.update(),
         gr.update(),
+        # The reveal this whole click exists for: the night's kill, hidden
+        # from these two panels until now by _next_day_setup/start_game's
+        # include_current_day_death=False.
+        format_alive_panel(state),
+        format_deaths_panel(state),
     )
     async for update in _stream_bridge(bridge, state):
         yield update
@@ -1021,7 +1060,7 @@ async def begin_discussion(bridge: SessionBridge, state: GameState):
 
 async def send_discussion_turn(bridge: SessionBridge, state: GameState, message: str):
     if not message.strip():
-        yield (gr.skip(),) * 12
+        yield (gr.skip(),) * 14
         return
     if not bridge.resolve_input(PlayerInput(text=message.strip())):
         return
@@ -1030,6 +1069,8 @@ async def send_discussion_turn(bridge: SessionBridge, state: GameState, message:
         gr.update(),
         gr.update(),
         gr.update(visible=False),
+        gr.update(),
+        gr.update(),
         gr.update(),
         gr.update(),
         gr.update(),
@@ -1051,6 +1092,8 @@ async def pass_discussion_turn(bridge: SessionBridge, state: GameState):
         gr.update(),
         gr.update(),
         gr.update(visible=False),
+        gr.update(),
+        gr.update(),
         gr.update(),
         gr.update(),
         gr.update(),
@@ -1311,8 +1354,12 @@ async def _next_day_setup(
         return item
     weekday = WEEKDAYS[(state.day_number - 1) % 7]
     return _NextDayPanel(
-        alive_panel=format_alive_panel(state),
-        deaths_panel=format_deaths_panel(state),
+        # This new day's kill is already in state (see the module-level
+        # comment on format_deaths_panel) but must stay hidden until the
+        # player clicks "Begin" for it -- begin_discussion is what reveals
+        # it, both in panel_death_line and by re-rendering these two panels.
+        alive_panel=format_alive_panel(state, include_current_day_death=False),
+        deaths_panel=format_deaths_panel(state, include_current_day_death=False),
         discussion_title=gr.update(value=f"### {weekday}", visible=True),
         history_log=gr.update(value=format_completed_round_history(state)),
     )
@@ -1463,8 +1510,13 @@ async def start_game(player_name: str):
     yield (
         gr.update(visible=False),
         gr.update(visible=True),
-        format_deaths_panel(state),
-        format_alive_panel(state),
+        # Night one's kill is already in state by this point (see the
+        # module-level comment on format_deaths_panel) but must stay hidden
+        # until the player clicks "Begin" -- begin_discussion is what
+        # reveals it, both in panel_death_line and by re-rendering these two
+        # panels.
+        format_deaths_panel(state, include_current_day_death=False),
+        format_alive_panel(state, include_current_day_death=False),
         format_lynched_panel(state),
         gr.update(value=f"### {weekday}", visible=True),
         state,
@@ -1616,6 +1668,13 @@ def build_app() -> gr.Blocks:
             game_over_status,
             discussion_title,
             live_day_card,
+            # Only begin_discussion actually changes these (revealing the
+            # night's kill hidden by _next_day_setup/start_game until now)
+            # -- every other event sharing this output list (_stream_bridge,
+            # send_discussion_turn, pass_discussion_turn) leaves them
+            # untouched.
+            alive_panel,
+            deaths_panel,
         ]
 
         # SessionBridge.resolve_input() is the per-session no-pending-future
