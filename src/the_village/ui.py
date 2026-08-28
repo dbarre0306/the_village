@@ -1214,6 +1214,8 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
         gr.update(),
         gr.update(),
         gr.update(),
+        gr.update(),
+        gr.update(),
     )
     try:
         while True:
@@ -1233,6 +1235,8 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
                     gr.update(),
                     gr.update(),
                     gr.update(),
+                    gr.update(),
+                    gr.update(),
                 )
             elif item == FlowStatus.VOTING_COMPLETE:
                 # The round auto-advances into the next day's panel as soon
@@ -1243,24 +1247,47 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
                 # with nothing yielded in between -- yield a no-op heartbeat
                 # first so the frontend has a fresh update to hold onto
                 # rather than sitting on a stale pending state that long.
-                yield (gr.update(),) * 11
-                next_day = await _next_day_setup(bridge, state)
+                yield (gr.update(),) * 13
+                next_step = await _next_day_setup(bridge, state)
+                if isinstance(next_step, GameOverResult):
+                    yield (
+                        gr.update(visible=False),
+                        gr.update(visible=False),
+                        gr.update(),
+                        gr.update(),
+                        gr.update(),
+                        gr.update(visible=False),
+                        gr.update(),
+                        gr.update(visible=False),
+                        gr.update(
+                            value=format_completed_round_history(
+                                state, include_current_day=True
+                            )
+                        ),
+                        gr.update(),
+                        gr.update(visible=False),
+                        gr.update(visible=True),
+                        gr.update(value=format_game_over(next_step, state)),
+                    )
+                    return
                 yield (
                     gr.update(),
                     gr.update(visible=False),
-                    next_day.alive_panel,
+                    next_step.alive_panel,
                     gr.update(),
-                    next_day.deaths_panel,
+                    next_step.deaths_panel,
                     # Gradio unmounts a hidden component entirely (see the
                     # comment on discussion_input_row in _autofocus_js), so
                     # its label has to be resent here, not just `visible`,
                     # or the remounted button comes back blank.
                     gr.update(value="Begin", visible=True),
-                    next_day.discussion_title,
+                    next_step.discussion_title,
                     gr.update(visible=False),
-                    next_day.history_log,
+                    next_step.history_log,
                     gr.update(value=""),
                     gr.update(visible=False),
+                    gr.update(),
+                    gr.update(),
                 )
                 return
     except gr.Error:
@@ -1491,6 +1518,8 @@ def build_app() -> gr.Blocks:
             history_log,
             discussion_transcript,
             panel_death_line,
+            game_over_panel,
+            game_over_status,
         ]
 
         # SessionBridge.resolve_input()'s no-pending-future guard (see

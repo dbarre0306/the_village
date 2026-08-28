@@ -1200,6 +1200,8 @@ async def test_cast_player_vote_resolves_the_ballot_and_hides_controls_before_th
         _history_log_update,
         _discussion_transcript_update,
         _panel_death_line_update,
+        _game_over_panel_update,
+        _game_over_status_update,
     ) = first_event
     assert row_update["visible"] is False
     assert status_update["value"] == "Tallying the votes…"
@@ -1322,6 +1324,8 @@ async def test_cast_player_vote_advances_to_next_days_begin_gated_panel_on_votin
         _history_log_update,
         discussion_transcript_update,
         panel_death_line_update,
+        game_over_panel_update,
+        game_over_status_update,
     ) = await events.__anext__()
 
     assert ">A</span>" not in alive_panel_value
@@ -1343,6 +1347,8 @@ async def test_cast_player_vote_advances_to_next_days_begin_gated_panel_on_votin
     # live vote_status widget (reused by the next round) is hidden instead
     # of continuing to show it.
     assert status_update["visible"] is False
+    assert game_over_panel_update == gr.update()
+    assert game_over_status_update == gr.update()
 
     with pytest.raises(StopAsyncIteration):
         await events.__anext__()
@@ -1423,3 +1429,55 @@ async def test_start_voting_shows_the_results_panel_when_the_lynch_ends_the_game
     assert "W" in history_log_update["value"]
     assert game_over_panel_update["visible"] is True
     assert "The Villagers Win!" in game_over_status_update["value"]
+
+
+async def test_cast_player_vote_shows_the_results_panel_when_the_lynch_ends_the_game():
+    state = _voting_state()
+    state.players.append(Player(name="W", player_type="werewolf"))
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
+
+    outcome = VoteOutcome(day_number=2, votes=[], tally={"W": 1}, lynched="W")
+
+    async def feed_outcome_and_game_over():
+        next(p for p in state.players if p.name == "W").is_alive = False
+        state.current_day.player_lynched = "W"
+        await bridge.outbox.put(outcome)
+        await bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
+        await bridge.outbox.put(GameOverResult(winner="villagers", werewolf_names=["W"]))
+
+    events = cast_player_vote(bridge, state, "W")
+    await events.__anext__()  # the "Tallying..." yield; also resolves waiter
+    await waiter
+    await feed_outcome_and_game_over()
+    await events.__anext__()  # the VoteOutcome yield
+    await events.__anext__()  # the no-op heartbeat yield
+
+    (
+        row_update,
+        status_update,
+        _alive_panel_value,
+        _lynched_panel_value,
+        _deaths_panel_value,
+        begin_button_update,
+        _discussion_title_update,
+        discussion_status_update,
+        history_log_update,
+        _discussion_transcript_update,
+        panel_death_line_update,
+        game_over_panel_update,
+        game_over_status_update,
+    ) = await events.__anext__()
+
+    assert row_update["visible"] is False
+    assert status_update["visible"] is False
+    assert begin_button_update["visible"] is False
+    assert discussion_status_update["visible"] is False
+    assert panel_death_line_update["visible"] is False
+    assert "W" in history_log_update["value"]
+    assert game_over_panel_update["visible"] is True
+    assert "The Villagers Win!" in game_over_status_update["value"]
+
+    with pytest.raises(StopAsyncIteration):
+        await events.__anext__()
