@@ -493,6 +493,38 @@ def _autofocus_js() -> str:
     """
 
 
+def _game_over_scroll_js() -> str:
+    # game_over_panel starts visible=False, and like discussion_input_row
+    # (see _autofocus_js) it's conditionally mounted rather than just
+    # display:none'd -- so there's no fixed node to grab up front. Watch the
+    # document for its markdown filling in and jump to it, the same
+    # watch-and-catch approach _autofocus_js uses for the reappearing
+    # textarea.
+    return f"""
+    (() => {{
+        const scrolledPanels = new WeakSet();
+        const tryScroll = () => {{
+            const status = document.querySelector(".{GAME_OVER_STATUS_CLASS}");
+            if (!status || scrolledPanels.has(status) || !status.textContent.trim()) {{
+                return;
+            }}
+            scrolledPanels.add(status);
+            // Scroll the whole panel (status text + Play Again button) into
+            // view, not just the status markdown -- scrolling to the
+            // markdown's own bottom edge left the button below the fold.
+            const panel = status.closest(".{DAY_PANEL_CLASS}") ?? status;
+            panel.scrollIntoView({{block: "end"}});
+        }};
+        new MutationObserver(tryScroll).observe(document.body, {{
+            childList: true,
+            subtree: true,
+            characterData: true,
+        }});
+        tryScroll();
+    }})();
+    """
+
+
 def _speaker_color_index(name: str, state: GameState) -> int:
     roster_names = [player.name for player in state.players]
     if name not in roster_names:
@@ -1696,7 +1728,7 @@ def build_app() -> gr.Blocks:
 def main():
     build_app().launch(
         css=_speaker_color_css() + _layout_css() + _chronicle_css(),
-        js=_autoscroll_js() + _autofocus_js(),
+        js=_autoscroll_js() + _autofocus_js() + _game_over_scroll_js(),
     )
 
 
