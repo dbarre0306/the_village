@@ -777,6 +777,8 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                     gr.update(),
                     gr.update(),
                     gr.update(),
+                    gr.update(),
+                    gr.update(),
                 )
             item = await bridge.outbox.get()
             logger.debug("_stream_bridge: bridge=%s got item=%r", id(bridge), item)
@@ -800,6 +802,19 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                     ),
                     gr.update(visible=True),
                     gr.update(value=format_game_over(item, state)),
+                    # The live day card's own title never advances into a new
+                    # Day when a night kill ends the game (see
+                    # _next_day_setup's GameOverResult short-circuit) -- it's
+                    # still sitting there visible from this round's Begin
+                    # click. Left alone, live-day-card renders as its own
+                    # (empty) panel below the archived history entry above,
+                    # right next to the real results panel.
+                    gr.update(visible=False),
+                    # And the card's own container needs hiding too, not
+                    # just its title -- with every child hidden/empty it
+                    # still renders as its own collapsed, parchment-backed
+                    # sliver of a panel.
+                    gr.update(visible=False),
                 )
                 return
             if isinstance(item, DiscussionMessage):
@@ -823,6 +838,8 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                         gr.update(),
                         gr.update(),
                         gr.update(),
+                        gr.update(),
+                        gr.update(),
                     )
                     await asyncio.sleep(SPEAKER_THINKING_DELAY_SECONDS)
                 bridge.revealed_discussion_messages += 1
@@ -834,6 +851,8 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                     transcript,
                     gr.update(value=""),
                     gr.update(visible=False),
+                    gr.update(),
+                    gr.update(),
                     gr.update(),
                     gr.update(),
                     gr.update(),
@@ -864,6 +883,8 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                     gr.update(),
                     gr.update(),
                     gr.update(),
+                    gr.update(),
+                    gr.update(),
                 )
                 return
             elif item == FlowStatus.DISCUSSION_COMPLETE:
@@ -881,6 +902,8 @@ async def _stream_bridge(bridge: SessionBridge, state: GameState):
                         visible=True,
                         value=_discussion_complete_notice(state),
                     ),
+                    gr.update(),
+                    gr.update(),
                     gr.update(),
                     gr.update(),
                     gr.update(),
@@ -927,6 +950,8 @@ async def begin_discussion(bridge: SessionBridge, state: GameState):
         gr.update(),
         gr.update(),
         gr.update(),
+        gr.update(),
+        gr.update(),
     )
     async for update in _stream_bridge(bridge, state):
         yield update
@@ -934,7 +959,7 @@ async def begin_discussion(bridge: SessionBridge, state: GameState):
 
 async def send_discussion_turn(bridge: SessionBridge, state: GameState, message: str):
     if not message.strip():
-        yield (gr.skip(),) * 10
+        yield (gr.skip(),) * 12
         return
     if not bridge.resolve_input(PlayerInput(text=message.strip())):
         return
@@ -943,6 +968,8 @@ async def send_discussion_turn(bridge: SessionBridge, state: GameState, message:
         gr.update(),
         gr.update(),
         gr.update(visible=False),
+        gr.update(),
+        gr.update(),
         gr.update(),
         gr.update(),
         gr.update(),
@@ -962,6 +989,8 @@ async def pass_discussion_turn(bridge: SessionBridge, state: GameState):
         gr.update(),
         gr.update(),
         gr.update(visible=False),
+        gr.update(),
+        gr.update(),
         gr.update(),
         gr.update(),
         gr.update(),
@@ -990,13 +1019,23 @@ async def start_voting(bridge: SessionBridge, state: GameState):
         # before any yield) appears to leave Gradio's bound outputs in a
         # blank/pending state rather than untouched -- yielding an explicit
         # no-op tuple, even though nothing here actually changes, avoids
-        # that. Matches this event's outputs list: session_bridge,
-        # vote_button_row, *candidate_buttons, vote_status,
+        # that. gr.skip() (not gr.update()) is what makes it a true no-op:
+        # gr.update() still ships a real, empty update for every one of
+        # these components, and since this whole branch only runs because
+        # this same event's *own* real update (the discussion_status swap
+        # above) just fired again, that redundant update lands in the
+        # frontend concurrently with the real one still streaming in --
+        # visibly flickering every bound component and briefly remounting
+        # the ones mid-transition (e.g. vote_status/discussion_status right
+        # before their real hide arrives), leaving a blank panel behind.
+        # gr.skip() removes these components from the payload entirely, so
+        # this call touches nothing. Matches this event's outputs list:
+        # session_bridge, vote_button_row, *candidate_buttons, vote_status,
         # discussion_status, alive_panel, deaths_panel,
         # begin_discussion_button, discussion_title, history_log,
         # discussion_transcript, panel_death_line, game_over_panel,
-        # game_over_status.
-        yield (gr.update(),) * (13 + MAX_VOTE_CANDIDATES)
+        # game_over_status, live_day_card.
+        yield (gr.skip(),) * (14 + MAX_VOTE_CANDIDATES)
         return
     bridge.voting_started = True
     if not bridge.resolve_input(PlayerInput()):
@@ -1012,6 +1051,7 @@ async def start_voting(bridge: SessionBridge, state: GameState):
                     gr.update(visible=True),
                     *_vote_button_updates(state),
                     gr.update(visible=False),
+                    gr.update(),
                     gr.update(),
                     gr.update(),
                     gr.update(),
@@ -1048,6 +1088,7 @@ async def start_voting(bridge: SessionBridge, state: GameState):
                     gr.update(),
                     gr.update(),
                     gr.update(),
+                    gr.update(),
                 )
             elif item == FlowStatus.VOTING_COMPLETE:
                 # cast_player_vote is what normally advances into the next
@@ -1059,8 +1100,12 @@ async def start_voting(bridge: SessionBridge, state: GameState):
                 # can take several seconds with nothing yielded in between --
                 # yield a no-op heartbeat first so the frontend has a fresh
                 # update to hold onto rather than sitting on a stale pending
-                # state that long.
-                yield (bridge,) + (gr.update(),) * 18
+                # state that long. gr.skip() (not gr.update()) keeps it a
+                # true no-op -- see the matching comment on the
+                # bridge.voting_started guard above for why gr.update()
+                # here visibly flickers/blanks components that aren't
+                # actually changing.
+                yield (bridge,) + (gr.skip(),) * 19
                 next_step = await _next_day_setup(bridge, state)
                 if isinstance(next_step, GameOverResult):
                     yield (
@@ -1082,6 +1127,14 @@ async def start_voting(bridge: SessionBridge, state: GameState):
                         gr.update(visible=False),
                         gr.update(visible=True),
                         gr.update(value=format_game_over(next_step, state)),
+                        # The live day card never advances into a new Day
+                        # when this lynch just ended the game -- left alone
+                        # it renders as its own (collapsed but visible, still
+                        # parchment-backed) empty panel next to the real
+                        # results panel below it. See the matching branch in
+                        # _stream_bridge for the night-kill-ends-the-game
+                        # equivalent.
+                        gr.update(visible=False),
                     )
                     return
                 yield (
@@ -1101,6 +1154,7 @@ async def start_voting(bridge: SessionBridge, state: GameState):
                     next_step.history_log,
                     gr.update(value=""),
                     gr.update(visible=False),
+                    gr.update(),
                     gr.update(),
                     gr.update(),
                 )
@@ -1216,6 +1270,7 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
         gr.update(),
         gr.update(),
         gr.update(),
+        gr.update(),
     )
     try:
         while True:
@@ -1237,6 +1292,7 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
                     gr.update(),
                     gr.update(),
                     gr.update(),
+                    gr.update(),
                 )
             elif item == FlowStatus.VOTING_COMPLETE:
                 # The round auto-advances into the next day's panel as soon
@@ -1247,7 +1303,11 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
                 # with nothing yielded in between -- yield a no-op heartbeat
                 # first so the frontend has a fresh update to hold onto
                 # rather than sitting on a stale pending state that long.
-                yield (gr.update(),) * 13
+                # gr.skip() (not gr.update()) keeps it a true no-op -- see
+                # the matching comment on start_voting's bridge.voting_started
+                # guard for why gr.update() here visibly
+                # flickers/blanks components that aren't actually changing.
+                yield (gr.skip(),) * 14
                 next_step = await _next_day_setup(bridge, state)
                 if isinstance(next_step, GameOverResult):
                     yield (
@@ -1268,6 +1328,12 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
                         gr.update(visible=False),
                         gr.update(visible=True),
                         gr.update(value=format_game_over(next_step, state)),
+                        # The live day card never advances into a new Day
+                        # when this vote just ended the game -- left alone
+                        # it renders as its own (collapsed but visible,
+                        # still parchment-backed) empty panel next to the
+                        # real results panel below it.
+                        gr.update(visible=False),
                     )
                     return
                 yield (
@@ -1286,6 +1352,7 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
                     next_step.history_log,
                     gr.update(value=""),
                     gr.update(visible=False),
+                    gr.update(),
                     gr.update(),
                     gr.update(),
                 )
@@ -1341,6 +1408,9 @@ async def start_game(player_name: str):
         gr.update(visible=False),
         gr.update(visible=False),
         gr.update(visible=False),
+        # A previous game (via Play Again) may have hidden the live day
+        # card on GameOverResult -- always show it again for a fresh game.
+        gr.update(visible=True),
     )
 
 
@@ -1390,7 +1460,7 @@ def build_app() -> gr.Blocks:
                 # it, as its own panel appended at the end) -- so the live
                 # card stays put at the bottom while finished days pile up
                 # above it, oldest first.
-                with gr.Column(elem_classes=[LIVE_DAY_CARD_CLASS]):
+                with gr.Column(elem_classes=[LIVE_DAY_CARD_CLASS]) as live_day_card:
                     discussion_title = gr.Markdown(
                         visible=False, elem_classes=[DISCUSSION_TITLE_CLASS]
                     )
@@ -1446,6 +1516,7 @@ def build_app() -> gr.Blocks:
             discussion_status,
             vote_button_row,
             vote_status,
+            live_day_card,
         ]
 
         start_button.click(
@@ -1473,6 +1544,8 @@ def build_app() -> gr.Blocks:
             history_log,
             game_over_panel,
             game_over_status,
+            discussion_title,
+            live_day_card,
         ]
 
         # SessionBridge.resolve_input() is the per-session no-pending-future
@@ -1535,6 +1608,7 @@ def build_app() -> gr.Blocks:
                 panel_death_line,
                 game_over_panel,
                 game_over_status,
+                live_day_card,
             ],
         )
 
@@ -1552,6 +1626,7 @@ def build_app() -> gr.Blocks:
             panel_death_line,
             game_over_panel,
             game_over_status,
+            live_day_card,
         ]
 
         # SessionBridge.resolve_input()'s no-pending-future guard (see

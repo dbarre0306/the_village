@@ -248,7 +248,7 @@ async def test_send_discussion_turn_is_a_noop_on_blank_message():
     outputs = [
         update async for update in send_discussion_turn(bridge, GameState(), "   ")
     ]
-    assert outputs == [(gr.skip(),) * 10]
+    assert outputs == [(gr.skip(),) * 12]
 
 
 async def test_send_discussion_turn_resolves_pending_input():
@@ -314,6 +314,8 @@ async def test_begin_discussion_shows_the_results_panel_on_game_over():
         history_log,
         game_over_panel,
         game_over_status,
+        discussion_title,
+        live_day_card,
     ) = outputs[-1]
     assert discussion_input_row["visible"] is False
     assert discussion_status["visible"] is False
@@ -322,6 +324,8 @@ async def test_begin_discussion_shows_the_results_panel_on_game_over():
     assert "A" in history_log["value"]
     assert game_over_panel["visible"] is True
     assert "The Werewolves Win!" in game_over_status["value"]
+    assert discussion_title["visible"] is False
+    assert live_day_card["visible"] is False
 
 
 def _discussion_state() -> GameState:
@@ -882,6 +886,7 @@ async def test_start_voting_resolves_the_discussion_gate_and_reveals_the_ballot(
         panel_death_line_update,
         game_over_panel_update,
         game_over_status_update,
+        live_day_card_update,
     ) = outputs[0]
     assert row_update["visible"] is True
     assert len(candidate_updates) == ui.MAX_VOTE_CANDIDATES
@@ -903,6 +908,7 @@ async def test_start_voting_resolves_the_discussion_gate_and_reveals_the_ballot(
     assert panel_death_line_update == gr.update()
     assert game_over_panel_update == gr.update()
     assert game_over_status_update == gr.update()
+    assert live_day_card_update == gr.update()
 
 
 async def test_start_voting_advances_to_next_day_on_voting_complete_instead_of_hanging():
@@ -950,6 +956,7 @@ async def test_start_voting_advances_to_next_day_on_voting_complete_instead_of_h
         panel_death_line_update,
         game_over_panel_update,
         game_over_status_update,
+        live_day_card_update,
     ) = outputs[1]
     assert vote_status_update["visible"] is False
     assert discussion_status_update["visible"] is False
@@ -966,6 +973,7 @@ async def test_start_voting_advances_to_next_day_on_voting_complete_instead_of_h
     assert panel_death_line_update["visible"] is False
     assert game_over_panel_update == gr.update()
     assert game_over_status_update == gr.update()
+    assert live_day_card_update == gr.update()
 
 
 async def test_start_voting_renders_a_vote_outcome_before_voting_complete():
@@ -1008,6 +1016,7 @@ async def test_start_voting_renders_a_vote_outcome_before_voting_complete():
         _panel_death_line_update,
         _game_over_panel_update,
         _game_over_status_update,
+        _live_day_card_update,
     ) = outputs[0]
     assert status_update["visible"] is True
     assert status_update["value"] == ui.format_vote_result(state, outcome)
@@ -1033,6 +1042,7 @@ async def test_start_voting_renders_a_vote_outcome_before_voting_complete():
         _panel_death_line_update,
         _game_over_panel_update,
         _game_over_status_update,
+        _live_day_card_update,
     ) = outputs[2]
     assert begin_button_update["visible"] is True
     # The label must be resent, not just visible=True -- see the matching
@@ -1084,7 +1094,7 @@ async def test_start_voting_second_invocation_does_not_resolve_a_later_pending_i
     # zero-yield generator invocation appears to leave Gradio's bound
     # outputs blank instead of untouched (see the comment in start_voting).
     assert len(second_outputs) == 1
-    assert second_outputs[0] == (gr.update(),) * (13 + ui.MAX_VOTE_CANDIDATES)
+    assert second_outputs[0] == (gr.skip(),) * (14 + ui.MAX_VOTE_CANDIDATES)
     assert not next_waiter.done()
     next_waiter.cancel()
 
@@ -1221,6 +1231,7 @@ async def test_cast_player_vote_resolves_the_ballot_and_hides_controls_before_th
         _panel_death_line_update,
         _game_over_panel_update,
         _game_over_status_update,
+        _live_day_card_update,
     ) = first_event
     assert row_update["visible"] is False
     assert status_update["value"] == "Tallying the votes…"
@@ -1345,6 +1356,7 @@ async def test_cast_player_vote_advances_to_next_days_begin_gated_panel_on_votin
         panel_death_line_update,
         game_over_panel_update,
         game_over_status_update,
+        live_day_card_update,
     ) = await events.__anext__()
 
     assert ">A</span>" not in alive_panel_value
@@ -1368,6 +1380,7 @@ async def test_cast_player_vote_advances_to_next_days_begin_gated_panel_on_votin
     assert status_update["visible"] is False
     assert game_over_panel_update == gr.update()
     assert game_over_status_update == gr.update()
+    assert live_day_card_update == gr.update()
 
     with pytest.raises(StopAsyncIteration):
         await events.__anext__()
@@ -1441,6 +1454,7 @@ async def test_start_voting_shows_the_results_panel_when_the_lynch_ends_the_game
         panel_death_line_update,
         game_over_panel_update,
         game_over_status_update,
+        live_day_card_update,
     ) = outputs[-1]
     assert vote_status_update["visible"] is False
     assert discussion_status_update["visible"] is False
@@ -1454,6 +1468,7 @@ async def test_start_voting_shows_the_results_panel_when_the_lynch_ends_the_game
     # keep showing them a second time.
     assert discussion_transcript_update["value"] == ""
     assert discussion_title_update["visible"] is False
+    assert live_day_card_update["visible"] is False
     # Finding 2: this is the human-already-dead path -- nothing else in
     # start_voting refreshes these panels here, so they must be refreshed
     # in this branch or a villagers-win screen can still list the
@@ -1503,6 +1518,7 @@ async def test_cast_player_vote_shows_the_results_panel_when_the_lynch_ends_the_
         panel_death_line_update,
         game_over_panel_update,
         game_over_status_update,
+        live_day_card_update,
     ) = await events.__anext__()
 
     assert row_update["visible"] is False
@@ -1518,6 +1534,7 @@ async def test_cast_player_vote_shows_the_results_panel_when_the_lynch_ends_the_
     # keep showing them a second time.
     assert discussion_transcript_update["value"] == ""
     assert discussion_title_update["visible"] is False
+    assert live_day_card_update["visible"] is False
 
     with pytest.raises(StopAsyncIteration):
         await events.__anext__()
