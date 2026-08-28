@@ -51,6 +51,8 @@ LIVE_DAY_CARD_CLASS = "live-day-card"
 PANEL_DEATH_LINE_CLASS = "panel-death-line"
 MODERATOR_NOTICE_CLASS = "moderator-notice"
 BALLOT_QUESTION_CLASS = "ballot-question"
+GAME_OVER_STATUS_CLASS = "game-over-status"
+GAME_OVER_HEADLINE_CLASS = "game-over-headline"
 
 # Matches roster.py's fixed count of 6 sampled AI villagers -- the vote
 # ballot pre-allocates this many button slots since Gradio's layout is
@@ -237,7 +239,11 @@ def _chronicle_css() -> str:
     .{HISTORY_LOG_CLASS} li, .{HISTORY_LOG_CLASS} strong,
     .{LIVE_DAY_CARD_CLASS} p, .{LIVE_DAY_CARD_CLASS} h1, .{LIVE_DAY_CARD_CLASS} h2,
     .{LIVE_DAY_CARD_CLASS} h3, .{LIVE_DAY_CARD_CLASS} h4,
-    .{LIVE_DAY_CARD_CLASS} h6, .{LIVE_DAY_CARD_CLASS} li, .{LIVE_DAY_CARD_CLASS} strong {{
+    .{LIVE_DAY_CARD_CLASS} h6, .{LIVE_DAY_CARD_CLASS} li, .{LIVE_DAY_CARD_CLASS} strong,
+    .{GAME_OVER_STATUS_CLASS} p, .{GAME_OVER_STATUS_CLASS} h1, .{GAME_OVER_STATUS_CLASS} h2,
+    .{GAME_OVER_STATUS_CLASS} h3, .{GAME_OVER_STATUS_CLASS} h4,
+    .{GAME_OVER_STATUS_CLASS} h6, .{GAME_OVER_STATUS_CLASS} li,
+    .{GAME_OVER_STATUS_CLASS} strong {{
         color: var(--ink);
     }}
 
@@ -296,7 +302,8 @@ def _chronicle_css() -> str:
     .{PANEL_DEATH_LINE_CLASS} .{NIGHT_STRIP_CLASS} {{ margin-top: 8px; }}
 
     .{HISTORY_LOG_CLASS} h5,
-    .{LIVE_DAY_CARD_CLASS} h5 {{
+    .{LIVE_DAY_CARD_CLASS} h5,
+    .{GAME_OVER_STATUS_CLASS} h5 {{
         font-family: 'IBM Plex Sans', sans-serif;
         font-size: 1.3em;
         font-weight: 600;
@@ -398,6 +405,29 @@ def _chronicle_css() -> str:
     }}
 
     .{DISCUSSION_TRANSCRIPT_CLASS} p {{ margin: 0 0 14px; }}
+
+    /* The game's final beat: bigger and more ornamented than the ballot
+       question it echoes, since this is the one line the whole story has
+       been building toward. Color forks on who actually won. */
+    .{GAME_OVER_HEADLINE_CLASS} {{
+        display: block;
+        font-family: 'Fraunces', Georgia, serif;
+        font-weight: 600;
+        font-size: 2.3em;
+        letter-spacing: 0.01em;
+        text-align: center;
+        margin: 8px 0 20px;
+    }}
+    .{GAME_OVER_HEADLINE_CLASS}.villagers-won {{ color: var(--lantern); }}
+    .{GAME_OVER_HEADLINE_CLASS}.werewolves-won {{ color: var(--ember); }}
+    .{GAME_OVER_HEADLINE_CLASS}::before,
+    .{GAME_OVER_HEADLINE_CLASS}::after {{
+        content: '\\2726';
+        font-size: 0.55em;
+        margin: 0 14px;
+        opacity: 0.8;
+        vertical-align: middle;
+    }}
     """
 
 
@@ -1199,17 +1229,25 @@ def format_vote_result(state: GameState, outcome: VoteOutcome) -> str:
 
 
 def format_game_over(result: GameOverResult, state: GameState) -> str:
-    headline = (
-        "The Villagers Win!" if result.winner == "villagers" else "The Werewolves Win!"
-    )
-    chips = "".join(
-        f'<span class="{VILLAGER_CHIP_CLASS}" '
-        f'style="color: var(--speaker-{_speaker_color_index(name, state)})">{name}</span>'
-        for name in result.werewolf_names
-    )
+    villagers_won = result.winner == "villagers"
+    headline = "The Villagers Win!" if villagers_won else "The Werewolves Win!"
+    outcome_class = "villagers-won" if villagers_won else "werewolves-won"
+
+    def chips(names: list[str]) -> str:
+        return "".join(
+            f'<span class="{VILLAGER_CHIP_CLASS}" '
+            f'style="color: var(--speaker-{_speaker_color_index(name, state)})">'
+            f'{name}{" (me)" if name == state.user_player_name else ""}</span>'
+            for name in names
+        )
+
+    villager_names = [player.name for player in state.players if player.is_not_werewolf]
     return (
-        f"### {headline}\n\n"
-        f'The werewolves were: <div class="{CHIP_LIST_CLASS}">{chips}</div>'
+        f'<div class="{GAME_OVER_HEADLINE_CLASS} {outcome_class}">{headline}</div>\n\n'
+        f"##### The Werewolves\n\n"
+        f'<div class="{CHIP_LIST_CLASS}">{chips(result.werewolf_names)}</div>\n\n'
+        f"##### The Villagers\n\n"
+        f'<div class="{CHIP_LIST_CLASS}">{chips(villager_names)}</div>'
     )
 
 
@@ -1495,7 +1533,7 @@ def build_app() -> gr.Blocks:
                 with gr.Column(
                     visible=False, elem_classes=[DAY_PANEL_CLASS]
                 ) as game_over_panel:
-                    game_over_status = gr.Markdown()
+                    game_over_status = gr.Markdown(elem_classes=[GAME_OVER_STATUS_CLASS])
                     play_again_button = gr.Button("Play Again")
 
         start_game_outputs = [
