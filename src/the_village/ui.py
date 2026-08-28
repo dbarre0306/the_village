@@ -994,8 +994,9 @@ async def start_voting(bridge: SessionBridge, state: GameState):
         # vote_button_row, *candidate_buttons, vote_status,
         # discussion_status, alive_panel, deaths_panel,
         # begin_discussion_button, discussion_title, history_log,
-        # discussion_transcript, panel_death_line.
-        yield (gr.update(),) * (11 + MAX_VOTE_CANDIDATES)
+        # discussion_transcript, panel_death_line, game_over_panel,
+        # game_over_status.
+        yield (gr.update(),) * (13 + MAX_VOTE_CANDIDATES)
         return
     bridge.voting_started = True
     if not bridge.resolve_input(PlayerInput()):
@@ -1011,6 +1012,8 @@ async def start_voting(bridge: SessionBridge, state: GameState):
                     gr.update(visible=True),
                     *_vote_button_updates(state),
                     gr.update(visible=False),
+                    gr.update(),
+                    gr.update(),
                     gr.update(),
                     gr.update(),
                     gr.update(),
@@ -1043,6 +1046,8 @@ async def start_voting(bridge: SessionBridge, state: GameState):
                     gr.update(),
                     gr.update(),
                     gr.update(),
+                    gr.update(),
+                    gr.update(),
                 )
             elif item == FlowStatus.VOTING_COMPLETE:
                 # cast_player_vote is what normally advances into the next
@@ -1055,25 +1060,49 @@ async def start_voting(bridge: SessionBridge, state: GameState):
                 # yield a no-op heartbeat first so the frontend has a fresh
                 # update to hold onto rather than sitting on a stale pending
                 # state that long.
-                yield (bridge,) + (gr.update(),) * 16
-                next_day = await _next_day_setup(bridge, state)
+                yield (bridge,) + (gr.update(),) * 18
+                next_step = await _next_day_setup(bridge, state)
+                if isinstance(next_step, GameOverResult):
+                    yield (
+                        bridge,
+                        gr.update(),
+                        *([gr.update()] * MAX_VOTE_CANDIDATES),
+                        gr.update(visible=False),
+                        gr.update(visible=False),
+                        gr.update(),
+                        gr.update(),
+                        gr.update(visible=False),
+                        gr.update(),
+                        gr.update(
+                            value=format_completed_round_history(
+                                state, include_current_day=True
+                            )
+                        ),
+                        gr.update(),
+                        gr.update(visible=False),
+                        gr.update(visible=True),
+                        gr.update(value=format_game_over(next_step, state)),
+                    )
+                    return
                 yield (
                     bridge,
                     gr.update(),
                     *([gr.update()] * MAX_VOTE_CANDIDATES),
                     gr.update(visible=False),
                     gr.update(visible=False),
-                    next_day.alive_panel,
-                    next_day.deaths_panel,
+                    next_step.alive_panel,
+                    next_step.deaths_panel,
                     # Gradio unmounts a hidden component entirely (see the
                     # comment on discussion_input_row in _autofocus_js), so
                     # its label has to be resent here, not just `visible`,
                     # or the remounted button comes back blank.
                     gr.update(value="Begin", visible=True),
-                    next_day.discussion_title,
-                    next_day.history_log,
+                    next_step.discussion_title,
+                    next_step.history_log,
                     gr.update(value=""),
                     gr.update(visible=False),
+                    gr.update(),
+                    gr.update(),
                 )
                 return
     except gr.Error:
@@ -1137,18 +1166,25 @@ class _NextDayPanel(NamedTuple):
     history_log: dict
 
 
-async def _next_day_setup(bridge: SessionBridge, state: GameState) -> _NextDayPanel:
+async def _next_day_setup(
+    bridge: SessionBridge, state: GameState
+) -> _NextDayPanel | GameOverResult:
     # VillageFlow.run_next_night routes straight into the next night and
-    # re-arms announce_death, so the very next outbox item is the following
-    # morning's death announcement (a bare str) -- the same shape start_game
-    # waits on for night one. Draining it here (without resolving anything)
-    # lets the flow keep running in the background while announce_death
-    # stays paused at its own wait_for_input() -- resolving that pause is
-    # begin_discussion_button.click's job, same as day one, so every day
-    # gates its death reveal and discussion behind the same "Begin" click.
-    death = await bridge.outbox.get()
-    if isinstance(death, FlowFailed):
+    # re-arms announce_death, so the very next outbox item is normally the
+    # following morning's death announcement (a bare str) -- the same shape
+    # start_game waits on for night one. But if check_winner_after_lynching
+    # decided the game just ended instead, run_next_night never runs, and
+    # this is a GameOverResult instead. Draining it here (without resolving
+    # anything) lets the flow keep running in the background while
+    # announce_death stays paused at its own wait_for_input() -- resolving
+    # that pause is begin_discussion_button.click's job, same as day one, so
+    # every day gates its death reveal and discussion behind the same
+    # "Begin" click.
+    item = await bridge.outbox.get()
+    if isinstance(item, FlowFailed):
         raise gr.Error("Something went wrong, please try again.")
+    if isinstance(item, GameOverResult):
+        return item
     weekday = WEEKDAYS[(state.day_number - 1) % 7]
     return _NextDayPanel(
         alive_panel=format_alive_panel(state),
@@ -1438,6 +1474,8 @@ def build_app() -> gr.Blocks:
                 history_log,
                 discussion_transcript,
                 panel_death_line,
+                game_over_panel,
+                game_over_status,
             ],
         )
 

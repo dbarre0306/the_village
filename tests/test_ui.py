@@ -861,6 +861,8 @@ async def test_start_voting_resolves_the_discussion_gate_and_reveals_the_ballot(
         history_log_update,
         discussion_transcript_update,
         panel_death_line_update,
+        game_over_panel_update,
+        game_over_status_update,
     ) = outputs[0]
     assert row_update["visible"] is True
     assert len(candidate_updates) == ui.MAX_VOTE_CANDIDATES
@@ -880,6 +882,8 @@ async def test_start_voting_resolves_the_discussion_gate_and_reveals_the_ballot(
     assert history_log_update == gr.update()
     assert discussion_transcript_update == gr.update()
     assert panel_death_line_update == gr.update()
+    assert game_over_panel_update == gr.update()
+    assert game_over_status_update == gr.update()
 
 
 async def test_start_voting_advances_to_next_day_on_voting_complete_instead_of_hanging():
@@ -925,6 +929,8 @@ async def test_start_voting_advances_to_next_day_on_voting_complete_instead_of_h
         _history_log_update,
         discussion_transcript_update,
         panel_death_line_update,
+        game_over_panel_update,
+        game_over_status_update,
     ) = outputs[1]
     assert vote_status_update["visible"] is False
     assert discussion_status_update["visible"] is False
@@ -939,6 +945,8 @@ async def test_start_voting_advances_to_next_day_on_voting_complete_instead_of_h
     assert "A" in alive_panel_update
     assert discussion_transcript_update["value"] == ""
     assert panel_death_line_update["visible"] is False
+    assert game_over_panel_update == gr.update()
+    assert game_over_status_update == gr.update()
 
 
 async def test_start_voting_renders_a_vote_outcome_before_voting_complete():
@@ -979,6 +987,8 @@ async def test_start_voting_renders_a_vote_outcome_before_voting_complete():
         _history_log_update,
         _discussion_transcript_update,
         _panel_death_line_update,
+        _game_over_panel_update,
+        _game_over_status_update,
     ) = outputs[0]
     assert status_update["visible"] is True
     assert status_update["value"] == ui.format_vote_result(state, outcome)
@@ -1002,6 +1012,8 @@ async def test_start_voting_renders_a_vote_outcome_before_voting_complete():
         _history_log_update,
         _discussion_transcript_update,
         _panel_death_line_update,
+        _game_over_panel_update,
+        _game_over_status_update,
     ) = outputs[2]
     assert begin_button_update["visible"] is True
     # The label must be resent, not just visible=True -- see the matching
@@ -1053,7 +1065,7 @@ async def test_start_voting_second_invocation_does_not_resolve_a_later_pending_i
     # zero-yield generator invocation appears to leave Gradio's bound
     # outputs blank instead of untouched (see the comment in start_voting).
     assert len(second_outputs) == 1
-    assert second_outputs[0] == (gr.update(),) * (11 + ui.MAX_VOTE_CANDIDATES)
+    assert second_outputs[0] == (gr.update(),) * (13 + ui.MAX_VOTE_CANDIDATES)
     assert not next_waiter.done()
     next_waiter.cancel()
 
@@ -1362,3 +1374,52 @@ async def test_cast_player_abstain_resolves_with_no_target():
 
     assert await waiter == PlayerInput(text=None)
     await events.aclose()
+
+
+async def test_start_voting_shows_the_results_panel_when_the_lynch_ends_the_game():
+    # Happens when the human is already dead (same no-ballot path
+    # test_start_voting_advances_to_next_day_on_voting_complete_instead_of_hanging
+    # covers) and the lynch that just completed also ends the game -- there's
+    # no next night's death to drain, only a GameOverResult.
+    state = GameState(
+        user_player_name="Dana",
+        players=[
+            Player(name="Dana", player_type="user", is_alive=False),
+            Player(name="W", player_type="werewolf", is_alive=False),
+        ],
+        days=[Day(day_number=1, player_lynched="W")],
+    )
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
+    await bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
+    result = GameOverResult(winner="villagers", werewolf_names=["W"])
+    await bridge.outbox.put(result)
+
+    outputs = [update async for update in start_voting(bridge, state)]
+
+    assert await waiter == PlayerInput()
+    assert len(outputs) == 2  # heartbeat, then the results panel
+    (
+        _bridge,
+        _row_update,
+        *_candidate_updates,
+        vote_status_update,
+        discussion_status_update,
+        _alive_panel_update,
+        _deaths_panel_update,
+        begin_button_update,
+        _discussion_title_update,
+        history_log_update,
+        _discussion_transcript_update,
+        panel_death_line_update,
+        game_over_panel_update,
+        game_over_status_update,
+    ) = outputs[-1]
+    assert vote_status_update["visible"] is False
+    assert discussion_status_update["visible"] is False
+    assert begin_button_update["visible"] is False
+    assert panel_death_line_update["visible"] is False
+    assert "W" in history_log_update["value"]
+    assert game_over_panel_update["visible"] is True
+    assert "The Villagers Win!" in game_over_status_update["value"]
