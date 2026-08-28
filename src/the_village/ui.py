@@ -53,6 +53,9 @@ MODERATOR_NOTICE_CLASS = "moderator-notice"
 BALLOT_QUESTION_CLASS = "ballot-question"
 GAME_OVER_STATUS_CLASS = "game-over-status"
 GAME_OVER_HEADLINE_CLASS = "game-over-headline"
+GAME_OVER_BUTTON_ROW_CLASS = "game-over-button-row"
+PLAY_AGAIN_BUTTON_CLASS = "play-again-button"
+EXIT_BUTTON_CLASS = "exit-button"
 
 # Matches roster.py's fixed count of 6 sampled AI villagers -- the vote
 # ballot pre-allocates this many button slots since Gradio's layout is
@@ -179,6 +182,32 @@ def _layout_css() -> str:
     .{BEGIN_DISCUSSION_BUTTON_CLASS}:hover {{
         background: #c98a30;
         border-color: #c98a30;
+    }}
+    .{GAME_OVER_BUTTON_ROW_CLASS} {{
+        justify-content: center;
+    }}
+    .{PLAY_AGAIN_BUTTON_CLASS}, .{EXIT_BUTTON_CLASS} {{
+        flex: none;
+        width: auto;
+        min-width: 140px;
+    }}
+    .{PLAY_AGAIN_BUTTON_CLASS} {{
+        background: #2e8b45;
+        border-color: #2e8b45;
+        color: #fff;
+    }}
+    .{PLAY_AGAIN_BUTTON_CLASS}:hover {{
+        background: #26753a;
+        border-color: #26753a;
+    }}
+    .{EXIT_BUTTON_CLASS} {{
+        background: #2f6fb3;
+        border-color: #2f6fb3;
+        color: #fff;
+    }}
+    .{EXIT_BUTTON_CLASS}:hover {{
+        background: #275d96;
+        border-color: #275d96;
     }}
     """
 
@@ -1541,6 +1570,10 @@ async def play_again(state: GameState):
         yield update
 
 
+def exit_to_home():
+    return gr.update(visible=True), gr.update(visible=False)
+
+
 def build_app() -> gr.Blocks:
     with gr.Blocks(title="The Village") as demo:
         game_state = gr.State()
@@ -1618,7 +1651,11 @@ def build_app() -> gr.Blocks:
                     visible=False, elem_classes=[DAY_PANEL_CLASS]
                 ) as game_over_panel:
                     game_over_status = gr.Markdown(elem_classes=[GAME_OVER_STATUS_CLASS])
-                    play_again_button = gr.Button("Play Again")
+                    with gr.Row(elem_classes=[GAME_OVER_BUTTON_ROW_CLASS]):
+                        play_again_button = gr.Button(
+                            "Play Again", elem_classes=[PLAY_AGAIN_BUTTON_CLASS]
+                        )
+                        exit_button = gr.Button("Exit", elem_classes=[EXIT_BUTTON_CLASS])
 
         start_game_outputs = [
             start_screen,
@@ -1653,6 +1690,12 @@ def build_app() -> gr.Blocks:
             inputs=[game_state],
             outputs=start_game_outputs,
             concurrency_limit=None,
+        )
+
+        exit_button.click(
+            fn=exit_to_home,
+            inputs=None,
+            outputs=[start_screen, result_screen],
         )
 
         discussion_outputs = [
