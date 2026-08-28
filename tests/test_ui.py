@@ -102,6 +102,19 @@ async def test_start_game_yields_once_paused_at_the_death_gate():
     bridge = outputs[0][7]
     assert isinstance(bridge, SessionBridge)
     assert bridge.pending_input is not None
+    assert outputs[0][8]["visible"] is False  # game_over_panel starts hidden
+
+
+async def test_play_again_starts_a_new_game_with_the_same_player_name():
+    state = GameState(user_player_name="TestPlayer")
+
+    outputs = [update async for update in ui.play_again(state)]
+
+    assert len(outputs) == 1
+    new_state = outputs[0][6]
+    assert isinstance(new_state, GameState)
+    assert new_state.user_player_name == "TestPlayer"
+    assert new_state is not state
 
 
 async def test_begin_discussion_resolves_the_death_gate_and_streams_to_completion():

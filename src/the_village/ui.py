@@ -1332,7 +1332,21 @@ async def start_game(player_name: str):
         gr.update(value=f"### {weekday}", visible=True),
         state,
         bridge,
+        gr.update(visible=False),
+        gr.update(value=""),
+        gr.update(value=""),
+        gr.update(value=""),
+        gr.update(visible=False),
+        gr.update(value="Begin", visible=True),
+        gr.update(visible=False),
+        gr.update(visible=False),
+        gr.update(visible=False),
     )
+
+
+async def play_again(state: GameState):
+    async for update in start_game(state.user_player_name):
+        yield update
 
 
 def build_app() -> gr.Blocks:
@@ -1414,19 +1428,37 @@ def build_app() -> gr.Blocks:
                     game_over_status = gr.Markdown()
                     play_again_button = gr.Button("Play Again")
 
+        start_game_outputs = [
+            start_screen,
+            result_screen,
+            deaths_panel,
+            alive_panel,
+            lynched_panel,
+            discussion_title,
+            game_state,
+            session_bridge,
+            game_over_panel,
+            game_over_status,
+            history_log,
+            discussion_transcript,
+            panel_death_line,
+            begin_discussion_button,
+            discussion_status,
+            vote_button_row,
+            vote_status,
+        ]
+
         start_button.click(
             fn=start_game,
             inputs=[name_input],
-            outputs=[
-                start_screen,
-                result_screen,
-                deaths_panel,
-                alive_panel,
-                lynched_panel,
-                discussion_title,
-                game_state,
-                session_bridge,
-            ],
+            outputs=start_game_outputs,
+            concurrency_limit=None,
+        )
+
+        play_again_button.click(
+            fn=play_again,
+            inputs=[game_state],
+            outputs=start_game_outputs,
             concurrency_limit=None,
         )
 
