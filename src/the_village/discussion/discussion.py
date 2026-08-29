@@ -36,7 +36,7 @@ class Discussion:
         self._speakers = self._build_speakers()
 
     def _build_speakers(self) -> dict[str, _Speaker]:
-        living_players = self._state.names_of_living_players()
+        living_players = self._state.living_player_names()
         return {
             player_name: self._build_speaker(player_name)
             for player_name in living_players
@@ -106,7 +106,7 @@ class Discussion:
         await self._handle_replies(message)
 
     def _build_shuffled_living_players(self) -> list[str]:
-        living_players = self._state.names_of_living_players()
+        living_players = self._state.living_player_names()
         self._rng.shuffle(living_players)
         last_player_to_speak = self._state.last_player_to_speak()
 

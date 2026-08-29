@@ -78,8 +78,38 @@ class GameState(BaseModel):
             lambda player: player.player_type in (VILLAGER, WEREWOLF), self.players
         )
 
+    def advance_day(self) -> Day:
+        new_day = Day(day_number=self.day_number + 1)
+        self.days.append(new_day)
+        return new_day
+
     def is_human_player(self, name: str) -> bool:
         return name == self.user_player_name
+
+    def werewolf_pack_leader_name(self) -> str | None:
+        return next(
+            (p.name for p in self.living_werewolves() if p.is_pack_leader),
+            None,
+        )
+
+    def werewolf_pack_member_names(self) -> list[str]:
+        pack_leader_name = self.werewolf_pack_leader_name()
+        return [
+            werewolf.name
+            for werewolf in self.living_werewolves()
+            if werewolf.name != pack_leader_name
+        ]
+
+    def werewolf_names(self) -> list[str]:
+        return [player.name for player in self.players if player.is_werewolf]
+
+    def living_werewolves(self) -> list[Player]:
+        return [
+            player for player in self.players if player.is_alive and player.is_werewolf
+        ]
+
+    def living_werewolf_names(self) -> list[str]:
+        return [player.name for player in self.living_werewolves()]
 
     def is_werewolf(self, name: str) -> bool:
         player = next((player for player in self.players if player.name == name), None)
@@ -87,29 +117,32 @@ class GameState(BaseModel):
             return False
         return player.is_werewolf
 
-    def advance_day(self) -> Day:
-        new_day = Day(day_number=self.day_number + 1)
-        self.days.append(new_day)
-        return new_day
+    def living_werewolves_count(self) -> int:
+        return len(self.living_werewolves())
 
-    def names_of_living_players(self) -> list[str]:
-        return [player.name for player in self.players if player.is_alive]
+    def living_players(self) -> list[Player]:
+        return [player for player in self.players if player.is_alive]
 
-    def names_of_dead_players(self) -> list[str]:
+    def living_player_names(self) -> list[str]:
+        return [player.name for player in self.living_players()]
+
+    def dead_players_names(self) -> list[str]:
         return [player.name for player in self.players if not player.is_alive]
 
-    def names_of_other_living_players(self, player_name: str) -> list[str]:
-        return [name for name in self.names_of_living_players() if name != player_name]
+    def other_living_player_names(self, exclude_player_name: str) -> list[str]:
+        return [
+            name for name in self.living_player_names() if name != exclude_player_name
+        ]
 
-    def living_werewolves_count(self) -> int:
-        return sum(
-            1 for player in self.players if player.is_werewolf and player.is_alive
-        )
+    def living_non_werewolves(self) -> list[Player]:
+        return [player for player in self.living_players() if player.is_not_werewolf]
 
     def living_non_werewolves_count(self) -> int:
-        return sum(
-            1 for player in self.players if player.is_not_werewolf and player.is_alive
-        )
+        return len(self.living_non_werewolves())
+
+    # the set of players who can be killed by the wolves; wolves never kill each other
+    def eligible_villagers_to_kill(self) -> list[str]:
+        return [player.name for player in self.living_non_werewolves()]
 
     def determine_winner(self) -> Winner | None:
         if self.living_werewolves_count() == 0:
@@ -117,9 +150,6 @@ class GameState(BaseModel):
         if self.living_werewolves_count() >= self.living_non_werewolves_count():
             return "werewolves"
         return None
-
-    def werewolf_names(self) -> list[str]:
-        return [player.name for player in self.players if player.is_werewolf]
 
     def last_player_to_speak(self) -> str | None:
         if not self.current_day.discussion:
@@ -166,7 +196,7 @@ class GameState(BaseModel):
     def _format_other_living_players(self, player_name: str | None) -> str:
         if player_name is None:
             return ""
-        return f"Other living players: {', '.join(self.names_of_other_living_players(player_name))}"
+        return f"Other living players: {', '.join(self.other_living_player_names(player_name))}"
 
     def _format_daily_history(self) -> str:
         history = map(lambda day: self._format_day_history(day), self.days)

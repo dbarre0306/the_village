@@ -36,7 +36,7 @@ class _Speaker:
         self._bridge = bridge
         self._player_name = player_name
         self._analyst_agent = analyst_agent
-        self._names_of_other_living_players = state.names_of_other_living_players(
+        self._names_of_other_living_players = state.other_living_player_names(
             player_name
         )
 
@@ -92,6 +92,6 @@ class _Speaker:
     def _resolve_target(self, candidate: str | None) -> str | None:
         if not candidate or candidate == self._player_name:
             return None
-        if candidate not in self._state.names_of_living_players():
+        if candidate not in self._state.living_player_names():
             return None
         return candidate

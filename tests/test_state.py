@@ -75,23 +75,23 @@ def test_advance_day_appends_a_new_day_and_returns_it():
     assert state.day_number == 2
 
 
-def test_names_of_living_players_excludes_the_dead():
+def test_living_player_names_excludes_the_dead():
     players = [
         Player(name="Alice", player_type="villager"),
         Player(name="Bram", player_type="villager", is_alive=False),
     ]
     state = GameState(players=players)
-    assert state.names_of_living_players() == ["Alice"]
+    assert state.living_player_names() == ["Alice"]
 
 
-def test_names_of_other_living_players_excludes_the_given_player_and_the_dead():
+def test_other_living_player_names_excludes_the_given_player_and_the_dead():
     players = [
         Player(name="Alice", player_type="villager"),
         Player(name="Bram", player_type="villager"),
         Player(name="Cass", player_type="villager", is_alive=False),
     ]
     state = GameState(players=players)
-    assert state.names_of_other_living_players("Alice") == ["Bram"]
+    assert state.other_living_player_names("Alice") == ["Bram"]
 
 
 def test_last_player_to_speak_returns_none_with_no_discussion():
@@ -233,6 +233,29 @@ def test_determine_winner_is_villagers_once_every_werewolf_is_dead():
 def test_determine_winner_is_villagers_with_no_werewolves_in_the_roster():
     state = GameState(players=[Player(name="Dana", player_type="user")])
     assert state.determine_winner() == "villagers"
+
+
+def test_eligible_villagers_to_kill_excludes_werewolves_includes_user_and_villagers():
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager"),
+        Player(name="B", player_type="villager"),
+        Player(name="W1", player_type="werewolf", is_pack_leader=True),
+        Player(name="W2", player_type="werewolf"),
+    ]
+    state = GameState(players=players)
+    assert state.eligible_villagers_to_kill() == ["Dana", "A", "B"]
+
+
+def test_eligible_villagers_to_kill_excludes_the_dead():
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="villager", is_alive=False),
+        Player(name="B", player_type="villager"),
+        Player(name="W1", player_type="werewolf", is_pack_leader=True),
+    ]
+    state = GameState(players=players)
+    assert state.eligible_villagers_to_kill() == ["Dana", "B"]
 
 
 def test_werewolf_names_lists_all_werewolves_dead_or_alive():

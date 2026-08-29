@@ -32,25 +32,6 @@ def make_pack(
     return WereWolfPack(state, player_agents or {}, rng)
 
 
-def test_eligible_targets_excludes_werewolves_includes_user_and_villagers():
-    pack = make_pack(
-        werewolves=[
-            Player(name="W1", player_type="werewolf", is_pack_leader=True),
-            Player(name="W2", player_type="werewolf"),
-        ]
-    )
-
-    assert pack._eligible_targets() == ["Dana", "A", "B"]
-
-
-def test_eligible_targets_excludes_the_dead():
-    pack = make_pack(werewolves=[Player(name="W1", player_type="werewolf", is_pack_leader=True)])
-    dead = next(p for p in pack._state.players if p.name == "A")
-    dead.is_alive = False
-
-    assert pack._eligible_targets() == ["Dana", "B"]
-
-
 def test_guardrail_accepts_an_eligible_target():
     pack = make_pack(werewolves=[Player(name="W1", player_type="werewolf", is_pack_leader=True)])
     guardrail = pack._build_guardrail(["A", "B"])
@@ -115,81 +96,26 @@ def test_ensure_living_pack_leader_promotes_exactly_one_among_multiple_survivors
     assert len(new_leaders) == 1
 
 
-def test_order_pack_is_just_the_leader_with_a_single_werewolf():
-    leader = Player(name="W1", player_type="werewolf", is_pack_leader=True)
-    pack = make_pack(werewolves=[leader], rng=random.Random(1))
-
-    order = pack._order_pack()
-
-    assert order == ["W1"]
-
-
-def test_order_pack_puts_the_leader_last_with_multiple_werewolves():
-    leader = Player(name="W1", player_type="werewolf", is_pack_leader=True)
-    packmates = [Player(name=f"W{i}", player_type="werewolf") for i in (2, 3, 4)]
-    pack = make_pack(werewolves=[leader, *packmates], rng=random.Random(1))
-
-    order = pack._order_pack()
-
-    assert order[-1] == "W1"
-    assert set(order[:-1]) == {"W2", "W3", "W4"}
-    assert len(order) == 4
-
-
-def test_order_pack_excludes_dead_werewolves():
-    leader = Player(name="W1", player_type="werewolf", is_pack_leader=True)
-    dead = Player(name="W2", player_type="werewolf", is_alive=False)
-    pack = make_pack(werewolves=[leader, dead], rng=random.Random(1))
-
-    order = pack._order_pack()
-
-    assert order == ["W1"]
-
-
 def _stub_agent() -> Agent:
     """A minimal real Agent -- Task/Crew construction validates that `agent`
     fields are actual Agent instances, so a plain object() won't do."""
     return Agent(role="Stub", goal="stub", backstory="stub")
 
 
-def test_build_target_prompt_lists_eligible_targets_and_known_facts():
+def test_pack_member_prompt_lists_eligible_targets_and_known_facts():
     pack = make_pack(
         werewolves=[Player(name="W1", player_type="werewolf", is_pack_leader=True)],
         day_number=2,
     )
     pack._state.days[0].player_lynched = "C"
 
-    prompt = pack._build_target_prompt(["Dana", "A", "B"])
+    prompt = pack._pack_member_prompt(["Dana", "A", "B"])
 
     assert "Dana, A, B" in prompt
     assert "C was lynched by the village on Monday." in prompt
 
 
-def test_build_tasks_chains_context_and_marks_only_the_last_as_decider():
-    order = ["W2", "W1"]
-    player_agents = {"W1": _stub_agent(), "W2": _stub_agent()}
-    pack = make_pack(
-        werewolves=[
-            Player(name="W1", player_type="werewolf", is_pack_leader=True),
-            Player(name="W2", player_type="werewolf"),
-        ],
-        player_agents=player_agents,
-    )
-
-    tasks = pack._build_tasks(order, ["Dana", "A", "B"])
-
-    assert len(tasks) == 2
-    assert tasks[0].agent is player_agents["W2"]
-    assert tasks[0].output_pydantic is None
-    assert tasks[0].guardrail is None
-    assert tasks[1].agent is player_agents["W1"]
-    assert tasks[1].context == [tasks[0]]
-    assert tasks[1].output_pydantic is _VictimChoice
-    assert tasks[1].guardrail is not None
-
-
-def test_build_tasks_gives_each_task_the_full_accumulated_history_not_just_the_last_speaker():
-    order = ["W2", "W3", "W1"]
+def test_build_tasks_for_pack_members_creates_an_async_task_per_non_leader_werewolf():
     player_agents = {"W1": _stub_agent(), "W2": _stub_agent(), "W3": _stub_agent()}
     pack = make_pack(
         werewolves=[
@@ -200,31 +126,61 @@ def test_build_tasks_gives_each_task_the_full_accumulated_history_not_just_the_l
         player_agents=player_agents,
     )
 
-    tasks = pack._build_tasks(order, ["Dana", "A", "B"])
+    tasks = pack._build_tasks_for_pack_members(["Dana", "A", "B"])
 
-    assert tasks[0].agent is player_agents["W2"]
-    assert tasks[1].agent is player_agents["W3"]
-    assert tasks[1].context == [tasks[0]]
-    assert tasks[2].agent is player_agents["W1"]
-    assert tasks[2].context == [tasks[0], tasks[1]]
+    assert [t.agent for t in tasks] == [player_agents["W2"], player_agents["W3"]]
+    assert all(t.async_execution for t in tasks)
+    assert all(t.output_pydantic is None for t in tasks)
+    assert all(t.guardrail is None for t in tasks)
 
 
-def test_build_tasks_single_werewolf_is_immediately_the_decider():
-    order = ["W1"]
+def test_build_tasks_for_pack_members_is_empty_with_a_single_werewolf():
     player_agents = {"W1": _stub_agent()}
     pack = make_pack(
         werewolves=[Player(name="W1", player_type="werewolf", is_pack_leader=True)],
         player_agents=player_agents,
     )
 
-    tasks = pack._build_tasks(order, ["Dana", "A", "B"])
+    assert pack._build_tasks_for_pack_members(["Dana", "A", "B"]) == []
+
+
+def test_build_tasks_gives_the_leader_task_context_from_every_pack_member_task():
+    player_agents = {"W1": _stub_agent(), "W2": _stub_agent(), "W3": _stub_agent()}
+    pack = make_pack(
+        werewolves=[
+            Player(name="W1", player_type="werewolf", is_pack_leader=True),
+            Player(name="W2", player_type="werewolf"),
+            Player(name="W3", player_type="werewolf"),
+        ],
+        player_agents=player_agents,
+    )
+
+    tasks = pack._build_tasks(["Dana", "A", "B"])
+
+    assert len(tasks) == 3
+    member_tasks, leader_task = tasks[:2], tasks[2]
+    assert leader_task.agent is player_agents["W1"]
+    assert leader_task.context == member_tasks
+    assert leader_task.output_pydantic is _VictimChoice
+    assert leader_task.guardrail is not None
+
+
+def test_build_tasks_single_werewolf_is_the_only_task_and_is_the_decider():
+    player_agents = {"W1": _stub_agent()}
+    pack = make_pack(
+        werewolves=[Player(name="W1", player_type="werewolf", is_pack_leader=True)],
+        player_agents=player_agents,
+    )
+
+    tasks = pack._build_tasks(["Dana", "A", "B"])
 
     assert len(tasks) == 1
+    assert tasks[0].agent is player_agents["W1"]
     assert tasks[0].output_pydantic is _VictimChoice
+    assert tasks[0].guardrail is not None
 
 
-def test_build_crew_uses_sequential_process_and_matching_agents():
-    order = ["W2", "W1"]
+def test_build_crew_uses_sequential_process_and_all_living_werewolves_as_agents():
     player_agents = {"W1": _stub_agent(), "W2": _stub_agent()}
     pack = make_pack(
         werewolves=[
@@ -233,12 +189,12 @@ def test_build_crew_uses_sequential_process_and_matching_agents():
         ],
         player_agents=player_agents,
     )
-    tasks = pack._build_tasks(order, ["Dana", "A", "B"])
+    tasks = pack._build_tasks(["Dana", "A", "B"])
 
-    crew = pack._build_crew(tasks, order)
+    crew = pack._build_crew(tasks)
 
     assert crew.process == Process.sequential
-    assert crew.agents == [player_agents["W2"], player_agents["W1"]]
+    assert crew.agents == [player_agents["W1"], player_agents["W2"]]
     assert crew.tasks == tasks
 
 

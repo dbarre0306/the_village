@@ -31,6 +31,6 @@ class _Voter:
     def _resolve_target(self, candidate: str | None) -> str | None:
         if not candidate or candidate == self._player_name:
             return None
-        if candidate not in self._state.names_of_living_players():
+        if candidate not in self._state.living_player_names():
             return None
         return candidate

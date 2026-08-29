@@ -38,7 +38,7 @@ class Voting:
         self._voters = self._build_voters()
 
     def _build_voters(self) -> dict[str, _Voter]:
-        living_players = self._state.names_of_living_players()
+        living_players = self._state.living_player_names()
         return {name: self._build_voter(name) for name in living_players}
 
     def _build_voter(self, player_name: str) -> _Voter:
@@ -61,7 +61,7 @@ class Voting:
         # AI kickoff. Enforced explicitly here rather than assumed from
         # state.players' ordering, so it can't silently break if that
         # ordering changes elsewhere.
-        living_players = self._state.names_of_living_players()
+        living_players = self._state.living_player_names()
         human, ai = [], []
         for name in living_players:
             (human if self._state.is_human_player(name) else ai).append(name)

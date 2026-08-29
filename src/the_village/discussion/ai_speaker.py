@@ -158,7 +158,7 @@ class _AiSpeaker(_Speaker):
             "question or request directed at the group is not a behavior "
             "claim about anyone.",
         ]
-        dead_names = self._state.names_of_dead_players()
+        dead_names = self._state.dead_players_names()
         if dead_names:
             names = ", ".join(dead_names)
             first_name = dead_names[0]

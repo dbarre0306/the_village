@@ -584,7 +584,7 @@ def _discussion_complete_notice(state: GameState) -> str:
     # builds voters for living players -- see voting.py), so asking them
     # "The werewolf is among you. Who do you think it is?" is misleading; skip
     # the question entirely once they're out of the game.
-    is_human_alive = state.user_player_name in state.names_of_living_players()
+    is_human_alive = state.user_player_name in state.living_player_names()
     ballot_question = (
         f'<div class="{BALLOT_QUESTION_CLASS}">'
         "The werewolf is among you. Who do you think it is?"
