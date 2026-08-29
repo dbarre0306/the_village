@@ -96,7 +96,9 @@ class GameState(BaseModel):
         return [name for name in self.names_of_living_players() if name != player_name]
 
     def living_werewolves_count(self) -> int:
-        return sum(1 for player in self.players if player.is_werewolf and player.is_alive)
+        return sum(
+            1 for player in self.players if player.is_werewolf and player.is_alive
+        )
 
     def living_non_werewolves_count(self) -> int:
         return sum(
@@ -121,19 +123,32 @@ class GameState(BaseModel):
     def is_last_player_to_speak(self, player_name: str) -> bool:
         return player_name == self.last_player_to_speak()
 
+    def known_facts(self, player_name: str = None) -> str:
+        facts = [
+            "# Known Facts",
+            self.format_current_day(),
+            self._format_deaths(),
+            self._format_lynchings(),
+            self._format_other_living_players(player_name),
+            "",
+            "## Daily History",
+            self._format_daily_history(),
+        ]
+        return "\n".join(facts)
+
     def format_current_day(self) -> str:
         return f"Today is {_weekday(self.day_number)}."
 
-    def format_deaths(self) -> str:
+    def _format_deaths(self) -> str:
         dead_days = [day for day in self.days if day.player_found_dead]
         if not dead_days:
             return "(No one has been killed by the werewolves yet.)"
         return "\n".join(
-            f"{day.player_found_dead} was killed by the werewolves on {_weekday(day.day_number)}."
+            f"{day.player_found_dead} was killed by the werewolves today."
             for day in dead_days
         )
 
-    def format_lynchings(self) -> str:
+    def _format_lynchings(self) -> str:
         lynched_days = [day for day in self.days if day.player_lynched]
         if not lynched_days:
             return "(No one has been lynched yet.)"
@@ -142,8 +157,54 @@ class GameState(BaseModel):
             for day in lynched_days
         )
 
-    def format_history(self) -> str:
-        messages = [message for day in self.days for message in day.discussion]
-        if not messages:
-            return "(No discussion has happened yet.)"
-        return "\n".join(f"{m.player_name}: {m.text}" for m in messages)
+    def _format_other_living_players(self, player_name: str | None) -> str:
+        if player_name is None:
+            return ""
+        return f"Other living players: {', '.join(self.names_of_other_living_players(player_name))}"
+
+    def _format_daily_history(self) -> str:
+        history = map(lambda day: self._format_day_history(day), self.days)
+        return "\n".join(history)
+
+    def _format_day_history(self, day: Day) -> str:
+        day_history = [
+            f"### Day {day.day_number}: {_weekday(day.day_number)}",
+            self._format_dead_person(day),
+            self._format_discussion(day),
+            self._format_voting(day),
+            self._format_lynching(day),
+        ]
+        return "\n".join(day_history)
+
+    def _format_dead_person(self, day: Day) -> str:
+        if day.player_found_dead is None:
+            return "No one was killed today"
+        return f"{day.player_found_dead} was found dead in the morning. Killed by a werewolf."
+
+    def _format_discussion(self, day: Day) -> str:
+        if not day.discussion:
+            return ""
+        discussion = [
+            "#### Discussion",
+            "\n".join(f"{m.player_name}: {m.text}" for m in day.discussion),
+        ]
+        return "\n".join(discussion)
+
+    def _format_voting(self, day: Day) -> str:
+        if not day.votes:
+            return ""
+        votes = [
+            "#### Lynching Votes",
+            "\n".join(self._format_vote(vote) for vote in day.votes),
+        ]
+        return "\n".join(votes)
+
+    def _format_vote(self, vote: VoteRecord) -> str:
+        if vote.target_name is None:
+            return f"{vote.voter_name} abstained from voting."
+        return f"{vote.voter_name} voted to lynch {vote.target_name}."
+
+    def _format_lynching(self, day: Day) -> str:
+        if day.player_lynched is None:
+            return ""
+        return f"{day.player_lynched} was lynched by the village."

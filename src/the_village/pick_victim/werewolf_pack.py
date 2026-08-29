@@ -73,15 +73,11 @@ class WereWolfPack:
         state = self._state
         return "\n".join(
             [
-                "Known facts:",
-                state.format_current_day(),
-                state.format_deaths(),
-                state.format_lynchings(),
+                state.known_facts(),
+                "",
+                "# Instructions",
                 "",
                 f"Living players you may target tonight: {', '.join(eligible)}.",
-                "",
-                "Discussion so far:",
-                state.format_history(),
                 "",
                 "Discuss privately with your fellow werewolves and decide who "
                 "the pack should kill tonight. Try to determine the villager who "

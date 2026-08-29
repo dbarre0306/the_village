@@ -126,22 +126,24 @@ def test_format_current_day_names_the_weekday_for_the_current_day_number():
 
 def test_format_deaths_with_no_deaths():
     state = GameState(user_player_name="Dana")
-    assert state.format_deaths() == "(No one has been killed by the werewolves yet.)"
+    assert state._format_deaths() == "(No one has been killed by the werewolves yet.)"
 
 
 def test_format_deaths_lists_each_death():
     state = GameState(
         user_player_name="Dana", days=[Day(day_number=2, player_found_dead="D")]
     )
-    assert state.format_deaths() == "D was killed by the werewolves on Tuesday."
+    assert state._format_deaths() == "D was killed by the werewolves today."
 
 
-def test_format_history_with_no_messages():
+def test_format_daily_history_with_no_messages():
     state = GameState(user_player_name="Dana")
-    assert state.format_history() == "(No discussion has happened yet.)"
+    assert state._format_daily_history() == (
+        "### Day 1: Monday\nNo one was killed today\n\n\n"
+    )
 
 
-def test_format_history_includes_prior_days_in_order():
+def test_format_daily_history_includes_prior_days_in_order():
     state = GameState(
         user_player_name="Dana",
         days=[
@@ -157,8 +159,11 @@ def test_format_history_includes_prior_days_in_order():
             ),
         ],
     )
-    assert (
-        state.format_history() == "A: yesterday's message\nB: today's message"
+    assert state._format_daily_history() == (
+        "### Day 1: Monday\nNo one was killed today\n#### Discussion\n"
+        "A: yesterday's message\n\n\n"
+        "### Day 2: Tuesday\nNo one was killed today\n#### Discussion\n"
+        "B: today's message\n\n"
     )
 
 

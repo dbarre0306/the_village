@@ -54,19 +54,11 @@ class _AiVoter(_Voter):
         )
 
     def _build_vote_prompt(self) -> str:
-        candidates = self._state.names_of_other_living_players(self._player_name)
         return "\n".join(
             [
-                "Known facts:",
-                self._state.format_current_day(),
-                self._state.format_deaths(),
-                self._state.format_lynchings(),
+                self._state.known_facts(self._player_name),
                 "",
-                f"Living players you may vote to lynch: {', '.join(candidates)}.",
-                "",
-                "Discussion so far:",
-                self._state.format_history(),
-                "",
+                "# Instructions",
                 "It's time to vote. Decide who you believe is responsible for "
                 "the killing and vote to lynch them, or leave your vote unset "
                 "to abstain. You may not vote for yourself.  If you vote for someone "

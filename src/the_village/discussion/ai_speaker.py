@@ -196,18 +196,11 @@ class _AiSpeaker(_Speaker):
 
     def _build_speak_prompt(self, addressed_by: DiscussionMessage | None) -> str:
         parts = [
-            "Known facts:",
-            self._state.format_current_day(),
-            self._state.format_deaths(),
-            self._state.format_lynchings(),
+            self._state.known_facts(self._player_name),
             "",
-            f"Other living players: {', '.join(self._names_of_other_living_players)}",
-            "",
-            "Discussion so far:",
-            self._state.format_history(),
-            "",
+            "# Instructions",
             f"Today's discussion should focus on {self._state.current_day.player_found_dead}'s "
-            "killing, since that's what just happened -- but don't ignore the earlier "
+            "killing, since that's what just happened -- but don't ignore any earlier "
             "killings and lynchings listed in Known facts above; bring them up when "
             "they're relevant.",
             "",
