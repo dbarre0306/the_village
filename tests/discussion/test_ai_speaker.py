@@ -6,6 +6,7 @@ from crewai import Agent
 from the_village.bridge import SessionBridge
 from the_village.discussion.ai_speaker import _AiSpeaker, _SpeakerOutput
 from the_village.discussion.speaker import DECLINED_TO_RESPOND, _AddressResolution
+from the_village.discussion.villager_speaker import _VillagerSpeaker
 from the_village.state import GameState, Player
 
 
@@ -32,7 +33,11 @@ def _crew_result(*pydantic_outputs):
 
 
 def make_ai_speaker(state: GameState, player_name: str = "A") -> _AiSpeaker:
-    return _AiSpeaker(
+    """`_AiSpeaker` requires `_inner_prompt_instructions` from a concrete
+    subclass -- `_VillagerSpeaker` stands in here since these tests exercise
+    behavior shared by all speakers, not villager- or werewolf-specific
+    wording."""
+    return _VillagerSpeaker(
         state, SessionBridge(), player_name, _stub_agent(), _stub_agent()
     )
 
@@ -93,12 +98,11 @@ def test_guardrail_does_not_log_when_llm_guardrail_passes(caplog):
     assert caplog.text == ""
 
 
-def test_speak_prompt_forbids_ungrounded_claims_and_turn_order_commentary():
+def test_speak_prompt_forbids_ungrounded_claims():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
     prompt = speaker._build_speak_prompt(addressed_by=None)
-    assert "never invent a claim about what another villager did, said, or how they've been behaving" in prompt
-    assert "never comment on who has or hasn't spoken yet" in prompt
+    assert "Do NOT make any claims about what another villager did, " in prompt
 
 
 def test_speak_prompt_forbids_treating_dead_players_as_active_suspects():

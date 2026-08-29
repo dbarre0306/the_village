@@ -81,6 +81,12 @@ class GameState(BaseModel):
     def is_human_player(self, name: str) -> bool:
         return name == self.user_player_name
 
+    def is_werewolf(self, name: str) -> bool:
+        player = next((player for player in self.players if player.name == name), None)
+        if player is None:
+            return False
+        return player.is_werewolf
+
     def advance_day(self) -> Day:
         new_day = Day(day_number=self.day_number + 1)
         self.days.append(new_day)

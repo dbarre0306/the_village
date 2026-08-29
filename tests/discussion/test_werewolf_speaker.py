@@ -1,0 +1,38 @@
+from crewai import Agent
+
+from the_village.bridge import SessionBridge
+from the_village.discussion.werewolf_speaker import _WerewolfSpeaker
+from the_village.state import GameState, Player
+
+
+def make_discussion_state() -> GameState:
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="werewolf"),
+        Player(name="B", player_type="villager"),
+    ]
+    return GameState(user_player_name="Dana", players=players)
+
+
+def _stub_agent() -> Agent:
+    return Agent(role="Stub", goal="stub", backstory="stub")
+
+
+def make_werewolf_speaker(state: GameState, player_name: str = "A") -> _WerewolfSpeaker:
+    return _WerewolfSpeaker(
+        state, SessionBridge(), player_name, _stub_agent(), _stub_agent()
+    )
+
+
+def test_prompt_requires_suspicion_grounded_in_actual_discussion():
+    state = make_discussion_state()
+    speaker = make_werewolf_speaker(state)
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "grounded in something that was actually said" in prompt
+
+
+def test_prompt_forbids_revealing_werewolf_identity():
+    state = make_discussion_state()
+    speaker = make_werewolf_speaker(state)
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "Never tell anyone you are a werewolf" in prompt

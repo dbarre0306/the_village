@@ -1,3 +1,4 @@
+from abc import abstractmethod
 import logging
 from typing import Any
 
@@ -199,30 +200,7 @@ class _AiSpeaker(_Speaker):
             self._state.known_facts(self._player_name),
             "",
             "# Instructions",
-            f"Today's discussion should focus on {self._state.current_day.player_found_dead}'s "
-            "killing, since that's what just happened -- but don't ignore any earlier "
-            "killings and lynchings listed in Known facts above; bring them up when "
-            "they're relevant.",
-            "",
-            "Only treat something as true if it's listed in Known facts above or was "
-            "actually said in Discussion so far -- never invent a claim about what "
-            "another villager did, said, or how they've been behaving, and never "
-            "comment on who has or hasn't spoken yet (turn order is random and "
-            "proves nothing).",
-            "",
-            "Players listed above as killed or lynched are dead and out of the "
-            "game -- never treat them as an active suspect (pressing them for "
-            "answers, comparing their story to a living player's, accusing "
-            "them, and so on). It's still fine to discuss why or how a dead "
-            "player died, and to ask living players about their own "
-            "whereabouts or actions.",
-            "",
-            "When referring to another player, always use their name -- never a pronoun.",
-            "When referring to more than one player, always use all of their names -- never a pronoun.",
-            "When referring to every other player, always use a pronoun: them, they, etc",
-            "",
-            "Any statements, questions, or accusations must be consistent with what you previously said.",
-            "",
+            self._prompt_instructions(),
         ]
 
         if addressed_by is not None:
@@ -238,6 +216,47 @@ class _AiSpeaker(_Speaker):
                 "say so."
             )
         return "\n".join(parts)
+
+    def _prompt_instructions(self) -> str:
+        parts = [
+            f"Today's discussion should focus on {self._state.current_day.player_found_dead}'s "
+            "killing, since that's what just happened -- but don't ignore any earlier "
+            "killings and lynchings listed in Known Facts above; bring them up when "
+            "they're relevant.",
+            "",
+            "Only treat something as true if it's listed in Known Facts above or was "
+            "actually said in this discussion or previous discussions. ",
+            "",
+            "You may make things up about yourself -- for example, inventing an alibi. You must "
+            "remain consistent throughout all of the discussions.  Do NOT say contradictory things. ",
+            "",
+            "Anything you say about someone else must be grounded in what you actually know or "
+            "what has already been said.  Do NOT make any claims about what another villager did, "
+            "or said. ",
+            "",
+            self._inner_prompt_instructions(),
+            "",
+            "You speak the way people actually do in a tense group conversation: briefly. "
+            "One or two sentences, never a speech. Speak in first person as yourself -- "
+            "never refer to yourself by name or in the third person. "
+            "",
+            "Players listed above as killed or lynched are dead and out of the "
+            "game -- never treat them as an active suspect (pressing them for "
+            "answers, comparing their story to a living player's, accusing "
+            "them, and so on). It's still fine to discuss why or how a dead "
+            "player died, and to ask living players about their own "
+            "whereabouts or actions.",
+            "",
+            "When referring to another player, always use their name -- never a pronoun.",
+            "",
+            "Any statements, questions, or accusations must be consistent with what you previously said.",
+            "",
+        ]
+        return "\n".join(parts)
+
+    @abstractmethod
+    def _inner_prompt_instructions(self) -> str:
+        pass
 
     def _build_analyze_task(self, speak_task: Task) -> Task:
         return Task(

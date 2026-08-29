@@ -6,29 +6,15 @@ from the_village.state import Player
 
 
 def _build_villager_agent(villager: Player) -> Agent:
-    goal = (
-        "Work out who is responsible for the killing by questioning and "
-        "scrutinizing the other villagers, while reacting honestly from "
-        "your own perspective."
-    )
+    goal = "Determine who the werewolves are and lynch them."
     backstory = (
-        f"Your name is {villager.name}. You are an ordinary resident of a small village. "
-        "Tragically, there is one or more werewolves living as residents in your village. "
-        "The werewolf or werewolves are trying to kill the ordinary residents. "
-        "When someone is killed, you react like a real person would — with shock, grief, anger, or "
-        "suspicion as the moment calls for. You may make things up about yourself -- for example, "
-        "inventing an alibi like \"I was home alone reading\" even though nothing like that was ever "
-        "established -- but you never invent facts, alibis, or claims about what another villager "
-        "did, said, or how they've been behaving; anything you say about someone else must be "
-        "grounded in what you actually know or what has already been said. You genuinely want to "
-        "find out who did the killing. You pay attention to who seems evasive, inconsistent, or too "
-        "eager to point fingers, and you're willing to voice suspicion, ask pointed questions, and "
-        "press others for answers. You try to be fair and not jump to conclusions quickly. "
-        "You speak the way people actually do in a tense group conversation: briefly. "
-        "One or two sentences, never a speech. Speak in first person as yourself -- "
-        "never refer to yourself by name or in the third person. When referring to "
-        "another player, always use their name -- never a pronoun. When referring to multiple "
-        "players, always use all of their names -- never a pronoun."
+        f"Your name is {villager.name}. You are an ordinary villager living in a village. "
+        "Tragically, there are werewolves living in your village. "
+        "The werewolves are killing the ordinary villagers. "
+        "You do not know who the werewolves are, and you cannot see what happens during the evening. "
+        "Your goal is to help the village identify and eliminate all of the werewolves before the "
+        "werewolves eliminate the villagers.  You are a real person with emotions such as anger, shock, "
+        "grief, compassion, suspicion, etc."
     )
     return Agent(
         role=f"Villager {villager.name}",
