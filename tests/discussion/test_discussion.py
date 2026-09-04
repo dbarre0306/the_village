@@ -57,7 +57,7 @@ class NoShuffleRandom:
         return start
 
 
-async def test_runs_two_rounds_where_everyone_gets_a_turn():
+async def test_runs_all_rounds_where_everyone_gets_a_turn():
     bridge = SessionBridge()
 
     async def auto_pass(*_args, **_kwargs):
@@ -78,7 +78,7 @@ async def test_runs_two_rounds_where_everyone_gets_a_turn():
 
     # Everyone declines every turn in this test, so no DiscussionMessages are
     # recorded -- what's under test is that the discussion runs to
-    # completion (doesn't hang) across two full rounds without error.
+    # completion (doesn't hang) across all rounds without error.
     assert transcript == []
 
 
@@ -197,7 +197,7 @@ async def test_pauses_for_player_and_resumes():
 
         # Drain the outbox for the whole run, answering every player-turn
         # pause immediately. The discussion asks the player once per round
-        # (two rounds total), so more than one pause is expected here --
+        # (multiple rounds total), so more than one pause is expected here --
         # race each outbox.get() against the discussion task itself so a
         # final completion with nothing left in the outbox doesn't leave
         # this loop blocked on a get() that will never resolve.
@@ -221,8 +221,43 @@ async def test_pauses_for_player_and_resumes():
     assert isinstance(transcript, list)
 
 
-def test_number_of_rounds_is_two():
-    assert NUMBER_OF_ROUNDS == 2
+def test_number_of_rounds_is_three():
+    assert NUMBER_OF_ROUNDS == 3
+
+
+async def test_number_of_rounds_increases_by_one_each_day():
+    bridge = SessionBridge()
+    state = make_discussion_state()
+    state.advance_day()
+    state.advance_day()
+    assert state.day_number == 3
+
+    async def auto_pass(*_args, **_kwargs):
+        return PlayerInput(text=None)
+
+    round_calls = 0
+    original_run_round = Discussion._run_round
+
+    async def counting_run_round(self):
+        nonlocal round_calls
+        round_calls += 1
+        await original_run_round(self)
+
+    with (
+        patch("crewai.Crew.akickoff", new=AsyncMock(return_value=_decline_result())),
+        patch.object(SessionBridge, "wait_for_input", auto_pass),
+        patch.object(Discussion, "_run_round", counting_run_round),
+    ):
+        discussion = Discussion(
+            state=state,
+            bridge=bridge,
+            player_agents=_stub_agents(["A", "B", "C", "D"]),
+            analyst_agent=_stub_agent(),
+            rng=random.Random(1),
+        )
+        await discussion.run()
+
+    assert round_calls == NUMBER_OF_ROUNDS + 2
 
 
 async def test_user_is_never_first_to_speak_at_the_start_of_a_discussion():
