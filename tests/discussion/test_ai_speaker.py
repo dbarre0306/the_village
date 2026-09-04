@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 from crewai import Agent
 
 from the_village.bridge import SessionBridge
-from the_village.discussion.ai_speaker import _AiSpeaker, _SpeakerOutput
+from the_village.discussion.ai_speaker import _GUARDRAIL_MODEL, _AiSpeaker, _SpeakerOutput
 from the_village.discussion.speaker import DECLINED_TO_RESPOND, _AddressResolution
 from the_village.discussion.villager_speaker import _VillagerSpeaker
 from the_village.state import GameState, Player
@@ -81,6 +81,20 @@ def test_guardrail_logs_increasing_attempt_number_across_retries(caplog):
             guardrail(output)
     assert "attempt 0" in caplog.text.lower()
     assert "attempt 1" in caplog.text.lower()
+
+
+def test_guardrail_uses_the_guardrail_model_not_the_players_model():
+    """The player's own model proved unreliable at following the guardrail's
+    conditional rules faithfully, so judging is deliberately pinned to a
+    separate, stronger model rather than reusing whatever the player agent
+    happens to be running on."""
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    with patch("the_village.discussion.ai_speaker.LLMGuardrail") as mock_cls:
+        speaker._build_guardrail()
+        _, kwargs = mock_cls.call_args
+        assert kwargs["llm"].model == _GUARDRAIL_MODEL
+        assert kwargs["llm"] is not speaker._player_agent.llm
 
 
 def test_guardrail_does_not_log_when_llm_guardrail_passes(caplog):

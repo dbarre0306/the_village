@@ -1,8 +1,9 @@
 from abc import abstractmethod
 import logging
+import os
 from typing import Any
 
-from crewai import Agent, Crew, Process, Task
+from crewai import LLM, Agent, Crew, Process, Task
 from crewai.tasks.llm_guardrail import LLMGuardrail
 from pydantic import BaseModel, Field
 
@@ -14,6 +15,14 @@ from the_village.state import DiscussionMessage, GameState, Player
 logger = logging.getLogger(__name__)
 
 _DEAD_AND_OUT_OF_GAME = "dead and out of the game"
+
+# The guardrail judges speaker output against a multi-clause conditional
+# prompt ("reject only if explicit", "don't infer"). The player's own model
+# (MODEL, often a small/cheap one) proved unreliable at following those
+# conditions faithfully -- it kept rejecting generic, ungrounded statements
+# on invented implications despite repeated prompt tightening. Judging needs
+# a stronger model than generating does, so the guardrail gets its own.
+_GUARDRAIL_MODEL = os.environ.get("GUARDRAIL_MODEL", "gpt-5-mini")
 
 
 class _SpeakerOutput(BaseModel):
@@ -105,7 +114,7 @@ class _AiSpeaker(_Speaker):
         diagnose from logs alone."""
         llm_guardrail = LLMGuardrail(
             description=self._build_guardrail_description(),
-            llm=self._player_agent.llm,
+            llm=LLM(model=_GUARDRAIL_MODEL),
         )
         attempt = 0
 
