@@ -221,7 +221,7 @@ class _AiSpeaker(_Speaker):
         parts = [
             f"Today's discussion should focus on {self._state.current_day.player_found_dead}'s "
             "killing, since that's what just happened -- but don't ignore any earlier "
-            "killings and lynchings listed in Known Facts above; bring them up when "
+            "discussions, killings, lynchings, or votes listed in Known Facts above; bring them up when "
             "they're relevant.",
             "",
             "Only treat something as true if it's listed in Known Facts above or was "
@@ -238,7 +238,8 @@ class _AiSpeaker(_Speaker):
             "",
             "You speak the way people actually do in a tense group conversation: briefly. "
             "One or two sentences, never a speech. Speak in first person as yourself -- "
-            "never refer to yourself by name or in the third person. "
+            "never refer to yourself by name or in the third person. You may direct questions to "
+            "other players about their alibis, why they voted the way they did, etc.",
             "",
             "Players listed above as killed or lynched are dead and out of the "
             "game -- never treat them as an active suspect (pressing them for "
