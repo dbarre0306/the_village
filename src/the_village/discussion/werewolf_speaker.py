@@ -14,7 +14,7 @@ class _WerewolfSpeaker(_AiSpeaker):
 
     def _inner_prompt_instructions(self) -> str:
         parts = [
-            "Your goal is have to have a normal villager blamed for any killings.  "
+            "Your goal is to have a normal villager blamed for any killings.  "
             "Never tell anyone you are a werewolf. You want someone else blamed for the killing, "
             "so you actively steer suspicion toward other villagers — voicing "
             "doubts about their behavior, questioning their alibi (but only if they have given an alibi), "

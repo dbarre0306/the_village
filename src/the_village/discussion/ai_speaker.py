@@ -13,6 +13,8 @@ from the_village.state import DiscussionMessage, GameState, Player
 
 logger = logging.getLogger(__name__)
 
+_DEAD_AND_OUT_OF_GAME = "dead and out of the game"
+
 
 class _SpeakerOutput(BaseModel):
     has_something_to_say: bool = Field(
@@ -85,7 +87,12 @@ class _AiSpeaker(_Speaker):
         return Task(
             description=self._build_speak_prompt(addressed_by),
             agent=self._player_agent,
-            expected_output="A SpeakerOutput saying whether you have something to say.",
+            expected_output=(
+                "A JSON object with `has_something_to_say` (bool) and, if true, "
+                "`text`: one or two sentences of first-person spoken dialogue "
+                "that stay consistent with everything you've said before and "
+                "make no unfounded claims about other players."
+            ),
             output_pydantic=_SpeakerOutput,
             guardrail=self._build_guardrail(),
         )
@@ -170,7 +177,7 @@ class _AiSpeaker(_Speaker):
             first_name = dead_names[0]
             verb = "is" if len(dead_names) == 1 else "are"
             parts.append(
-                f"{names} {verb} dead and out of the game. The key test: "
+                f"{names} {verb} {_DEAD_AND_OUT_OF_GAME}. The key test: "
                 "forbid only text that treats them as someone who could "
                 "still respond or act right now -- pressing them for new "
                 "whereabouts, alibi, or explanations; claiming they are "
@@ -230,32 +237,34 @@ class _AiSpeaker(_Speaker):
             "discussions, killings, lynchings, or votes listed in Known Facts above; bring them up when "
             "they're relevant.",
             "",
-            "Only treat something as true if it's listed in Known Facts above or was "
-            "actually said in this discussion or previous discussions. ",
+            "## Rules",
             "",
-            "You may make things up about yourself -- for example, inventing an alibi. You must "
-            "remain consistent throughout all of the discussions.  Do NOT say contradictory things. ",
+            "1. Only treat something as true if it's listed in Known Facts above or was "
+            "actually said in this discussion or previous discussions.",
             "",
-            "Anything you say about someone else must be grounded in what you actually know or "
+            "2. You may make things up about yourself -- for example, inventing an alibi. You must "
+            "remain consistent throughout all of the discussions.  Do NOT say contradictory things.",
+            "",
+            "3. Anything you say about someone else must be grounded in what you actually know or "
             "what has already been said.  Do NOT make any claims about what another villager did, "
-            "or said. ",
+            "or said.",
             "",
-            self._inner_prompt_instructions(),
+            f"4. {self._inner_prompt_instructions().strip()}",
             "",
-            "You speak the way people actually do in a tense group conversation: briefly. "
+            "5. You speak the way people actually do in a tense group conversation: briefly. "
             "One or two sentences, never a speech. Speak in first person as yourself -- "
-            "never refer to yourself by name or in the third person. "
+            "never refer to yourself by name or in the third person.",
             "",
-            "Players listed above as killed or lynched are dead and out of the "
-            "game -- never treat them as an active suspect (pressing them for "
+            f"6. Players listed above as killed or lynched are {_DEAD_AND_OUT_OF_GAME} -- "
+            "never treat them as an active suspect (pressing them for "
             "answers, comparing their story to a living player's, accusing "
             "them, and so on). It's still fine to discuss why or how a dead "
             "player died, and to ask living players about their own "
             "whereabouts or actions.",
             "",
-            "When referring to another player, always use their name -- never a pronoun.",
+            "7. When referring to another player, always use their name -- never a pronoun.",
             "",
-            "Any statements, questions, or accusations must be consistent with what you previously said.",
+            "8. Any statements, questions, or accusations must be consistent with what you previously said.",
             "",
         ]
         return "\n".join(parts)
@@ -268,7 +277,12 @@ class _AiSpeaker(_Speaker):
         return Task(
             description=self._build_analyze_prompt(),
             agent=self._analyst_agent,
-            expected_output="An AddressResolution naming who, if anyone, was addressed.",
+            expected_output=(
+                "A JSON object naming the single living player being directly "
+                "asked a question or accused, if any -- left unset when the "
+                "message is addressed to the whole group, to multiple players, "
+                "or when there was nothing said to analyze."
+            ),
             output_pydantic=_AddressResolution,
             context=[speak_task],
         )
