@@ -123,6 +123,12 @@ class _AiSpeaker(_Speaker):
 
     def _build_guardrail_description(self) -> str:
         parts = [
+            self._state.known_facts(self._player_name),
+            "",
+            "The rules below reference the Known Facts and Daily History above "
+            "-- use them to check whether a claim is actually grounded, rather "
+            "than taking the speaker's wording at face value.",
+            "",
             "The task result is a JSON object with a `text` field containing "
             "what the player said aloud. Judge only the content of that field "
             "against the rules below.",
