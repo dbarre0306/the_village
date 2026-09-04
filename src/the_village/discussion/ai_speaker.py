@@ -244,8 +244,7 @@ class _AiSpeaker(_Speaker):
             "",
             "You speak the way people actually do in a tense group conversation: briefly. "
             "One or two sentences, never a speech. Speak in first person as yourself -- "
-            "never refer to yourself by name or in the third person. You may direct questions to "
-            "other players about their alibis, why they voted the way they did, etc.",
+            "never refer to yourself by name or in the third person. "
             "",
             "Players listed above as killed or lynched are dead and out of the "
             "game -- never treat them as an active suspect (pressing them for "
