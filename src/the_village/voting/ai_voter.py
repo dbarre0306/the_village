@@ -1,3 +1,4 @@
+from abc import abstractmethod
 import logging
 
 from crewai import Agent, Crew, Task
@@ -54,14 +55,17 @@ class _AiVoter(_Voter):
         )
 
     def _build_vote_prompt(self) -> str:
-        return "\n".join(
-            [
-                self._state.known_facts(self._player_name),
-                "",
-                "# Instructions",
-                "It's time to vote. Decide who you believe is responsible for "
-                "the killing and vote to lynch them, or leave your vote unset "
-                "to abstain. You may not vote for yourself.  If you vote for someone "
-                "that player must be a living player.",
-            ]
-        )
+        parts = [
+            self._state.known_facts(self._player_name),
+            "",
+            "# Instructions",
+            "It's time to vote. You may not vote for yourself. If you vote for "
+            "someone, that player must be a living player.",
+            "",
+            self._inner_prompt_instructions(),
+        ]
+        return "\n".join(parts)
+
+    @abstractmethod
+    def _inner_prompt_instructions(self) -> str:
+        pass

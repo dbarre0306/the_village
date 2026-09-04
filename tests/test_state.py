@@ -167,6 +167,36 @@ def test_format_daily_history_includes_prior_days_in_order():
     )
 
 
+def test_format_daily_history_hides_votes_cast_so_far_on_the_current_day():
+    state = GameState(
+        user_player_name="Dana",
+        days=[
+            Day(
+                day_number=1,
+                votes=[VoteRecord(voter_name="A", target_name="B")],
+            )
+        ],
+    )
+    assert "Lynching Votes" not in state._format_daily_history()
+    assert "A voted to lynch B" not in state._format_daily_history()
+
+
+def test_format_daily_history_shows_votes_from_a_past_day():
+    state = GameState(
+        user_player_name="Dana",
+        days=[
+            Day(
+                day_number=1,
+                votes=[VoteRecord(voter_name="A", target_name="B")],
+            ),
+            Day(day_number=2),
+        ],
+    )
+    history = state._format_daily_history()
+    assert "Lynching Votes" in history
+    assert "A voted to lynch B." in history
+
+
 def test_game_state_winner_defaults_to_none():
     state = GameState()
     assert state.winner is None

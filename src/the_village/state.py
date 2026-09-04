@@ -227,6 +227,12 @@ class GameState(BaseModel):
         return "\n".join(discussion)
 
     def _format_voting(self, day: Day) -> str:
+        if day.day_number == self.day_number:
+            # Votes for the day still in progress must stay hidden from
+            # every voter until all of that day's votes are cast --
+            # otherwise later voters in the casting order would see how
+            # earlier players voted before casting their own.
+            return ""
         if not day.votes:
             return ""
         votes = [

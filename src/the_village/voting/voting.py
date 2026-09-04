@@ -4,9 +4,10 @@ from pydantic import BaseModel
 from the_village.bridge import SessionBridge
 from the_village.state import GameState, VoteRecord
 
-from .ai_voter import _AiVoter
 from .human_voter import _HumanVoter
+from .villager_voter import _VillagerVoter
 from .voter import _Voter
+from .werewolf_voter import _WerewolfVoter
 
 
 class VoteOutcome(BaseModel):
@@ -44,7 +45,14 @@ class Voting:
     def _build_voter(self, player_name: str) -> _Voter:
         if self._state.is_human_player(player_name):
             return _HumanVoter(self._state, self._bridge, player_name)
-        return _AiVoter(
+        if self._state.is_werewolf(player_name):
+            return _WerewolfVoter(
+                self._state,
+                self._bridge,
+                player_name,
+                self._player_agents[player_name],
+            )
+        return _VillagerVoter(
             self._state,
             self._bridge,
             player_name,

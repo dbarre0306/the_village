@@ -6,6 +6,7 @@ from crewai import Agent
 from the_village.bridge import SessionBridge
 from the_village.state import Day, DiscussionMessage, GameState, Player
 from the_village.voting.ai_voter import _AiVoter, _VoteChoice
+from the_village.voting.villager_voter import _VillagerVoter
 
 
 def make_voting_state() -> GameState:
@@ -31,7 +32,11 @@ def _crew_result(target):
 
 
 def make_ai_voter(state: GameState, player_name: str = "A") -> _AiVoter:
-    return _AiVoter(state, SessionBridge(), player_name, _stub_agent())
+    """`_AiVoter` requires `_inner_prompt_instructions` from a concrete
+    subclass -- `_VillagerVoter` stands in here since these tests exercise
+    behavior shared by all voters, not villager- or werewolf-specific
+    wording."""
+    return _VillagerVoter(state, SessionBridge(), player_name, _stub_agent())
 
 
 def test_vote_prompt_lists_other_living_candidates():
