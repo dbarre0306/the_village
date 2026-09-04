@@ -27,7 +27,7 @@ async def _run_one_session(player_name: str) -> str:
             bridge.resolve_input(PlayerInput(text=None))
 
     # This test only plays to the first VOTING_COMPLETE -- the default
-    # 7-player roster needs 3 kills to reach werewolf parity, so the game
+    # 8-player roster needs 4 kills to reach werewolf parity, so the game
     # genuinely isn't over yet; cancel rather than waiting for a natural end.
     flow_task.cancel()
     try:

@@ -1,7 +1,7 @@
 # Application Description
 
 `the_village` is a Werewolf/Mafia-style social-deduction game. One human
-plays alongside six AI villagers, two of whom are secretly werewolves. Play
+plays alongside seven AI villagers, two of whom are secretly werewolves. Play
 alternates between a werewolf night-kill, a discussion phase, and a lynch
 vote, until one side wins. AI players are CrewAI agents that speak, vote, and
 choose kill targets by reasoning over a text summary of everything that has

@@ -2,6 +2,8 @@ import random
 
 from the_village.state import GameState, Player
 
+NUMBER_OF_PLAYERS = 7
+
 PLAYER_NAME_POOL = [
     "Alice",
     "Bruce",
@@ -15,6 +17,8 @@ PLAYER_NAME_POOL = [
     "Joshua",
     "Kestrel",
     "Stephen",
+    "Henry",
+    "Joan",
 ]
 
 
@@ -28,7 +32,7 @@ def build_initial_roster(
         for name in PLAYER_NAME_POOL
         if name.lower() != user_player_name.strip().lower()
     ]
-    ai_names = rng.sample(available_names, 6)
+    ai_names = rng.sample(available_names, NUMBER_OF_PLAYERS)
     players = [Player(name=user_player_name, player_type="user")]
     players += [Player(name=name, player_type="villager") for name in ai_names]
 
