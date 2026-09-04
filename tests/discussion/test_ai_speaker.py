@@ -250,6 +250,20 @@ def test_guardrail_description_allows_dead_player_as_time_reference():
     assert "alibi for when" in description.lower()
 
 
+def test_guardrail_description_forbids_misstated_vote_claims():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "contradicts the actual vote recorded" in description.lower()
+
+
+def test_guardrail_description_allows_vague_vote_references():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "not a claim that can be checked" in description.lower()
+
+
 def test_guardrail_description_allows_bare_factual_or_emotional_statement():
     state = make_discussion_state()
     dead_player = next(p for p in state.players if p.name == "B")

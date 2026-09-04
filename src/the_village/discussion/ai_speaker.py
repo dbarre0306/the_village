@@ -170,6 +170,14 @@ class _AiSpeaker(_Speaker):
             "without grounding it in something specific. A generic "
             "question or request directed at the group is not a behavior "
             "claim about anyone.",
+            "Reject only if the text explicitly claims a specific player "
+            "voted for, or abstained from voting for, a specific lynch "
+            "target, and that claim contradicts the actual vote recorded "
+            'for them in Known Facts above (e.g. "you voted for Henry '
+            'yesterday" when Known Facts records that player voting for '
+            "Alice). A vague or unattributed reference to a past vote "
+            '(e.g. "remember who you voted for") is not a claim that can '
+            "be checked, and is valid.",
         ]
         dead_names = self._state.dead_players_names()
         if dead_names:
