@@ -48,4 +48,12 @@ def build_initial_roster(
     for villager, personality in zip(villagers, personalities):
         villager.personality = personality
 
-    return players
+    # Every "living players" list shown to the human or fed into agent
+    # prompts iterates this list in place, so its order is what a player
+    # could learn from over time. Re-shuffling the AI players here, after
+    # werewolf status has already been assigned, guarantees that order never
+    # correlates with role (e.g. always listing werewolves last) -- the
+    # human always stays at index 0 for the UX reasons noted elsewhere.
+    ai_players = players[1:]
+    rng.shuffle(ai_players)
+    return [players[0], *ai_players]
