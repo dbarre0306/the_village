@@ -134,6 +134,14 @@ def test_speak_prompt_allows_discussing_the_dead_players_killing():
     assert "still fine to discuss why or how a dead player died" in prompt
 
 
+def test_analyze_prompt_requires_a_question_or_demand_not_just_an_accusation():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    prompt = speaker._build_analyze_prompt()
+    assert "directly asks a question of, or explicitly demands a response from" in prompt
+    assert "accusing or talking about them, doesn't count on its own" in prompt
+
+
 async def test_returns_none_on_scheduled_decline():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")

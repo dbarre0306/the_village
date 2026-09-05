@@ -62,6 +62,14 @@ async def test_records_decline_placeholder_when_owed_a_reply():
     assert message.addressed_to is None
 
 
+def test_analyze_prompt_requires_a_question_or_demand_not_just_an_accusation():
+    state = make_discussion_state()
+    speaker = make_human_speaker(state, SessionBridge())
+    prompt = speaker._build_analyze_prompt("B's defensiveness is a huge red flag.")
+    assert "directly ask a question of, or explicitly" in prompt
+    assert "accused, or talked about doesn't count" in prompt
+
+
 async def test_resolves_address_via_the_analyst():
     state = make_discussion_state()
     bridge = SessionBridge()

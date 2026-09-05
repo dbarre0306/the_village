@@ -16,9 +16,12 @@ class _AddressResolution(BaseModel):
     addressed_to: str | None = Field(
         default=None,
         description=(
-            "The name of the living villager the message is speaking directly "
-            "to, if any — e.g. asking them a question or accusing them. Leave "
-            "unset if the message isn't addressing anyone in particular."
+            "The name of the living villager the message directly asks a "
+            "question of, or explicitly demands a response from, if any. "
+            "Merely accusing or talking about a player -- without asking "
+            "them anything or demanding they respond -- doesn't count. "
+            "Leave unset if the message isn't addressing anyone in "
+            "particular."
         ),
     )
 

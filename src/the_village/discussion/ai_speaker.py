@@ -299,9 +299,11 @@ class _AiSpeaker(_Speaker):
             agent=self._analyst_agent,
             expected_output=(
                 "A JSON object naming the single living player being directly "
-                "asked a question or accused, if any -- left unset when the "
-                "message is addressed to the whole group, to multiple players, "
-                "or when there was nothing said to analyze."
+                "asked a question or explicitly told to respond, if any -- "
+                "left unset when the message is addressed to the whole group, "
+                "to multiple players, merely accuses or talks about someone "
+                "without asking them anything, or when there was nothing said "
+                "to analyze."
             ),
             output_pydantic=_AddressResolution,
             context=[speak_task],
@@ -319,9 +321,11 @@ class _AiSpeaker(_Speaker):
             f"Names of other players: {', '.join(self._names_of_other_living_players)}.",
             "",
             "Determine which of the other players, if anyone, the message you were just given as ",
-            "context is directed at. If the message is to everyone, then there is no specific player ",
-            "being addressed - leave addressed_to unset.  If the message is addressed to multiple ",
-            "players, then leave addressed_to to unset. If the speaker had nothing to say, there ",
-            "is nothing to analyze -- leave addressed_to unset.",
+            "context directly asks a question of, or explicitly demands a response from. Naming a ",
+            "player, or accusing or talking about them, doesn't count on its own -- only an actual ",
+            "question or a direct demand that they respond does. If the message is to everyone, then ",
+            "there is no specific player being addressed - leave addressed_to unset.  If the message ",
+            "is addressed to multiple players, then leave addressed_to to unset. If the speaker had ",
+            "nothing to say, there is nothing to analyze -- leave addressed_to unset.",
         ]
         return "\n".join(parts)

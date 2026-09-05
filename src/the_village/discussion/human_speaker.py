@@ -61,9 +61,10 @@ class _HumanSpeaker(_Speaker):
                 f"Names of other players: {', '.join(self._names_of_other_living_players)}.",
                 "",
                 f'{self._player_name} just said: "{text}"',
-                "Who, if anyone, is this message directed at? A name that's "
-                "merely mentioned doesn't count -- only someone actually being "
-                "spoken to.  If the message is to everyone, then there is no specific player "
+                "Who, if anyone, does this message directly ask a question of, or explicitly "
+                "demand a response from? A name that's merely mentioned, accused, or talked "
+                "about doesn't count -- only someone actually being asked something or told to "
+                "respond.  If the message is to everyone, then there is no specific player "
                 "being addressed - leave addressed_to unset.  If the message is addressed to "
                 "multiple players, then leave addressed_to to unset.",
             ]

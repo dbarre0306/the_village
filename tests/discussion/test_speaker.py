@@ -1,5 +1,5 @@
 from the_village.bridge import SessionBridge
-from the_village.discussion.speaker import _Speaker
+from the_village.discussion.speaker import _AddressResolution, _Speaker
 from the_village.state import GameState, Player
 
 
@@ -37,3 +37,10 @@ def test_resolve_target_rejects_self_and_unknown_names():
     assert speaker._resolve_target("A") is None
     assert speaker._resolve_target("Ghost") is None
     assert speaker._resolve_target("B") == "B"
+
+
+def test_address_resolution_field_excludes_mere_accusations():
+    description = _AddressResolution.model_fields["addressed_to"].description
+    assert "directly asks a question of, or explicitly demands a response from" in description
+    assert "Merely accusing or talking about a player" in description
+    assert "doesn't count" in description
