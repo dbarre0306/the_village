@@ -16,6 +16,8 @@ def _build_villager_agent(villager: Player) -> Agent:
         "werewolves eliminate the villagers.  You are a real person with emotions such as anger, shock, "
         "grief, compassion, suspicion, etc."
     )
+    if villager.personality:
+        backstory += f" {villager.personality}"
     return Agent(
         role=f"Villager {villager.name}",
         goal=goal,

@@ -30,6 +30,7 @@ class Player(BaseModel):
     player_type: PlayerType
     is_pack_leader: bool = False
     is_alive: bool = True
+    personality: str | None = None
 
     @property
     def is_werewolf(self):

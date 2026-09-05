@@ -2,6 +2,7 @@ import random
 
 import pytest
 
+from the_village.personalities import PERSONALITIES
 from the_village.roster import PLAYER_NAME_POOL, build_initial_roster
 
 
@@ -55,3 +56,18 @@ def test_player_is_never_targeted_and_never_duplicated_across_seeds(seed):
     players = build_initial_roster("Alice", random.Random(seed))
     assert players[0].player_type == "user"
     assert all(v.name != "Alice" for v in players[1:])
+
+
+def test_ai_villagers_get_unique_personalities():
+    players = build_initial_roster("Dana", random.Random(1))
+    villagers = [p for p in players if p.player_type == "villager"]
+    personalities = [v.personality for v in villagers]
+    assert all(p is not None for p in personalities)
+    assert len(personalities) == len(set(personalities))
+    assert all(p in PERSONALITIES.values() for p in personalities)
+
+
+def test_user_and_werewolves_have_no_personality():
+    players = build_initial_roster("Dana", random.Random(1))
+    non_villagers = [p for p in players if p.player_type != "villager"]
+    assert all(p.personality is None for p in non_villagers)

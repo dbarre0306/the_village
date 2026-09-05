@@ -1,5 +1,6 @@
 import random
 
+from the_village.personalities import PERSONALITIES
 from the_village.state import GameState, Player
 
 NUMBER_OF_PLAYERS = 7
@@ -40,5 +41,10 @@ def build_initial_roster(
     for werewolf in werewolves:
         werewolf.player_type = "werewolf"
     rng.choice(werewolves).is_pack_leader = True
+
+    villagers = [player for player in players if player.player_type == "villager"]
+    personalities = rng.sample(list(PERSONALITIES.values()), len(villagers))
+    for villager, personality in zip(villagers, personalities):
+        villager.personality = personality
 
     return players
