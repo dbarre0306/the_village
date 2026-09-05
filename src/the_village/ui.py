@@ -1166,11 +1166,11 @@ async def start_voting(bridge: SessionBridge, state: GameState):
         # gr.skip() removes these components from the payload entirely, so
         # this call touches nothing. Matches this event's outputs list:
         # session_bridge, vote_button_row, *candidate_buttons, vote_status,
-        # discussion_status, alive_panel, deaths_panel,
+        # discussion_status, alive_panel, lynched_panel, deaths_panel,
         # begin_discussion_button, discussion_title, history_log,
         # discussion_transcript, panel_death_line, game_over_panel,
         # game_over_status, live_day_card.
-        yield (gr.skip(),) * (14 + MAX_VOTE_CANDIDATES)
+        yield (gr.skip(),) * (15 + MAX_VOTE_CANDIDATES)
         return
     bridge.voting_started = True
     if not bridge.resolve_input(PlayerInput()):
@@ -1186,6 +1186,7 @@ async def start_voting(bridge: SessionBridge, state: GameState):
                     gr.update(visible=True),
                     *_vote_button_updates(state),
                     gr.update(visible=False),
+                    gr.update(),
                     gr.update(),
                     gr.update(),
                     gr.update(),
@@ -1224,6 +1225,7 @@ async def start_voting(bridge: SessionBridge, state: GameState):
                     gr.update(),
                     gr.update(),
                     gr.update(),
+                    gr.update(),
                 )
             elif item == FlowStatus.VOTING_COMPLETE:
                 # cast_player_vote is what normally advances into the next
@@ -1240,7 +1242,7 @@ async def start_voting(bridge: SessionBridge, state: GameState):
                 # bridge.voting_started guard above for why gr.update()
                 # here visibly flickers/blanks components that aren't
                 # actually changing.
-                yield (bridge,) + (gr.skip(),) * 19
+                yield (bridge,) + (gr.skip(),) * 20
                 next_step = await _next_day_setup(bridge, state)
                 if isinstance(next_step, GameOverResult):
                     yield (
@@ -1250,6 +1252,7 @@ async def start_voting(bridge: SessionBridge, state: GameState):
                         gr.update(visible=False),
                         gr.update(visible=False),
                         format_alive_panel(state),
+                        format_lynched_panel(state),
                         format_deaths_panel(state),
                         gr.update(visible=False),
                         gr.update(visible=False),
@@ -1279,6 +1282,7 @@ async def start_voting(bridge: SessionBridge, state: GameState):
                     gr.update(visible=False),
                     gr.update(visible=False),
                     next_step.alive_panel,
+                    format_lynched_panel(state),
                     next_step.deaths_panel,
                     # Gradio unmounts a hidden component entirely (see the
                     # comment on discussion_input_row in _autofocus_js), so
@@ -1773,6 +1777,7 @@ def build_app() -> gr.Blocks:
                 vote_status,
                 discussion_status,
                 alive_panel,
+                lynched_panel,
                 deaths_panel,
                 begin_discussion_button,
                 discussion_title,

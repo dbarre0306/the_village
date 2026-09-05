@@ -908,6 +908,7 @@ async def test_start_voting_resolves_the_discussion_gate_and_reveals_the_ballot(
         status_update,
         discussion_status_update,
         alive_panel_update,
+        lynched_panel_update,
         deaths_panel_update,
         begin_button_update,
         discussion_title_update,
@@ -930,6 +931,7 @@ async def test_start_voting_resolves_the_discussion_gate_and_reveals_the_ballot(
     # The next-day panel setup only happens once voting completes (see
     # _next_day_setup) -- untouched here, mid-vote.
     assert alive_panel_update == gr.update()
+    assert lynched_panel_update == gr.update()
     assert deaths_panel_update == gr.update()
     assert begin_button_update == gr.update()
     assert discussion_title_update == gr.update()
@@ -978,6 +980,7 @@ async def test_start_voting_advances_to_next_day_on_voting_complete_instead_of_h
         vote_status_update,
         discussion_status_update,
         alive_panel_update,
+        _lynched_panel_update,
         _deaths_panel_update,
         begin_button_update,
         discussion_title_update,
@@ -1038,6 +1041,7 @@ async def test_start_voting_renders_a_vote_outcome_before_voting_complete():
         status_update,
         discussion_status_update,
         _alive_panel_update,
+        _lynched_panel_update,
         _deaths_panel_update,
         _begin_button_update,
         _discussion_title_update,
@@ -1064,6 +1068,7 @@ async def test_start_voting_renders_a_vote_outcome_before_voting_complete():
         _status_update,
         _discussion_status_update,
         _alive_panel_update,
+        _lynched_panel_update,
         _deaths_panel_update,
         begin_button_update,
         discussion_title_update,
@@ -1124,7 +1129,7 @@ async def test_start_voting_second_invocation_does_not_resolve_a_later_pending_i
     # zero-yield generator invocation appears to leave Gradio's bound
     # outputs blank instead of untouched (see the comment in start_voting).
     assert len(second_outputs) == 1
-    assert second_outputs[0] == (gr.skip(),) * (14 + ui.MAX_VOTE_CANDIDATES)
+    assert second_outputs[0] == (gr.skip(),) * (15 + ui.MAX_VOTE_CANDIDATES)
     assert not next_waiter.done()
     next_waiter.cancel()
 
@@ -1479,6 +1484,7 @@ async def test_start_voting_shows_the_results_panel_when_the_lynch_ends_the_game
         vote_status_update,
         discussion_status_update,
         alive_panel_value,
+        lynched_panel_value,
         deaths_panel_value,
         begin_button_update,
         discussion_title_update,
@@ -1510,6 +1516,11 @@ async def test_start_voting_shows_the_results_panel_when_the_lynch_ends_the_game
     assert ">W</span>" not in alive_panel_value
     assert ">Dana</span>" not in alive_panel_value
     assert "Dana" in deaths_panel_value
+    # Finding 3: lynched_panel is never touched anywhere else in this
+    # human-already-dead path either -- without refreshing it here, the
+    # pinned header's lynched-chip list stays stuck on whatever it showed
+    # before this round, silently dropping the just-lynched player's name.
+    assert "W" in lynched_panel_value
 
 
 async def test_cast_player_vote_shows_the_results_panel_when_the_lynch_ends_the_game():
