@@ -281,10 +281,15 @@ class _AiSpeaker(_Speaker):
                 "knew, heard, suspected, or otherwise learned that a specific "
                 "killing had happened before it was found and announced in Known "
                 'Facts above (e.g. claiming to have heard the news "last night," '
-                "or before the morning the body was discovered). A statement that "
-                "only refers to a death after it was found, or a generic reaction "
-                "to the news without any specific pre-discovery timing claim, is "
-                "valid."
+                "or before the morning the body was discovered). This includes "
+                "describing an alibi for the night of the killing as time spent "
+                'reacting to, mourning, or "processing" that killing (e.g. '
+                '"gathering my thoughts about the murder" as an account of what '
+                "the speaker was doing that night) -- the reaction itself is a "
+                'pre-discovery timing claim, even without the words "last '
+                'night." A statement that only refers to a death after it was '
+                "found, or a generic reaction to the news given as a "
+                "present-tense response in today's discussion, is valid."
             )
         if self._state.day_number == 1 and not self._state.is_werewolf(
             self._player_name
@@ -389,7 +394,11 @@ class _AiSpeaker(_Speaker):
                 "next morning, as recorded in Known Facts above -- you have no knowledge "
                 "of a death before it's discovered. Never claim to have heard, suspected, "
                 "or known about a killing before it was found (for example, hearing the "
-                'news "last night," or before the morning it was announced).'
+                'news "last night," or before the morning it was announced). This also '
+                "applies to your alibi for that night -- don't describe reacting to, "
+                "mourning, or processing the killing as something you were doing "
+                "overnight; that reaction could only happen after the body was found "
+                "the next morning."
             )
             parts.append("")
             parts.append(

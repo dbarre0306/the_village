@@ -84,3 +84,19 @@ def test_prompt_forbids_treating_being_home_alone_as_suspicious():
     speaker = make_villager_speaker(state)
     prompt = speaker._build_speak_prompt(addressed_by=None)
     assert "Being home alone" in prompt
+
+
+def test_prompt_forbids_describing_alibi_as_reacting_to_the_killing():
+    state = make_discussion_state()
+    speaker = make_villager_speaker(state)
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "applies to your alibi for that night" in prompt
+
+
+def test_guardrail_forbids_describing_alibi_as_reacting_to_the_killing():
+    state = make_discussion_state()
+    dead_player = next(p for p in state.players if p.name == "B")
+    dead_player.is_alive = False
+    speaker = make_villager_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "pre-discovery timing claim, even without the words" in description
