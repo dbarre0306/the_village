@@ -16,7 +16,7 @@ from the_village.state import WEEKDAYS, DiscussionMessage, GameState
 
 logger = logging.getLogger(__name__)
 
-NUMBER_OF_ROUNDS: Final = 3
+NUMBER_OF_ROUNDS: Final = 2
 
 
 class Discussion:
@@ -87,9 +87,9 @@ class Discussion:
             await self._run_round()
 
     def _number_of_rounds(self) -> int:
-        # One extra round per day beyond day one, so a shrinking roster
-        # still gets plenty of chances to speak.
-        return NUMBER_OF_ROUNDS + (self._state.day_number - 1)
+        # One extra round every other day (on odd days 3, 5, 7, ...), so a
+        # shrinking roster still gets plenty of chances to speak.
+        return NUMBER_OF_ROUNDS + (self._state.day_number - 1) // 2
 
     async def _run_round(self) -> None:
         living_players = self._build_shuffled_living_players()

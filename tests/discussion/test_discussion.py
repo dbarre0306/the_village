@@ -221,11 +221,11 @@ async def test_pauses_for_player_and_resumes():
     assert isinstance(transcript, list)
 
 
-def test_number_of_rounds_is_three():
-    assert NUMBER_OF_ROUNDS == 3
+def test_number_of_rounds_is_two():
+    assert NUMBER_OF_ROUNDS == 2
 
 
-async def test_number_of_rounds_increases_by_one_each_day():
+async def test_number_of_rounds_increases_by_one_every_odd_day():
     bridge = SessionBridge()
     state = make_discussion_state()
     state.advance_day()
@@ -257,7 +257,7 @@ async def test_number_of_rounds_increases_by_one_each_day():
         )
         await discussion.run()
 
-    assert round_calls == NUMBER_OF_ROUNDS + 2
+    assert round_calls == NUMBER_OF_ROUNDS + 1
 
 
 async def test_user_is_never_first_to_speak_at_the_start_of_a_discussion():
