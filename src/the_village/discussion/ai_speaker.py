@@ -175,10 +175,13 @@ class _AiSpeaker(_Speaker):
             "valid.",
             "Reject only if the text explicitly asserts, about a specific "
             "named player, that they have been acting oddly/strangely/"
-            "suspiciously/nervously/shady, or references their movements, "
-            "without grounding it in something specific. A generic "
-            "question or request directed at the group is not a behavior "
-            "claim about anyone.",
+            "suspiciously/nervously/shady/defensively/evasively, or "
+            "displaying any other suspicious demeanor or reaction, or "
+            "references their movements, without grounding it in "
+            "something specific. This covers any wording with that same "
+            "meaning, not just the examples listed. A generic question or "
+            "request directed at the group is not a behavior claim about "
+            "anyone.",
             "Reject only if the text explicitly claims a specific player "
             "voted for, or abstained from voting for, a specific lynch "
             "target, and that claim contradicts the actual vote recorded "

@@ -219,6 +219,13 @@ def test_guardrail_description_forbids_unfounded_behavior_claims():
     assert "without grounding it in something specific" in description.lower()
 
 
+def test_guardrail_description_behavior_claim_rule_is_not_limited_to_a_fixed_word_list():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "not just the examples listed" in description.lower()
+
+
 def test_guardrail_description_names_the_dead_player():
     state = make_discussion_state()
     dead_player = next(p for p in state.players if p.name == "B")
