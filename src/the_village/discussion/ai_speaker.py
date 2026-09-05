@@ -327,6 +327,13 @@ class _AiSpeaker(_Speaker):
                 'news "last night," or before the morning it was announced).'
             )
             parts.append("")
+            parts.append(
+                "11. When inventing your own alibi, never base it on what another player "
+                "already claimed (for example, saying you were with someone just because "
+                "they already claimed it). Your alibi must be your own invention, not a "
+                "copy of someone else's."
+            )
+            parts.append("")
         return "\n".join(parts)
 
     @abstractmethod
