@@ -312,10 +312,15 @@ class _AiSpeaker(_Speaker):
             "",
             "8. Any statements, questions, or accusations must be consistent with what you previously said.",
             "",
+            "9. Check the \"Heavily Discussed Today\" list in Known Facts above. If a "
+            "player listed there keeps coming up without new information, don't just "
+            "restate a question or accusation about them -- either add something "
+            "genuinely new, or shift focus to a different player or angle.",
+            "",
         ]
         if not self._state.is_werewolf(self._player_name):
             parts.append(
-                "9. You only learn that someone was killed when their body is found the "
+                "10. You only learn that someone was killed when their body is found the "
                 "next morning, as recorded in Known Facts above -- you have no knowledge "
                 "of a death before it's discovered. Never claim to have heard, suspected, "
                 "or known about a killing before it was found (for example, hearing the "

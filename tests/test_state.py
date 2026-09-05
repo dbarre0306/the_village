@@ -296,3 +296,83 @@ def test_werewolf_names_lists_all_werewolves_dead_or_alive():
     ]
     state = GameState(players=players)
     assert state.werewolf_names() == ["A", "B"]
+
+
+def test_format_heavily_discussed_flags_players_mentioned_past_the_threshold():
+    players = [Player(name="Bruce", player_type="villager")]
+    state = GameState(
+        players=players,
+        days=[
+            Day(
+                day_number=1,
+                discussion=[
+                    DiscussionMessage(player_name="A", text="Bruce, where were you?"),
+                    DiscussionMessage(player_name="B", text="Bruce is hiding something."),
+                    DiscussionMessage(player_name="C", text="Bruce needs to explain himself."),
+                    DiscussionMessage(player_name="D", text="Bruce, answer the question."),
+                ],
+            )
+        ],
+    )
+    assert state._format_heavily_discussed() == (
+        "## Heavily Discussed Today\nBruce has come up 4 times already today."
+    )
+
+
+def test_format_heavily_discussed_omits_players_below_the_threshold():
+    players = [Player(name="Bruce", player_type="villager")]
+    state = GameState(
+        players=players,
+        days=[
+            Day(
+                day_number=1,
+                discussion=[
+                    DiscussionMessage(player_name="A", text="Bruce, where were you?"),
+                ],
+            )
+        ],
+    )
+    assert state._format_heavily_discussed() == ""
+
+
+def test_format_heavily_discussed_ignores_mentions_from_prior_days():
+    players = [Player(name="Bruce", player_type="villager")]
+    state = GameState(
+        players=players,
+        days=[
+            Day(
+                day_number=1,
+                discussion=[
+                    DiscussionMessage(player_name="A", text="Bruce did this.")
+                    for _ in range(5)
+                ],
+            ),
+            Day(day_number=2),
+        ],
+    )
+    assert state._format_heavily_discussed() == ""
+
+
+def test_known_facts_includes_heavily_discussed_section_when_flagged():
+    players = [Player(name="Bruce", player_type="villager")]
+    state = GameState(
+        user_player_name="Dana",
+        players=players,
+        days=[
+            Day(
+                day_number=1,
+                discussion=[
+                    DiscussionMessage(player_name="A", text="Bruce, explain yourself.")
+                    for _ in range(4)
+                ],
+            )
+        ],
+    )
+    facts = state.known_facts()
+    assert "## Heavily Discussed Today" in facts
+    assert "Bruce has come up 4 times already today." in facts
+
+
+def test_known_facts_omits_heavily_discussed_section_when_nothing_flagged():
+    state = GameState(user_player_name="Dana")
+    assert "Heavily Discussed Today" not in state.known_facts()

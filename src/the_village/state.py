@@ -1,3 +1,4 @@
+import re
 from typing import Final, Literal
 
 from pydantic import BaseModel, Field
@@ -19,6 +20,9 @@ WEEKDAYS = [
     "Saturday",
     "Sunday",
 ]
+
+
+_HEAVILY_DISCUSSED_THRESHOLD: Final = 4
 
 
 def _weekday(day_number: int) -> str:
@@ -167,6 +171,7 @@ class GameState(BaseModel):
             self._format_deaths(),
             self._format_lynchings(),
             self._format_other_living_players(player_name),
+            self._format_heavily_discussed(),
             "",
             "## Daily History",
             self._format_daily_history(),
@@ -198,6 +203,27 @@ class GameState(BaseModel):
         if player_name is None:
             return ""
         return f"Other living players: {', '.join(self.other_living_player_names(player_name))}"
+
+    def _format_heavily_discussed(self) -> str:
+        counts = self._mention_counts(self.current_day.discussion)
+        flagged = [
+            (name, count)
+            for name, count in counts.items()
+            if count >= _HEAVILY_DISCUSSED_THRESHOLD
+        ]
+        if not flagged:
+            return ""
+        lines = [
+            f"{name} has come up {count} times already today." for name, count in flagged
+        ]
+        return "\n".join(["## Heavily Discussed Today", *lines])
+
+    def _mention_counts(self, discussion: list[DiscussionMessage]) -> dict[str, int]:
+        counts = {player.name: 0 for player in self.players}
+        for message in discussion:
+            for name in counts:
+                counts[name] += len(re.findall(rf"\b{re.escape(name)}\b", message.text))
+        return {name: count for name, count in counts.items() if count > 0}
 
     def _format_daily_history(self) -> str:
         history = map(lambda day: self._format_day_history(day), self.days)

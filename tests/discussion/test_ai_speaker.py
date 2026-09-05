@@ -134,6 +134,14 @@ def test_speak_prompt_allows_discussing_the_dead_players_killing():
     assert "still fine to discuss why or how a dead player died" in prompt
 
 
+def test_speak_prompt_tells_agents_to_avoid_repeating_heavily_discussed_topics():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "Heavily Discussed Today" in prompt
+    assert "shift focus to a different player or angle" in prompt
+
+
 def test_speak_task_expected_output_requires_a_question_or_demand_not_just_an_accusation():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
