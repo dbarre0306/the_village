@@ -13,8 +13,8 @@ def _build_villager_agent(villager: Player) -> Agent:
         "The werewolves are killing the ordinary villagers. "
         "You do not know who the werewolves are, and you cannot see what happens during the evening. "
         "Your goal is to help the village identify and eliminate all of the werewolves before the "
-        "werewolves eliminate the villagers.  You are a real person with emotions such as anger, shock, "
-        "grief, compassion, suspicion, etc."
+        "werewolves eliminate the villagers.  You are a real person with intelligence and emotions "
+        "such as anger, shock, grief, compassion, suspicion, etc."
     )
     if villager.personality:
         backstory += f" {villager.personality}"

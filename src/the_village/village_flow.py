@@ -26,6 +26,8 @@ class VillageFlow(Flow[GameState]):
     @start()
     async def setup_game(self):
         self.state.players = build_initial_roster(self.state.user_player_name)
+        for player in self.state.players:
+            print(f"[roster] {player.name}: {player.player_type}")
         self._player_agents = self._build_ai_agents()
         self._analyst_agent = build_conversation_analyst_agent()
         self.bridge.player_agents = self._player_agents
