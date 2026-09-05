@@ -8,7 +8,7 @@ from crewai import Agent
 from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
 from the_village.discussion.ai_speaker import _SpeakerOutput
 from the_village.discussion.discussion import NUMBER_OF_ROUNDS, Discussion
-from the_village.discussion.speaker import DECLINED_TO_RESPOND, _AddressResolution, _Speaker
+from the_village.discussion.speaker import DECLINED_TO_RESPOND, _Speaker
 from the_village.state import DiscussionMessage, GameState, Player
 
 
@@ -41,7 +41,7 @@ def _crew_result(*pydantic_outputs):
 
 
 def _decline_result():
-    return _crew_result(_SpeakerOutput(has_something_to_say=False), None)
+    return _crew_result(_SpeakerOutput(has_something_to_say=False))
 
 
 class NoShuffleRandom:
@@ -91,8 +91,9 @@ async def test_resolves_a_bonus_reply_chain():
     state = make_discussion_state()
 
     speak_and_address_b = _crew_result(
-        _SpeakerOutput(has_something_to_say=True, text="B, where were you?"),
-        _AddressResolution(addressed_to="B"),
+        _SpeakerOutput(
+            has_something_to_say=True, text="B, where were you?", addressed_to="B"
+        )
     )
     responses = iter([speak_and_address_b] + [_decline_result()] * 20)
 
@@ -137,19 +138,18 @@ async def test_skips_a_player_already_used_in_the_reply_chain():
     state = make_discussion_state()
 
     a_speaks_and_addresses_b = _crew_result(
-        _SpeakerOutput(has_something_to_say=True, text="Where were you, B?"),
-        _AddressResolution(addressed_to="B"),
+        _SpeakerOutput(
+            has_something_to_say=True, text="Where were you, B?", addressed_to="B"
+        )
     )
     b_chain_reply = _crew_result(
-        _SpeakerOutput(has_something_to_say=True, text="I was home."),
-        _AddressResolution(addressed_to=None),
+        _SpeakerOutput(has_something_to_say=True, text="I was home.")
     )
     # Filler has something to say every time it's asked, so an erroneous
     # extra main turn for B would show up as a second recorded B message
     # instead of silently declining.
     filler = _crew_result(
-        _SpeakerOutput(has_something_to_say=True, text="Nothing new."),
-        _AddressResolution(addressed_to=None),
+        _SpeakerOutput(has_something_to_say=True, text="Nothing new.")
     )
     responses = iter([a_speaks_and_addresses_b, b_chain_reply] + [filler] * 20)
 

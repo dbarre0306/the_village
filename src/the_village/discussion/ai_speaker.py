@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from the_village.bridge import SessionBridge
 
-from .speaker import _AddressResolution, _Speaker, DECLINED_TO_RESPOND
+from .speaker import _Speaker, DECLINED_TO_RESPOND
 from the_village.state import DiscussionMessage, GameState, Player
 
 logger = logging.getLogger(__name__)
@@ -39,6 +39,18 @@ class _SpeakerOutput(BaseModel):
             "two sentences -- brief, like real spoken dialogue."
         ),
     )
+    addressed_to: str | None = Field(
+        default=None,
+        description=(
+            "The name of the living villager your text directly asks a "
+            "question of, or explicitly demands a response from, if any. "
+            "Merely accusing or talking about a player -- without asking "
+            "them anything or demanding they respond -- doesn't count. "
+            "Leave unset if the message isn't addressing anyone in "
+            "particular, is addressed to the whole group or to multiple "
+            "players, or if you have nothing to say."
+        ),
+    )
 
 
 class _AiSpeaker(_Speaker):
@@ -60,8 +72,7 @@ class _AiSpeaker(_Speaker):
     ) -> DiscussionMessage | None:
 
         speak_task = self._build_speak_task(addressed_by)
-        analyze_task = self._build_analyze_task(speak_task)
-        crew = self._build_crew(speak_task, analyze_task)
+        crew = self._build_crew(speak_task)
 
         try:
             result = await crew.akickoff()
@@ -86,10 +97,7 @@ class _AiSpeaker(_Speaker):
                 return None
             return self._record_message(DECLINED_TO_RESPOND, addressed_to=None)
 
-        resolution = result.tasks_output[1].pydantic or _AddressResolution(
-            addressed_to=None
-        )
-        addressed_to = self._resolve_target(resolution.addressed_to)
+        addressed_to = self._resolve_target(speakerOutput.addressed_to)
         return self._record_message(speakerOutput.text, addressed_to)
 
     def _build_speak_task(self, addressed_by: str | None) -> Task:
@@ -97,13 +105,20 @@ class _AiSpeaker(_Speaker):
             description=self._build_speak_prompt(addressed_by),
             agent=self._player_agent,
             expected_output=(
-                "A JSON object with `has_something_to_say` (bool) and, if true, "
+                "A JSON object with `has_something_to_say` (bool); if true, "
                 "`text`: one or two sentences of first-person spoken dialogue "
                 "that stay consistent with everything you've said before and "
-                "make no unfounded claims about other players."
+                "make no unfounded claims about other players; and "
+                "`addressed_to`: the name of the single living player your "
+                "text directly asks a question of or explicitly demands a "
+                "response from, if any -- left unset when addressed to the "
+                "whole group, addressed to multiple players, merely accuses "
+                "or talks about someone without asking them anything, or "
+                "when you have nothing to say."
             ),
             output_pydantic=_SpeakerOutput,
             guardrail=self._build_guardrail(),
+            guardrail_max_retries=1,
         )
 
     def _build_guardrail(self):
@@ -293,39 +308,9 @@ class _AiSpeaker(_Speaker):
     def _inner_prompt_instructions(self) -> str:
         pass
 
-    def _build_analyze_task(self, speak_task: Task) -> Task:
-        return Task(
-            description=self._build_analyze_prompt(),
-            agent=self._analyst_agent,
-            expected_output=(
-                "A JSON object naming the single living player being directly "
-                "asked a question or explicitly told to respond, if any -- "
-                "left unset when the message is addressed to the whole group, "
-                "to multiple players, merely accuses or talks about someone "
-                "without asking them anything, or when there was nothing said "
-                "to analyze."
-            ),
-            output_pydantic=_AddressResolution,
-            context=[speak_task],
-        )
-
-    def _build_crew(self, speak_task: Task, analyze_task: Task) -> Crew:
+    def _build_crew(self, speak_task: Task) -> Crew:
         return Crew(
-            agents=[self._player_agent, self._analyst_agent],
-            tasks=[speak_task, analyze_task],
+            agents=[self._player_agent],
+            tasks=[speak_task],
             process=Process.sequential,
         )
-
-    def _build_analyze_prompt(self) -> str:
-        parts = [
-            f"Names of other players: {', '.join(self._names_of_other_living_players)}.",
-            "",
-            "Determine which of the other players, if anyone, the message you were just given as ",
-            "context directly asks a question of, or explicitly demands a response from. Naming a ",
-            "player, or accusing or talking about them, doesn't count on its own -- only an actual ",
-            "question or a direct demand that they respond does. If the message is to everyone, then ",
-            "there is no specific player being addressed - leave addressed_to unset.  If the message ",
-            "is addressed to multiple players, then leave addressed_to to unset. If the speaker had ",
-            "nothing to say, there is nothing to analyze -- leave addressed_to unset.",
-        ]
-        return "\n".join(parts)

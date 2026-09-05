@@ -10,8 +10,9 @@ async def _decline_and_abstain_akickoff(crew):
     """Every AI villager declines to speak during discussion and abstains
     when voting -- a deterministic stand-in for real kickoff() calls so
     tests can drive the whole flow to completion without hitting an LLM.
-    Dispatches on each task's output_pydantic, since a discussion turn's
-    crew has two tasks (_SpeakerOutput, _AddressResolution), a vote's crew
+    Dispatches on each task's output_pydantic, since an AI speaker's
+    discussion-turn crew has one task (_SpeakerOutput), the human player's
+    message-analysis crew also has one (_AddressResolution), a vote's crew
     has one (_VoteChoice), and a kill_next_victim crew has one or more
     tasks with only the last carrying _VictimChoice.
 

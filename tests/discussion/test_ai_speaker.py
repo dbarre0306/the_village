@@ -5,7 +5,7 @@ from crewai import Agent
 
 from the_village.bridge import SessionBridge
 from the_village.discussion.ai_speaker import _GUARDRAIL_MODEL, _AiSpeaker, _SpeakerOutput
-from the_village.discussion.speaker import DECLINED_TO_RESPOND, _AddressResolution
+from the_village.discussion.speaker import DECLINED_TO_RESPOND
 from the_village.discussion.villager_speaker import _VillagerSpeaker
 from the_village.state import GameState, Player
 
@@ -42,8 +42,8 @@ def make_ai_speaker(state: GameState, player_name: str = "A") -> _AiSpeaker:
     )
 
 
-def test_speaker_output_has_no_addressed_to_field():
-    assert "addressed_to" not in _SpeakerOutput.model_fields
+def test_speaker_output_has_addressed_to_field():
+    assert "addressed_to" in _SpeakerOutput.model_fields
 
 
 def test_guardrail_logs_text_and_reason_on_rejection(caplog):
@@ -134,12 +134,18 @@ def test_speak_prompt_allows_discussing_the_dead_players_killing():
     assert "still fine to discuss why or how a dead player died" in prompt
 
 
-def test_analyze_prompt_requires_a_question_or_demand_not_just_an_accusation():
+def test_speak_task_expected_output_requires_a_question_or_demand_not_just_an_accusation():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
-    prompt = speaker._build_analyze_prompt()
-    assert "directly asks a question of, or explicitly demands a response from" in prompt
-    assert "accusing or talking about them, doesn't count on its own" in prompt
+    task = speaker._build_speak_task(addressed_by=None)
+    assert (
+        "directly asks a question of or explicitly demands a response from"
+        in task.expected_output
+    )
+    assert (
+        "merely accuses or talks about someone without asking them anything"
+        in task.expected_output
+    )
 
 
 async def test_returns_none_on_scheduled_decline():
@@ -148,7 +154,7 @@ async def test_returns_none_on_scheduled_decline():
     with patch(
         "crewai.Crew.akickoff",
         new=AsyncMock(
-            return_value=_crew_result(_SpeakerOutput(has_something_to_say=False), None)
+            return_value=_crew_result(_SpeakerOutput(has_something_to_say=False))
         ),
     ):
         message = await speaker.speak(addressed_by=None)
@@ -163,7 +169,7 @@ async def test_records_decline_placeholder_when_owed_a_reply():
     with patch(
         "crewai.Crew.akickoff",
         new=AsyncMock(
-            return_value=_crew_result(_SpeakerOutput(has_something_to_say=False), None)
+            return_value=_crew_result(_SpeakerOutput(has_something_to_say=False))
         ),
     ):
         message = await speaker.speak(addressed_by=asking)
@@ -179,8 +185,11 @@ async def test_records_message_and_resolved_address():
         "crewai.Crew.akickoff",
         new=AsyncMock(
             return_value=_crew_result(
-                _SpeakerOutput(has_something_to_say=True, text="I saw B leave."),
-                _AddressResolution(addressed_to="B"),
+                _SpeakerOutput(
+                    has_something_to_say=True,
+                    text="I saw B leave.",
+                    addressed_to="B",
+                ),
             )
         ),
     ):
@@ -309,6 +318,13 @@ def test_speak_task_guardrail_is_callable():
     assert callable(task.guardrail)
 
 
+def test_speak_task_guardrail_max_retries_is_capped_at_one():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    task = speaker._build_speak_task(addressed_by=None)
+    assert task.guardrail_max_retries == 1
+
+
 async def test_returns_none_when_guardrail_keeps_failing_and_no_reply_owed():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
@@ -357,18 +373,17 @@ async def test_reraises_non_guardrail_errors():
             raise AssertionError("expected RuntimeError to propagate")
 
 
-async def test_discards_addressed_to_from_the_analyst_on_decline():
-    """Even if the analyst task somehow returns an address for a decline (it
-    still runs -- see the spec's resolved decision to keep one uniform
-    two-task Crew shape), a decline's recorded message must not carry it."""
+async def test_ignores_addressed_to_when_declining_with_nothing_to_say():
+    """Even if the model somehow sets `addressed_to` alongside
+    `has_something_to_say=False`, a decline must not be recorded as a
+    message at all -- the field is only meaningful when there's text."""
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
     with patch(
         "crewai.Crew.akickoff",
         new=AsyncMock(
             return_value=_crew_result(
-                _SpeakerOutput(has_something_to_say=False),
-                _AddressResolution(addressed_to="B"),
+                _SpeakerOutput(has_something_to_say=False, addressed_to="B"),
             )
         ),
     ):

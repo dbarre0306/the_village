@@ -163,6 +163,7 @@ def test_build_tasks_gives_the_leader_task_context_from_every_pack_member_task()
     assert leader_task.context == member_tasks
     assert leader_task.output_pydantic is _VictimChoice
     assert leader_task.guardrail is not None
+    assert leader_task.guardrail_max_retries == 1
 
 
 def test_build_tasks_single_werewolf_is_the_only_task_and_is_the_decider():
@@ -178,6 +179,7 @@ def test_build_tasks_single_werewolf_is_the_only_task_and_is_the_decider():
     assert tasks[0].agent is player_agents["W1"]
     assert tasks[0].output_pydantic is _VictimChoice
     assert tasks[0].guardrail is not None
+    assert tasks[0].guardrail_max_retries == 1
 
 
 def test_build_crew_uses_sequential_process_and_all_living_werewolves_as_agents():

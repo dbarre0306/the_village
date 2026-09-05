@@ -109,6 +109,7 @@ class WereWolfPack:
                 expected_output=expected_output,
                 output_pydantic=_VictimChoice,
                 guardrail=guardrail,
+                guardrail_max_retries=1,
             )
         return Task(
             description=self._pack_leader_prompt_with_members(eligible_targets),
@@ -116,6 +117,7 @@ class WereWolfPack:
             expected_output=expected_output,
             output_pydantic=_VictimChoice,
             guardrail=guardrail,
+            guardrail_max_retries=1,
             context=pack_member_tasks,
         )
 
