@@ -475,14 +475,27 @@ def _autoscroll_js() -> str:
     # so we can't hook a single event's completion to know when to scroll.
     # A MutationObserver reacts to every content change instead, regardless
     # of how many times the Markdown gets updated.
+    #
+    # live_day_card itself gets hidden on GameOverResult and shown again by
+    # start_game for the next Play Again (see the "always show it again for
+    # a fresh game" comment there) -- like discussion_input_row (see
+    # _autofocus_js), Gradio unmounts a hidden component's node entirely
+    # rather than just display:none'ing it, so that's a brand new .live-
+    # day-card element each time, not the one first observed. Binding a
+    # single MutationObserver to one node reference up front would go inert
+    # (silently -- no error) the moment that node is replaced. Instead watch
+    # document.body the same way _autofocus_js/_game_over_scroll_js do, and
+    # (re)attach to whichever .live-day-card is live right now, tracking
+    # already-wired nodes in a WeakSet so each one only gets one observer.
     return f"""
     (() => {{
-        const attach = () => {{
+        const observedCards = new WeakSet();
+        const attachToLiveCard = () => {{
             const liveCard = document.querySelector(".{LIVE_DAY_CARD_CLASS}");
-            if (!liveCard) {{
-                setTimeout(attach, 200);
+            if (!liveCard || observedCards.has(liveCard)) {{
                 return;
             }}
+            observedCards.add(liveCard);
             const followLiveCard = () => {{
                 liveCard.scrollIntoView({{block: "end"}});
             }};
@@ -492,7 +505,11 @@ def _autoscroll_js() -> str:
                 characterData: true,
             }});
         }};
-        attach();
+        new MutationObserver(attachToLiveCard).observe(document.body, {{
+            childList: true,
+            subtree: true,
+        }});
+        attachToLiveCard();
     }})();
     """
 
