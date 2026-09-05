@@ -71,6 +71,10 @@ DEATH_COLOR = ("#c62828", "#ef5350")
 # each AI turn in all at once.
 SPEAKER_THINKING_DELAY_SECONDS = 3.0
 
+# Minimum time "Tallying the votes…" stays on screen once shown, so it
+# doesn't just flash by when the AI votes resolve quickly.
+VOTE_TALLY_DELAY_SECONDS = 3.0
+
 
 def _speaker_color_css() -> str:
     # Defined on :root (not scoped to the transcript) so the same
@@ -757,6 +761,10 @@ def _speaker_name_span(name: str, state: GameState) -> str:
     )
 
 
+def _typing_indicator_html() -> str:
+    return f'<span class="{TYPING_INDICATOR_CLASS}"><span></span><span></span><span></span></span>'
+
+
 def _format_transcript_lines(
     messages: list[DiscussionMessage], state: GameState
 ) -> list[str]:
@@ -783,7 +791,7 @@ def format_discussion_transcript(
     all_messages = state.current_day.discussion
     messages = all_messages if limit is None else all_messages[:limit]
     lines = _format_transcript_lines(messages, state)
-    typing_indicator = f'<span class="{TYPING_INDICATOR_CLASS}"><span></span><span></span><span></span></span>'
+    typing_indicator = _typing_indicator_html()
     if pending_speaker is not None:
         lines.append(f"{_speaker_name_span(pending_speaker, state)} {typing_indicator}")
     elif waiting:
@@ -1175,6 +1183,38 @@ async def start_voting(bridge: SessionBridge, state: GameState):
     bridge.voting_started = True
     if not bridge.resolve_input(PlayerInput()):
         return  # already resolved (e.g. double-fire) -- no-op
+    if state.user_player_name not in state.living_player_names():
+        # A dead human never gets a _HumanVoter (Voting._build_voters only
+        # builds voters for living players), so WAITING_FOR_VOTE never
+        # arrives here -- Voting.run() goes straight into the AI voters'
+        # sequential LLM calls, which can take several seconds with nothing
+        # pushed to the outbox in between. Left alone, the UI would sit
+        # frozen on the post-discussion notice for that whole stretch. Give
+        # the same instant "Tallying the votes…" swap cast_player_vote gives
+        # a living human the moment they vote, before the wait even starts.
+        yield (
+            bridge,
+            gr.update(),
+            *([gr.update()] * MAX_VOTE_CANDIDATES),
+            gr.update(
+                value=f"Tallying the votes… {_typing_indicator_html()}", visible=True
+            ),
+            gr.update(value=_voting_results_notice(state)),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+        )
+        # Enforce a minimum "Tallying the votes…" display time -- see the
+        # matching sleep in cast_player_vote.
+        await asyncio.sleep(VOTE_TALLY_DELAY_SECONDS)
     try:
         while True:
             item = await bridge.outbox.get()
@@ -1409,7 +1449,7 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
     # arrive later.
     yield (
         gr.update(visible=False),
-        gr.update(value="Tallying the votes…", visible=True),
+        gr.update(value=f"Tallying the votes… {_typing_indicator_html()}", visible=True),
         gr.update(),
         gr.update(),
         gr.update(),
@@ -1423,6 +1463,10 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
         gr.update(),
         gr.update(),
     )
+    # Enforce a minimum "Tallying the votes…" display time -- the AI votes
+    # can resolve fast enough (or already be sitting in the outbox) that the
+    # message would otherwise flash by unread.
+    await asyncio.sleep(VOTE_TALLY_DELAY_SECONDS)
     try:
         while True:
             item = await bridge.outbox.get()

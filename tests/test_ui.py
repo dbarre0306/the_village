@@ -943,6 +943,69 @@ async def test_start_voting_resolves_the_discussion_gate_and_reveals_the_ballot(
     assert live_day_card_update == gr.update()
 
 
+async def test_start_voting_shows_tallying_status_immediately_when_human_is_already_dead():
+    # No _HumanVoter ever pauses on WAITING_FOR_VOTE in this path (the human
+    # is dead -- see Voting._build_voters), and the AI voters that follow
+    # make sequential LLM calls with nothing pushed to the outbox in
+    # between. Without an immediate signal here, the UI sits frozen on the
+    # post-discussion notice for however long those calls take. start_voting
+    # must give the same instant "Tallying the votes…" swap cast_player_vote
+    # gives a living human the moment they vote.
+    state = GameState(
+        user_player_name="Dana",
+        players=[
+            Player(name="Dana", player_type="user", is_alive=False),
+            Player(name="A", player_type="villager"),
+        ],
+        days=[Day(day_number=1)],
+    )
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await asyncio.sleep(0)
+
+    events = start_voting(bridge, state)
+    first_event = await events.__anext__()
+
+    assert await waiter == PlayerInput()
+    (
+        _bridge,
+        row_update,
+        *candidate_updates,
+        status_update,
+        discussion_status_update,
+        alive_panel_update,
+        lynched_panel_update,
+        deaths_panel_update,
+        begin_button_update,
+        discussion_title_update,
+        history_log_update,
+        discussion_transcript_update,
+        panel_death_line_update,
+        game_over_panel_update,
+        game_over_status_update,
+        live_day_card_update,
+    ) = first_event
+    assert row_update == gr.update()
+    assert all(update == gr.update() for update in candidate_updates)
+    assert status_update["visible"] is True
+    assert "Tallying the votes…" in status_update["value"]
+    assert "typing-indicator" in status_update["value"]
+    assert "The Village Votes" in discussion_status_update["value"]
+    assert alive_panel_update == gr.update()
+    assert lynched_panel_update == gr.update()
+    assert deaths_panel_update == gr.update()
+    assert begin_button_update == gr.update()
+    assert discussion_title_update == gr.update()
+    assert history_log_update == gr.update()
+    assert discussion_transcript_update == gr.update()
+    assert panel_death_line_update == gr.update()
+    assert game_over_panel_update == gr.update()
+    assert game_over_status_update == gr.update()
+    assert live_day_card_update == gr.update()
+
+    await events.aclose()
+
+
 async def test_start_voting_advances_to_next_day_on_voting_complete_instead_of_hanging():
     # Happens once the human dies on an earlier night: no _HumanVoter ever
     # pauses here, so Voting.run() completes entirely from AI votes with no
@@ -1134,7 +1197,8 @@ async def test_start_voting_second_invocation_does_not_resolve_a_later_pending_i
     next_waiter.cancel()
 
 
-async def test_start_voting_raises_gr_error_on_flow_failed():
+async def test_start_voting_raises_gr_error_on_flow_failed(monkeypatch):
+    monkeypatch.setattr(ui, "VOTE_TALLY_DELAY_SECONDS", 0)
     bridge = SessionBridge()
     waiter = asyncio.create_task(bridge.wait_for_input())
     await asyncio.sleep(0)
@@ -1269,7 +1333,8 @@ async def test_cast_player_vote_resolves_the_ballot_and_hides_controls_before_th
         _live_day_card_update,
     ) = first_event
     assert row_update["visible"] is False
-    assert status_update["value"] == "Tallying the votes…"
+    assert "Tallying the votes…" in status_update["value"]
+    assert "typing-indicator" in status_update["value"]
     # The ballot question is answered the moment the player picks -- it
     # shouldn't linger through tallying until the outcome arrives.
     assert (
@@ -1280,7 +1345,40 @@ async def test_cast_player_vote_resolves_the_ballot_and_hides_controls_before_th
     await events.aclose()
 
 
-async def test_cast_player_vote_reveals_outcome_and_updates_panels():
+async def test_cast_player_vote_pauses_before_draining_the_outcome(monkeypatch):
+    # "Tallying the votes…" must stay on screen for a beat rather than
+    # flashing by the instant the outcome happens to already be sitting in
+    # the outbox.
+    sleep_calls = []
+    real_sleep = asyncio.sleep
+
+    async def spy_sleep(seconds):
+        sleep_calls.append(seconds)
+        await real_sleep(0)  # still a real checkpoint, just instant
+
+    monkeypatch.setattr(ui.asyncio, "sleep", spy_sleep)
+
+    state = _voting_state()
+    bridge = SessionBridge()
+    waiter = asyncio.create_task(bridge.wait_for_input())
+    await real_sleep(0)
+
+    outcome = VoteOutcome(day_number=2, votes=[], tally={}, lynched=None)
+    await bridge.outbox.put(outcome)
+    await bridge.outbox.put(FlowStatus.VOTING_COMPLETE)
+    await bridge.outbox.put("A")
+
+    events = cast_player_vote(bridge, state, "A")
+    await events.__anext__()  # the "Tallying..." yield; also resolves waiter
+    await waiter
+    await events.__anext__()  # the VoteOutcome yield, only after the pause
+
+    assert sleep_calls == [ui.VOTE_TALLY_DELAY_SECONDS]
+    await events.aclose()
+
+
+async def test_cast_player_vote_reveals_outcome_and_updates_panels(monkeypatch):
+    monkeypatch.setattr(ui, "VOTE_TALLY_DELAY_SECONDS", 0)
     state = _voting_state()
     bridge = SessionBridge()
     waiter = asyncio.create_task(bridge.wait_for_input())
@@ -1316,11 +1414,14 @@ async def test_cast_player_vote_reveals_outcome_and_updates_panels():
     await events.aclose()
 
 
-async def test_cast_player_vote_replaces_the_ballot_question_with_a_results_label():
+async def test_cast_player_vote_replaces_the_ballot_question_with_a_results_label(
+    monkeypatch,
+):
     # discussion_status keeps showing "The werewolf is among you. Who do you think it is?"
     # (set when discussion ended, see _discussion_complete_notice) unless
     # cast_player_vote itself swaps it out once the outcome is known -- it's
     # not touched anywhere else in the voting flow.
+    monkeypatch.setattr(ui, "VOTE_TALLY_DELAY_SECONDS", 0)
     state = _voting_state()
     bridge = SessionBridge()
     waiter = asyncio.create_task(bridge.wait_for_input())
@@ -1352,13 +1453,16 @@ async def test_cast_player_vote_replaces_the_ballot_question_with_a_results_labe
     await events.aclose()
 
 
-async def test_cast_player_vote_advances_to_next_days_begin_gated_panel_on_voting_complete():
+async def test_cast_player_vote_advances_to_next_days_begin_gated_panel_on_voting_complete(
+    monkeypatch,
+):
     # The round auto-advances into the next day's panel as soon as the
     # outcome is known, but in the same Begin-gated state day one starts in
     # -- the death reveal and discussion don't start until that click (see
     # _next_day_setup). VillageFlow.run_voting/run_next_night mutate this
     # same shared GameState and advance to a new day before putting the
     # next morning's death (a bare str) on the outbox -- mirror that here.
+    monkeypatch.setattr(ui, "VOTE_TALLY_DELAY_SECONDS", 0)
     state = _voting_state()
     state.days.append(Day(day_number=3, player_found_dead="A"))
     next(p for p in state.players if p.name == "A").is_alive = False
@@ -1424,7 +1528,8 @@ async def test_cast_player_vote_advances_to_next_days_begin_gated_panel_on_votin
         await events.__anext__()
 
 
-async def test_cast_player_vote_raises_gr_error_on_flow_failed():
+async def test_cast_player_vote_raises_gr_error_on_flow_failed(monkeypatch):
+    monkeypatch.setattr(ui, "VOTE_TALLY_DELAY_SECONDS", 0)
     state = _voting_state()
     bridge = SessionBridge()
     waiter = asyncio.create_task(bridge.wait_for_input())
@@ -1452,11 +1557,14 @@ async def test_cast_player_abstain_resolves_with_no_target():
     await events.aclose()
 
 
-async def test_start_voting_shows_the_results_panel_when_the_lynch_ends_the_game():
+async def test_start_voting_shows_the_results_panel_when_the_lynch_ends_the_game(
+    monkeypatch,
+):
     # Happens when the human is already dead (same no-ballot path
     # test_start_voting_advances_to_next_day_on_voting_complete_instead_of_hanging
     # covers) and the lynch that just completed also ends the game -- there's
     # no next night's death to drain, only a GameOverResult.
+    monkeypatch.setattr(ui, "VOTE_TALLY_DELAY_SECONDS", 0)
     state = GameState(
         user_player_name="Dana",
         players=[
@@ -1476,7 +1584,9 @@ async def test_start_voting_shows_the_results_panel_when_the_lynch_ends_the_game
     outputs = [update async for update in start_voting(bridge, state)]
 
     assert await waiter == PlayerInput()
-    assert len(outputs) == 2  # heartbeat, then the results panel
+    # The immediate "Tallying..." swap (human already dead), then the
+    # heartbeat, then the results panel.
+    assert len(outputs) == 3
     (
         _bridge,
         _row_update,
@@ -1523,7 +1633,10 @@ async def test_start_voting_shows_the_results_panel_when_the_lynch_ends_the_game
     assert "W" in lynched_panel_value
 
 
-async def test_cast_player_vote_shows_the_results_panel_when_the_lynch_ends_the_game():
+async def test_cast_player_vote_shows_the_results_panel_when_the_lynch_ends_the_game(
+    monkeypatch,
+):
+    monkeypatch.setattr(ui, "VOTE_TALLY_DELAY_SECONDS", 0)
     state = _voting_state()
     state.players.append(Player(name="W", player_type="werewolf"))
     bridge = SessionBridge()
