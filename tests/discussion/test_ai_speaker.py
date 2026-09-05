@@ -148,6 +148,13 @@ def test_speak_prompt_tells_agents_not_to_ask_already_answered_questions():
     assert "check whether their own words in Discussion so far already answer that" in prompt
 
 
+def test_speak_prompt_tells_agents_not_to_reask_an_already_explained_fact():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "a specific fact or inconsistency they've already explained" in prompt
+
+
 def test_speak_prompt_tells_agents_to_avoid_repeating_heavily_discussed_topics():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
@@ -350,7 +357,14 @@ def test_guardrail_description_forbids_asking_about_an_already_reversed_belief()
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
     description = speaker._build_guardrail_description()
-    assert "explicitly and unambiguously abandoned" in description.lower()
+    assert "explicitly and unambiguously answered or abandoned" in description.lower()
+
+
+def test_guardrail_description_forbids_reasking_an_already_explained_fact():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "account again for a specific fact or inconsistency" in description.lower()
 
 
 def test_guardrail_description_allows_asking_why_they_changed_their_mind():

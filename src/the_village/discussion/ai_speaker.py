@@ -219,11 +219,15 @@ class _AiSpeaker(_Speaker):
             "a claim about their recorded words, and is valid.",
             "Reject only if the text asks a named player whether they "
             "still hold, or asks them to reconsider or justify, a "
-            "specific belief or suspicion that player has already "
-            "explicitly and unambiguously abandoned earlier in Discussion "
-            "so far (e.g. asking Don \"do you still think Bruce was the "
-            "werewolf?\" right after Don said he was wrong to suspect "
-            "Bruce). Quote or closely paraphrase the player's own prior "
+            "specific belief or suspicion, or asks them to explain or "
+            "account again for a specific fact or inconsistency, that "
+            "player has already explicitly and unambiguously answered or "
+            "abandoned earlier in Discussion so far (e.g. asking Don "
+            "\"do you still think Bruce was the werewolf?\" right after "
+            "Don said he was wrong to suspect Bruce, or asking Kestrel "
+            "again how she knew about a killing before it was announced "
+            "after she already explained her wording was a mistake). "
+            "Quote or closely paraphrase the player's own prior "
             "statement to check this -- only reject when it already and "
             "directly settles the question being asked, not when the "
             "prior statement was hedged or ambiguous. A question about "
@@ -370,11 +374,13 @@ class _AiSpeaker(_Speaker):
             "",
             "8. Any statements, questions, or accusations must be consistent with what you previously said.",
             "",
-            "9. Before asking a player whether they still hold a belief or suspicion, or "
-            "asking them to reconsider or justify one, check whether their own words in "
-            "Discussion so far already answer that. If they do, don't ask it again -- "
-            "respond to what they actually said instead (agree, push back on it, or move "
-            "on to a different angle).",
+            "9. Before asking a player whether they still hold a belief or suspicion, "
+            "asking them to reconsider or justify one, or asking them to explain or "
+            "account again for a specific fact or inconsistency they've already "
+            "explained, check whether their own words in Discussion so far already "
+            "answer that. If they do, don't ask it again -- respond to what they "
+            "actually said instead (agree, push back on it, or move on to a different "
+            "angle).",
             "",
             "10. Check the \"Heavily Discussed Today\" list in Known Facts above. If a "
             "player listed there keeps coming up without new information, don't just "
