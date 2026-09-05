@@ -134,12 +134,27 @@ def test_speak_prompt_allows_discussing_the_dead_players_killing():
     assert "still fine to discuss why or how a dead player died" in prompt
 
 
+def test_speak_prompt_forbids_placing_dead_players_reactions_after_their_death():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "after the day they died" in prompt
+
+
 def test_speak_prompt_tells_agents_to_avoid_repeating_heavily_discussed_topics():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
     prompt = speaker._build_speak_prompt(addressed_by=None)
     assert "Heavily Discussed Today" in prompt
     assert "shift focus to a different player or angle" in prompt
+
+
+def test_speak_prompt_encourages_checking_victims_own_voting_history():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "own voting history" in prompt
+    assert "lone or minority vote" in prompt
 
 
 def test_speak_task_expected_output_requires_a_question_or_demand_not_just_an_accusation():
@@ -317,6 +332,16 @@ def test_guardrail_description_allows_bare_factual_or_emotional_statement():
     speaker = make_ai_speaker(state, "A")
     description = speaker._build_guardrail_description()
     assert "flat factual or emotional statement" in description.lower()
+
+
+def test_guardrail_description_forbids_dead_players_reaction_placed_after_their_death():
+    state = make_discussion_state()
+    dead_player = next(p for p in state.players if p.name == "B")
+    dead_player.is_alive = False
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "after the day they died" in description.lower()
+    assert "after the lynching" in description.lower()
 
 
 def test_speak_task_guardrail_is_callable():

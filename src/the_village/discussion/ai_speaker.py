@@ -224,6 +224,15 @@ class _AiSpeaker(_Speaker):
                 "understand that to mean the living players."
             )
             parts.append(
+                "Reject also if the text places one of them reacting, "
+                "feeling, or behaving at a point in time after the day "
+                "they died -- for example, describing their defensiveness "
+                '"after the lynching," claiming they now "feel cornered," '
+                'or saying they "just lost" someone who died after they '
+                "themselves did. A dead player's demeanor or reaction can "
+                "only be described as something from before they died."
+            )
+            parts.append(
                 "Everything else about a dead player is valid: discussing "
                 "why or how they died; asking a living player about their "
                 "own whereabouts or actions, even when the dead player's "
@@ -304,8 +313,12 @@ class _AiSpeaker(_Speaker):
             f"6. Players listed above as killed or lynched are {_DEAD_AND_OUT_OF_GAME} -- "
             "never treat them as an active suspect (pressing them for "
             "answers, comparing their story to a living player's, accusing "
-            "them, and so on). It's still fine to discuss why or how a dead "
-            "player died, and to ask living players about their own "
+            "them, and so on), and never describe their reactions, "
+            "feelings, or behavior as happening after the day they died -- "
+            "for example, a dead player can't be \"defensive after the "
+            "lynching\" or \"feel cornered\" over something that happened "
+            "after their own death. It's still fine to discuss why or how a "
+            "dead player died, and to ask living players about their own "
             "whereabouts or actions.",
             "",
             "7. When referring to another player, always use their name -- never a pronoun.",
@@ -317,10 +330,15 @@ class _AiSpeaker(_Speaker):
             "restate a question or accusation about them -- either add something "
             "genuinely new, or shift focus to a different player or angle.",
             "",
+            "10. When someone new turns up dead, check their own voting history in the "
+            "Daily History in Known Facts above. If they cast a lone or minority vote "
+            "for someone who's still alive, that's worth raising as a possible reason "
+            "the werewolves targeted them.",
+            "",
         ]
         if not self._state.is_werewolf(self._player_name):
             parts.append(
-                "10. You only learn that someone was killed when their body is found the "
+                "11. You only learn that someone was killed when their body is found the "
                 "next morning, as recorded in Known Facts above -- you have no knowledge "
                 "of a death before it's discovered. Never claim to have heard, suspected, "
                 "or known about a killing before it was found (for example, hearing the "
@@ -328,7 +346,7 @@ class _AiSpeaker(_Speaker):
             )
             parts.append("")
             parts.append(
-                "11. When inventing your own alibi, never base it on what another player "
+                "12. When inventing your own alibi, never base it on what another player "
                 "already claimed (for example, saying you were with someone just because "
                 "they already claimed it). Your alibi must be your own invention, not a "
                 "copy of someone else's."
