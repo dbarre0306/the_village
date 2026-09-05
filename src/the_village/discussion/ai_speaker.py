@@ -205,6 +205,18 @@ class _AiSpeaker(_Speaker):
             "Alice). A vague or unattributed reference to a past vote "
             '(e.g. "remember who you voted for") is not a claim that can '
             "be checked, and is valid.",
+            "Reject only if the text states, as fact, a specific position, "
+            "priority, or preference for a named player that directly "
+            "contradicts what that player actually said earlier in "
+            'Discussion so far (e.g. asserting a player "wants to mourn '
+            'instead of investigating" or "would rather move on" when that '
+            "player's own recorded words said the opposite). Quote or "
+            "closely paraphrase the player's own prior statement to check "
+            "this -- only reject when it's a direct contradiction, not "
+            "merely an uncharitable reading. An opinion about a player's "
+            "unstated motive, intent, or hidden agenda (e.g. accusing them "
+            "of using a true statement as a distraction) is inference, not "
+            "a claim about their recorded words, and is valid.",
         ]
         dead_names = self._state.dead_players_names()
         if dead_names:
