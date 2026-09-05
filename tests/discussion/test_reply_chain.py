@@ -68,3 +68,20 @@ async def test_a_speaker_only_replies_once_per_chain():
 
     assert b.call_count == 1
     assert a.call_count == 1
+
+
+async def test_stops_after_the_max_chain_length_even_with_distinct_speakers():
+    """A cascading chain through distinct players must still stop at the
+    configured cap, instead of running until everyone has replied."""
+    d = ScriptedSpeaker("D", make_message("D", "Ask E.", addressed_to="E"))
+    c = ScriptedSpeaker("C", make_message("C", "Ask D.", addressed_to="D"))
+    b = ScriptedSpeaker("B", make_message("B", "Ask C.", addressed_to="C"))
+    e = ScriptedSpeaker("E", make_message("E", "Ask F.", addressed_to="F"))
+    chain = _ReplyChain({"B": b, "C": c, "D": d, "E": e})
+
+    await chain.execute(make_message("A", "B, where were you?", addressed_to="B"))
+
+    assert b.call_count == 1
+    assert c.call_count == 1
+    assert d.call_count == 1
+    assert e.call_count == 0

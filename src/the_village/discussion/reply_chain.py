@@ -1,9 +1,12 @@
 import logging
+from typing import Final
 
 from .speaker import _Speaker
 from the_village.state import DiscussionMessage
 
 logger = logging.getLogger(__name__)
+
+MAX_REPLY_CHAIN_LENGTH: Final = 3
 
 
 class _ReplyChain:
@@ -21,6 +24,9 @@ class _ReplyChain:
             self._chain,
         )
         if message.addressed_to is None:
+            return
+
+        if len(self._chain) >= MAX_REPLY_CHAIN_LENGTH:
             return
 
         # only allowed to speak once in a chain of replies
