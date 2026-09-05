@@ -45,3 +45,35 @@ def test_guardrail_forbids_claiming_pre_announcement_knowledge_of_a_death():
     speaker = make_villager_speaker(state, "A")
     description = speaker._build_guardrail_description()
     assert "before it was found and announced" in description
+
+
+def test_prompt_forbids_claiming_pre_existing_werewolf_fear_on_first_night():
+    state = make_discussion_state()
+    assert state.day_number == 1
+    speaker = make_villager_speaker(state)
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "first night the village has ever had" in prompt
+
+
+def test_prompt_allows_pre_existing_werewolf_fear_after_first_night():
+    state = make_discussion_state()
+    state.advance_day()
+    speaker = make_villager_speaker(state)
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "first night the village has ever had" not in prompt
+
+
+def test_guardrail_forbids_claiming_pre_existing_werewolf_fear_on_first_night():
+    state = make_discussion_state()
+    assert state.day_number == 1
+    speaker = make_villager_speaker(state)
+    description = speaker._build_guardrail_description()
+    assert "before that first night" in description
+
+
+def test_guardrail_allows_pre_existing_werewolf_fear_after_first_night():
+    state = make_discussion_state()
+    state.advance_day()
+    speaker = make_villager_speaker(state)
+    description = speaker._build_guardrail_description()
+    assert "before that first night" not in description

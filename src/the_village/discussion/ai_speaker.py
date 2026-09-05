@@ -286,6 +286,21 @@ class _AiSpeaker(_Speaker):
                 "to the news without any specific pre-discovery timing claim, is "
                 "valid."
             )
+        if self._state.day_number == 1 and not self._state.is_werewolf(
+            self._player_name
+        ):
+            parts.append(
+                "Last night was the first night the village has ever had -- "
+                "before that first night, nothing had happened yet. Reject only "
+                "if the text explicitly claims the speaker already had a habit "
+                "or established pattern of fearing, suspecting, or taking "
+                'precautions against werewolves predating last night (e.g. "I '
+                'always lock my doors because of the werewolves," or "ever '
+                'since the killings started" when only last night\'s death has '
+                "happened). A statement that only describes what the speaker "
+                "did or started doing last night itself, without claiming it "
+                "was already an established habit, is valid."
+            )
         return "\n\n".join(parts)
 
     def _build_speak_prompt(self, addressed_by: DiscussionMessage | None) -> str:
@@ -383,6 +398,18 @@ class _AiSpeaker(_Speaker):
                 "copy of someone else's."
             )
             parts.append("")
+            if self._state.day_number == 1:
+                parts.append(
+                    "14. Last night was the first night the village has ever had -- "
+                    "nothing had happened before it. You had no reason yet to fear, "
+                    "suspect, or take precautions against werewolves, so never claim "
+                    "you already had a habit or established pattern of doing so (for "
+                    'example, locking your doors "every night" or "because of the '
+                    'werewolves" as if that had long been your routine). It is still '
+                    "fine to say you only started doing that last night, out of "
+                    "ordinary caution or unease, without any prior pattern."
+                )
+                parts.append("")
         return "\n".join(parts)
 
     @abstractmethod

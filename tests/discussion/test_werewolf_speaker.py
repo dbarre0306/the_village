@@ -56,3 +56,22 @@ def test_guardrail_omits_the_pre_announcement_knowledge_rule_for_werewolves():
     speaker = make_werewolf_speaker(state, "A")
     description = speaker._build_guardrail_description()
     assert "before it was found and announced" not in description
+
+
+def test_prompt_omits_the_first_night_werewolf_fear_rule_for_werewolves():
+    """Werewolves know exactly why they'd be locking doors (or not) on the
+    first night -- the villager-only rule against claiming pre-existing
+    werewolf fear would be irrelevant/false for them."""
+    state = make_discussion_state()
+    assert state.day_number == 1
+    speaker = make_werewolf_speaker(state)
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "first night the village has ever had" not in prompt
+
+
+def test_guardrail_omits_the_first_night_werewolf_fear_rule_for_werewolves():
+    state = make_discussion_state()
+    assert state.day_number == 1
+    speaker = make_werewolf_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "before that first night" not in description
