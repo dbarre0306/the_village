@@ -23,6 +23,10 @@ class _WerewolfSpeaker(_AiSpeaker):
             "interpretation, and misdirection, never in fabricated evidence: you never invent facts, "
             "alibis, or claims about what another villager did, said, or how they've been behaving. Any "
             "suspicion you cast must be grounded in something that was actually said in the discussion, "
-            "even if you're spinning an unfair interpretation of it. ",
+            "even if you're spinning an unfair interpretation of it. If another villager has responded "
+            "with hostility, insults, or a flat refusal to engage instead of answering, that's a gift -- "
+            "a free target who isn't you or your packmate -- and you make a point of piling onto them by "
+            "name on your next turn, ahead of any other thread, framing their outburst as the most "
+            "damning thing anyone has done. ",
         ]
         return "\n".join(parts)
