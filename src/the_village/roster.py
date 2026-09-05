@@ -3,7 +3,8 @@ import random
 from the_village.personalities import PERSONALITIES
 from the_village.state import GameState, Player
 
-NUMBER_OF_PLAYERS = 7
+NUMBER_OF_PLAYERS = 6
+NUMBER_OF_WEREWOLVES = 1
 
 PLAYER_NAME_POOL = [
     "Alice",
@@ -37,7 +38,7 @@ def build_initial_roster(
     players = [Player(name=user_player_name, player_type="user")]
     players += [Player(name=name, player_type="villager") for name in ai_names]
 
-    werewolves = rng.sample(players[1:], 2)
+    werewolves = rng.sample(players[1:], NUMBER_OF_WEREWOLVES)
     for werewolf in werewolves:
         werewolf.player_type = "werewolf"
     rng.choice(werewolves).is_pack_leader = True

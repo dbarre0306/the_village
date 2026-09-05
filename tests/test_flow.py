@@ -29,7 +29,7 @@ async def test_village_flow_produces_valid_night_one_result_and_pauses_for_discu
         pass
 
     state = flow.state
-    assert len(state.players) == 8
+    assert len(state.players) == 7
     assert state.day_number == 1
     assert state.current_day.player_found_dead == player_found_dead
 
@@ -92,7 +92,7 @@ async def test_village_flow_reaches_voting_complete_with_an_outcome():
             elif item in (FlowStatus.WAITING_FOR_TURN, FlowStatus.WAITING_FOR_ANSWER):
                 bridge.resolve_input(PlayerInput(text=None))
 
-        # The default 8-player roster needs 4 kills to reach werewolf
+        # The default 7-player roster needs 5 kills to reach werewolf
         # parity, so the game genuinely isn't over yet at this point --
         # cancel rather than waiting for a natural end this test won't reach.
         task.cancel()
@@ -130,7 +130,7 @@ async def test_village_flow_kills_and_announces_a_second_victim_after_voting():
             elif item in (FlowStatus.WAITING_FOR_TURN, FlowStatus.WAITING_FOR_ANSWER):
                 bridge.resolve_input(PlayerInput(text=None))
 
-        # The default 8-player roster needs 4 kills to reach werewolf
+        # The default 7-player roster needs 5 kills to reach werewolf
         # parity, so the game genuinely isn't over yet at this point --
         # cancel rather than waiting for a natural end this test won't reach.
         task.cancel()

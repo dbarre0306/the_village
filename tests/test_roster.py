@@ -6,17 +6,17 @@ from the_village.personalities import PERSONALITIES
 from the_village.roster import PLAYER_NAME_POOL, build_initial_roster
 
 
-def test_roster_has_eight_villagers():
+def test_roster_has_seven_villagers():
     players = build_initial_roster("Dana", random.Random(1))
-    assert len(players) == 8
+    assert len(players) == 7
 
 
-def test_roster_has_one_user_two_werewolves_five_villagers():
+def test_roster_has_one_user_one_werewolf_five_villagers():
     players = build_initial_roster("Dana", random.Random(1))
     by_type = {"user": 0, "werewolf": 0, "villager": 0}
     for player in players:
         by_type[player.player_type] += 1
-    assert by_type == {"user": 1, "werewolf": 2, "villager": 5}
+    assert by_type == {"user": 1, "werewolf": 1, "villager": 5}
 
 
 def test_player_is_first_villager_and_is_user_type():

@@ -13,6 +13,7 @@ from the_village.bridge import (
     run_flow,
 )
 from the_village.village_flow import VillageFlow
+from the_village.roster import NUMBER_OF_PLAYERS
 from the_village.state import WEEKDAYS, Day, DiscussionMessage, GameState
 from the_village.voting import VoteOutcome, tally_votes
 
@@ -57,10 +58,10 @@ GAME_OVER_BUTTON_ROW_CLASS = "game-over-button-row"
 PLAY_AGAIN_BUTTON_CLASS = "play-again-button"
 EXIT_BUTTON_CLASS = "exit-button"
 
-# Matches roster.py's fixed count of 7 sampled AI villagers -- the vote
+# Matches roster.py's fixed count of sampled AI villagers -- the vote
 # ballot pre-allocates this many button slots since Gradio's layout is
 # fixed at build time and can't grow/shrink with who's still alive.
-MAX_VOTE_CANDIDATES = 7
+MAX_VOTE_CANDIDATES = NUMBER_OF_PLAYERS
 
 # (light, dark)
 DEATH_COLOR = ("#c62828", "#ef5350")
