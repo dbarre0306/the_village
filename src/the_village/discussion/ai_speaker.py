@@ -217,6 +217,19 @@ class _AiSpeaker(_Speaker):
             "unstated motive, intent, or hidden agenda (e.g. accusing them "
             "of using a true statement as a distraction) is inference, not "
             "a claim about their recorded words, and is valid.",
+            "Reject only if the text asks a named player whether they "
+            "still hold, or asks them to reconsider or justify, a "
+            "specific belief or suspicion that player has already "
+            "explicitly and unambiguously abandoned earlier in Discussion "
+            "so far (e.g. asking Don \"do you still think Bruce was the "
+            "werewolf?\" right after Don said he was wrong to suspect "
+            "Bruce). Quote or closely paraphrase the player's own prior "
+            "statement to check this -- only reject when it already and "
+            "directly settles the question being asked, not when the "
+            "prior statement was hedged or ambiguous. A question about "
+            "why they changed their mind, what they think now, or "
+            "anything else not already settled by their own prior words, "
+            "is valid.",
         ]
         dead_names = self._state.dead_players_names()
         if dead_names:
@@ -337,12 +350,18 @@ class _AiSpeaker(_Speaker):
             "",
             "8. Any statements, questions, or accusations must be consistent with what you previously said.",
             "",
-            "9. Check the \"Heavily Discussed Today\" list in Known Facts above. If a "
+            "9. Before asking a player whether they still hold a belief or suspicion, or "
+            "asking them to reconsider or justify one, check whether their own words in "
+            "Discussion so far already answer that. If they do, don't ask it again -- "
+            "respond to what they actually said instead (agree, push back on it, or move "
+            "on to a different angle).",
+            "",
+            "10. Check the \"Heavily Discussed Today\" list in Known Facts above. If a "
             "player listed there keeps coming up without new information, don't just "
             "restate a question or accusation about them -- either add something "
             "genuinely new, or shift focus to a different player or angle.",
             "",
-            "10. When someone new turns up dead, check their own voting history in the "
+            "11. When someone new turns up dead, check their own voting history in the "
             "Daily History in Known Facts above. If they cast a lone or minority vote "
             "for someone who's still alive, that's worth raising as a possible reason "
             "the werewolves targeted them.",
@@ -350,7 +369,7 @@ class _AiSpeaker(_Speaker):
         ]
         if not self._state.is_werewolf(self._player_name):
             parts.append(
-                "11. You only learn that someone was killed when their body is found the "
+                "12. You only learn that someone was killed when their body is found the "
                 "next morning, as recorded in Known Facts above -- you have no knowledge "
                 "of a death before it's discovered. Never claim to have heard, suspected, "
                 "or known about a killing before it was found (for example, hearing the "
@@ -358,7 +377,7 @@ class _AiSpeaker(_Speaker):
             )
             parts.append("")
             parts.append(
-                "12. When inventing your own alibi, never base it on what another player "
+                "13. When inventing your own alibi, never base it on what another player "
                 "already claimed (for example, saying you were with someone just because "
                 "they already claimed it). Your alibi must be your own invention, not a "
                 "copy of someone else's."

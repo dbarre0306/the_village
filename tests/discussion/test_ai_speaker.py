@@ -141,6 +141,13 @@ def test_speak_prompt_forbids_placing_dead_players_reactions_after_their_death()
     assert "after the day they died" in prompt
 
 
+def test_speak_prompt_tells_agents_not_to_ask_already_answered_questions():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "check whether their own words in Discussion so far already answer that" in prompt
+
+
 def test_speak_prompt_tells_agents_to_avoid_repeating_heavily_discussed_topics():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
@@ -337,6 +344,20 @@ def test_guardrail_description_allows_inference_about_unstated_motives():
     speaker = make_ai_speaker(state, "A")
     description = speaker._build_guardrail_description()
     assert "not a claim about their recorded words" in description.lower()
+
+
+def test_guardrail_description_forbids_asking_about_an_already_reversed_belief():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "explicitly and unambiguously abandoned" in description.lower()
+
+
+def test_guardrail_description_allows_asking_why_they_changed_their_mind():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "not already settled by their own prior words" in description.lower()
 
 
 def test_guardrail_description_allows_bare_factual_or_emotional_statement():
