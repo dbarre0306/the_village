@@ -75,3 +75,13 @@ def test_guardrail_omits_the_first_night_werewolf_fear_rule_for_werewolves():
     speaker = make_werewolf_speaker(state, "A")
     description = speaker._build_guardrail_description()
     assert "before that first night" not in description
+
+
+def test_prompt_omits_the_home_alone_rule_for_werewolves():
+    """Werewolves deliberately exploit weak alibis to cast suspicion on
+    innocent villagers -- the villager-only rule against treating being home
+    alone as suspicious would undercut that deception."""
+    state = make_discussion_state()
+    speaker = make_werewolf_speaker(state)
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "Being home alone" not in prompt

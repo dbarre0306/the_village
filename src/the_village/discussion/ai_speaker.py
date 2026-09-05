@@ -381,6 +381,7 @@ class _AiSpeaker(_Speaker):
             "for someone who's still alive, that's worth raising as a possible reason "
             "the werewolves targeted them.",
             "",
+            "",
         ]
         if not self._state.is_werewolf(self._player_name):
             parts.append(
@@ -398,9 +399,17 @@ class _AiSpeaker(_Speaker):
                 "copy of someone else's."
             )
             parts.append("")
+            parts.append(
+                "14. Being home alone with no one to vouch for them is not suspicious "
+                "on its own -- most people are alone at night. Don't treat another "
+                "player's alibi as suspicious just because no one can confirm it; only "
+                "raise suspicion about an alibi if it's inconsistent, contradicted by "
+                "other evidence, or the player is being evasive when asked about it."
+            )
+            parts.append("")
             if self._state.day_number == 1:
                 parts.append(
-                    "14. Last night was the first night the village has ever had -- "
+                    "15. Last night was the first night the village has ever had -- "
                     "nothing had happened before it. You had no reason yet to fear, "
                     "suspect, or take precautions against werewolves, so never claim "
                     "you already had a habit or established pattern of doing so (for "

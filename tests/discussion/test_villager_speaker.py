@@ -77,3 +77,10 @@ def test_guardrail_allows_pre_existing_werewolf_fear_after_first_night():
     speaker = make_villager_speaker(state)
     description = speaker._build_guardrail_description()
     assert "before that first night" not in description
+
+
+def test_prompt_forbids_treating_being_home_alone_as_suspicious():
+    state = make_discussion_state()
+    speaker = make_villager_speaker(state)
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "Being home alone" in prompt
