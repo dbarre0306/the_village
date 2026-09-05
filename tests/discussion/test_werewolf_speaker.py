@@ -36,3 +36,23 @@ def test_prompt_forbids_revealing_werewolf_identity():
     speaker = make_werewolf_speaker(state)
     prompt = speaker._build_speak_prompt(addressed_by=None)
     assert "Never tell anyone you are a werewolf" in prompt
+
+
+def test_prompt_omits_the_pre_announcement_knowledge_rule_for_werewolves():
+    """Werewolves legitimately know who they killed before the village finds
+    out -- the villager-only rule against claiming pre-announcement
+    knowledge of a death would be false for them, so it must not appear in
+    their prompt."""
+    state = make_discussion_state()
+    speaker = make_werewolf_speaker(state)
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "no knowledge of a death before it's discovered" not in prompt
+
+
+def test_guardrail_omits_the_pre_announcement_knowledge_rule_for_werewolves():
+    state = make_discussion_state()
+    dead_player = next(p for p in state.players if p.name == "B")
+    dead_player.is_alive = False
+    speaker = make_werewolf_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "before it was found and announced" not in description

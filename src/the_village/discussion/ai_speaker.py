@@ -241,6 +241,17 @@ class _AiSpeaker(_Speaker):
                 'seemed to think Martha was acting suspicious"), as long as '
                 "it's grounded in Discussion so far or Known facts."
             )
+        if dead_names and not self._state.is_werewolf(self._player_name):
+            parts.append(
+                "Reject only if the text explicitly claims the speaker personally "
+                "knew, heard, suspected, or otherwise learned that a specific "
+                "killing had happened before it was found and announced in Known "
+                'Facts above (e.g. claiming to have heard the news "last night," '
+                "or before the morning the body was discovered). A statement that "
+                "only refers to a death after it was found, or a generic reaction "
+                "to the news without any specific pre-discovery timing claim, is "
+                "valid."
+            )
         return "\n\n".join(parts)
 
     def _build_speak_prompt(self, addressed_by: DiscussionMessage | None) -> str:
@@ -302,6 +313,15 @@ class _AiSpeaker(_Speaker):
             "8. Any statements, questions, or accusations must be consistent with what you previously said.",
             "",
         ]
+        if not self._state.is_werewolf(self._player_name):
+            parts.append(
+                "9. You only learn that someone was killed when their body is found the "
+                "next morning, as recorded in Known Facts above -- you have no knowledge "
+                "of a death before it's discovered. Never claim to have heard, suspected, "
+                "or known about a killing before it was found (for example, hearing the "
+                'news "last night," or before the morning it was announced).'
+            )
+            parts.append("")
         return "\n".join(parts)
 
     @abstractmethod

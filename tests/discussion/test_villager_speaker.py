@@ -29,3 +29,19 @@ def test_prompt_encourages_pressing_for_answers():
     speaker = make_villager_speaker(state)
     prompt = speaker._build_speak_prompt(addressed_by=None)
     assert "willing to voice suspicion, ask pointed questions" in prompt
+
+
+def test_prompt_forbids_claiming_pre_announcement_knowledge_of_a_death():
+    state = make_discussion_state()
+    speaker = make_villager_speaker(state)
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "no knowledge of a death before it's discovered" in prompt
+
+
+def test_guardrail_forbids_claiming_pre_announcement_knowledge_of_a_death():
+    state = make_discussion_state()
+    dead_player = next(p for p in state.players if p.name == "B")
+    dead_player.is_alive = False
+    speaker = make_villager_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "before it was found and announced" in description
