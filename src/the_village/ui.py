@@ -1892,14 +1892,3 @@ def build_app() -> gr.Blocks:
         )
 
     return demo
-
-
-def main():
-    build_app().launch(
-        css=_speaker_color_css() + _layout_css() + _chronicle_css(),
-        js=_autoscroll_js() + _autofocus_js() + _game_over_scroll_js(),
-    )
-
-
-if __name__ == "__main__":
-    main()

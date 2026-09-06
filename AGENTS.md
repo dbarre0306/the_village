@@ -72,7 +72,7 @@ with `uv run` if the venv isn't already activated.
   There's no live UI to answer pauses, so every AI/human turn auto-declines
   or auto-abstains (`village_flow._auto_play_consumer`); this drives the
   game to a `GameOverResult` as a smoke test, not a way to actually play.
-- `uv run app` — launches the real Gradio UI (`the_village.ui:main`).
+- `uv run app` — launches the real Gradio UI (`the_village.app:main`).
 - `uv run pytest` — runs the unit test suite (`tests/`, 300+ tests). Tests
   marked `integration` (hit a real LLM — slow, costs tokens) are excluded by
   default via `addopts` in `pyproject.toml`; run them explicitly with

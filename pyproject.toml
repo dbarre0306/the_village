@@ -13,7 +13,7 @@ dependencies = [
 kickoff = "the_village.village_flow:kickoff"
 run_crew = "the_village.village_flow:kickoff"
 plot = "the_village.village_flow:plot"
-app = "the_village.ui:main"
+app = "the_village.app:main"
 
 [build-system]
 requires = ["hatchling"]
