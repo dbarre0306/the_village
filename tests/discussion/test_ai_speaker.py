@@ -194,6 +194,14 @@ def test_speak_prompt_tells_agents_to_avoid_repeating_heavily_discussed_topics()
     assert "shift focus to a different player or angle" in prompt
 
 
+def test_speak_prompt_tells_agents_not_to_blame_players_who_havent_spoken_yet():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "check today's Discussion in Known Facts above" in prompt
+    assert "haven't had a turn yet" in prompt
+
+
 def test_speak_prompt_encourages_checking_victims_own_voting_history():
     state = make_discussion_state()
     state.advance_day()
@@ -432,6 +440,24 @@ def test_guardrail_description_allows_inference_about_unstated_motives():
     speaker = make_ai_speaker(state, "A")
     description = speaker._build_guardrail_description()
     assert "not a claim about their recorded words" in description.lower()
+
+
+def test_guardrail_description_forbids_blaming_a_player_who_hasnt_spoken_yet():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "hasn't had a turn yet" in description.lower()
+    assert "zero messages" in description.lower()
+
+
+def test_guardrail_description_still_forbids_blaming_unspoken_players_for_werewolves():
+    """This is a checkable fact (who has spoken today), not a demeanor read --
+    werewolves get latitude to invent demeanor, not to fabricate turn-taking
+    facts, so this rule stays active for them too."""
+    state = make_discussion_state_with_werewolf()
+    speaker = make_werewolf_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "hasn't had a turn yet" in description.lower()
 
 
 def test_guardrail_description_forbids_asking_about_an_already_reversed_belief():

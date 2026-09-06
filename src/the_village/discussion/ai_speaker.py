@@ -186,6 +186,37 @@ _NO_PRIOR_WEREWOLF_FEAR_RULE = _ConditionalRule(
 )
 
 
+_NO_BLAME_FOR_UNSPOKEN_PLAYERS_RULE = _ConditionalRule(
+    applies=lambda state, player_name: True,
+    prompt_text=(
+        "Before saying a named player hasn't shared, given, or provided "
+        "some piece of information -- an alibi, their whereabouts, or "
+        "anything else -- check today's Discussion in Known Facts above "
+        "for whether they've spoken at all yet today. If they have zero "
+        "messages there today, they simply haven't had a turn yet; that's "
+        "not evidence of anything, so don't frame it as suspicious, call "
+        "them out for it, or urge the group to focus on them for that "
+        "reason. A player who has spoken at least once today but didn't "
+        "share the specific information in question is fair game to call "
+        "out."
+    ),
+    guardrail_text=(
+        "Reject only if the text singles out a specific named living "
+        "player as not having shared, given, or provided some piece of "
+        "information -- an alibi, their whereabouts, or anything else -- "
+        "when today's Discussion in Known Facts above shows zero messages "
+        'from that player so far today (e.g. "Don and Bruce haven\'t '
+        'given us much information yet" when neither Don nor Bruce has '
+        "spoken today). That player simply hasn't had a turn yet, so "
+        "framing their lack of a turn as if it reflects something about "
+        "them -- evasiveness, unwillingness to cooperate, or the like -- "
+        "is baseless. A player who has spoken at least once today but "
+        "didn't share the specific information being asked about is a "
+        "valid target for this complaint."
+    ),
+)
+
+
 class _AiSpeaker(_Speaker):
 
     def __init__(
@@ -344,6 +375,7 @@ class _AiSpeaker(_Speaker):
             "of using a true statement as a distraction) is inference, not "
             "a claim about their recorded words, and is valid.",
             _ALREADY_ANSWERED_QUESTION_RULE.guardrail_text,
+            _NO_BLAME_FOR_UNSPOKEN_PLAYERS_RULE.guardrail_text,
         ]
         dead_names = self._state.dead_players_names()
         if dead_names:
@@ -471,6 +503,8 @@ class _AiSpeaker(_Speaker):
             "restate a question or accusation about them -- either add something "
             "genuinely new, or shift focus to a different player or angle.",
             "",
+            f"12. {_NO_BLAME_FOR_UNSPOKEN_PLAYERS_RULE.prompt_text}",
+            "",
             "",
         ]
         if self._state.day_number > 1:
@@ -478,24 +512,24 @@ class _AiSpeaker(_Speaker):
             # there is no voting history yet to check -- keeping this rule
             # unconditional prompted agents to invent one for the victim.
             parts.append(
-                "12. When someone new turns up dead, check their own voting history in "
+                "13. When someone new turns up dead, check their own voting history in "
                 "the Daily History in Known Facts above. If they cast a lone or "
                 "minority vote for someone who's still alive, that's worth raising as "
                 "a possible reason the werewolves targeted them."
             )
             parts.append("")
         if not self._state.is_werewolf(self._player_name):
-            parts.append(f"13. {_PRE_ANNOUNCEMENT_KNOWLEDGE_RULE.prompt_text}")
+            parts.append(f"14. {_PRE_ANNOUNCEMENT_KNOWLEDGE_RULE.prompt_text}")
             parts.append("")
             parts.append(
-                "14. When inventing your own alibi, never base it on what another player "
+                "15. When inventing your own alibi, never base it on what another player "
                 "already claimed (for example, saying you were with someone just because "
                 "they already claimed it). Your alibi must be your own invention, not a "
                 "copy of someone else's."
             )
             parts.append("")
             parts.append(
-                "15. Being home alone with no one to vouch for them is not suspicious "
+                "16. Being home alone with no one to vouch for them is not suspicious "
                 "on its own -- most people are alone at night. Don't treat another "
                 "player's alibi as suspicious just because no one can confirm it; only "
                 "raise suspicion about an alibi if it's inconsistent, contradicted by "
@@ -503,7 +537,7 @@ class _AiSpeaker(_Speaker):
             )
             parts.append("")
             if _NO_PRIOR_WEREWOLF_FEAR_RULE.applies(self._state, self._player_name):
-                parts.append(f"16. {_NO_PRIOR_WEREWOLF_FEAR_RULE.prompt_text}")
+                parts.append(f"17. {_NO_PRIOR_WEREWOLF_FEAR_RULE.prompt_text}")
                 parts.append("")
         return "\n".join(parts)
 
