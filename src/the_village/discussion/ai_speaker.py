@@ -247,10 +247,11 @@ class _AiSpeaker(_Speaker):
                 "whereabouts, alibi, or explanations; claiming they are "
                 "currently evading questions; comparing their ongoing "
                 "credibility or story to a living player's; or suggesting "
-                "they might still speak or be voted on. Generic statements "
-                'addressed to "everyone" or the group do not count as '
-                "naming them, since the living players obviously "
-                "understand that to mean the living players."
+                "they might still speak or be voted on; or naming them as a "
+                "current suspect or possible werewolf going forward. "
+                'Generic statements addressed to "everyone" or the group do '
+                "not count as naming them, since the living players "
+                "obviously understand that to mean the living players."
             )
             parts.append(
                 "Reject also if the text places one of them reacting, "
@@ -289,11 +290,17 @@ class _AiSpeaker(_Speaker):
                 "describing an alibi for the night of the killing as time spent "
                 'reacting to, mourning, or "processing" that killing (e.g. '
                 '"gathering my thoughts about the murder" as an account of what '
-                "the speaker was doing that night) -- the reaction itself is a "
-                'pre-discovery timing claim, even without the words "last '
-                'night." A statement that only refers to a death after it was '
-                "found, or a generic reaction to the news given as a "
-                "present-tense response in today's discussion, is valid."
+                "the speaker was doing that night), and it includes explaining an "
+                "overnight precaution -- locking doors, staying inside, and the "
+                "like -- as motivated by fear, worry, or unease about that "
+                'specific killing (e.g. "I was worried after what happened," or '
+                '"I locked myself in out of fear after what happened to Joan") '
+                "-- the reaction itself is a pre-discovery timing claim, even "
+                'without the words "last night" and even when phrased as fear '
+                "or worry rather than explicit knowledge. A statement that only "
+                "refers to a death after it was found, or a generic reaction to "
+                "the news given as a present-tense response in today's "
+                "discussion, is valid."
             )
         if self._state.day_number == 1 and not self._state.is_werewolf(
             self._player_name
@@ -308,7 +315,8 @@ class _AiSpeaker(_Speaker):
                 'since the killings started" when only last night\'s death has '
                 "happened). A statement that only describes what the speaker "
                 "did or started doing last night itself, without claiming it "
-                "was already an established habit, is valid."
+                "was already an established habit or attributing it to that "
+                "specific killing, is valid."
             )
         return "\n\n".join(parts)
 
@@ -370,11 +378,18 @@ class _AiSpeaker(_Speaker):
             "dead player died, and to ask living players about their own "
             "whereabouts or actions.",
             "",
-            "7. When referring to another player, always use their name -- never a pronoun.",
+            "7. A dead player cannot be a suspect. Once someone is dead, they're "
+            "removed from play for good, whether they were a werewolf or not -- "
+            "don't name them as a current suspect, float them as the possible "
+            "werewolf, or urge the group to keep an eye on them going forward. "
+            "It's still fine to analyze what a dead player did or seemed to "
+            "believe while they were alive as reasoning about who's guilty now.",
             "",
-            "8. Any statements, questions, or accusations must be consistent with what you previously said.",
+            "8. When referring to another player, always use their name -- never a pronoun.",
             "",
-            "9. Before asking a player whether they still hold a belief or suspicion, "
+            "9. Any statements, questions, or accusations must be consistent with what you previously said.",
+            "",
+            "10. Before asking a player whether they still hold a belief or suspicion, "
             "asking them to reconsider or justify one, or asking them to explain or "
             "account again for a specific fact or inconsistency they've already "
             "explained, check whether their own words in Discussion so far already "
@@ -382,12 +397,12 @@ class _AiSpeaker(_Speaker):
             "actually said instead (agree, push back on it, or move on to a different "
             "angle).",
             "",
-            "10. Check the \"Heavily Discussed Today\" list in Known Facts above. If a "
+            "11. Check the \"Heavily Discussed Today\" list in Known Facts above. If a "
             "player listed there keeps coming up without new information, don't just "
             "restate a question or accusation about them -- either add something "
             "genuinely new, or shift focus to a different player or angle.",
             "",
-            "11. When someone new turns up dead, check their own voting history in the "
+            "12. When someone new turns up dead, check their own voting history in the "
             "Daily History in Known Facts above. If they cast a lone or minority vote "
             "for someone who's still alive, that's worth raising as a possible reason "
             "the werewolves targeted them.",
@@ -396,26 +411,32 @@ class _AiSpeaker(_Speaker):
         ]
         if not self._state.is_werewolf(self._player_name):
             parts.append(
-                "12. You only learn that someone was killed when their body is found the "
+                "13. You only learn that someone was killed when their body is found the "
                 "next morning, as recorded in Known Facts above -- you have no knowledge "
                 "of a death before it's discovered. Never claim to have heard, suspected, "
                 "or known about a killing before it was found (for example, hearing the "
                 'news "last night," or before the morning it was announced). This also '
                 "applies to your alibi for that night -- don't describe reacting to, "
                 "mourning, or processing the killing as something you were doing "
-                "overnight; that reaction could only happen after the body was found "
-                "the next morning."
+                "overnight, and don't explain a precaution you took that night -- "
+                "locking your doors, staying inside, and the like -- as motivated by "
+                'fear or worry about that specific killing (e.g. "I was worried after '
+                'what happened" or "I locked myself in out of fear after what happened '
+                'to [victim]"). That killing could only be known, and reacted or '
+                "responded to, after the body was found the next morning; any "
+                "overnight caution you describe must be generic, not attributed to a "
+                "killing you had no way of knowing about yet."
             )
             parts.append("")
             parts.append(
-                "13. When inventing your own alibi, never base it on what another player "
+                "14. When inventing your own alibi, never base it on what another player "
                 "already claimed (for example, saying you were with someone just because "
                 "they already claimed it). Your alibi must be your own invention, not a "
                 "copy of someone else's."
             )
             parts.append("")
             parts.append(
-                "14. Being home alone with no one to vouch for them is not suspicious "
+                "15. Being home alone with no one to vouch for them is not suspicious "
                 "on its own -- most people are alone at night. Don't treat another "
                 "player's alibi as suspicious just because no one can confirm it; only "
                 "raise suspicion about an alibi if it's inconsistent, contradicted by "
@@ -424,14 +445,16 @@ class _AiSpeaker(_Speaker):
             parts.append("")
             if self._state.day_number == 1:
                 parts.append(
-                    "15. Last night was the first night the village has ever had -- "
+                    "16. Last night was the first night the village has ever had -- "
                     "nothing had happened before it. You had no reason yet to fear, "
                     "suspect, or take precautions against werewolves, so never claim "
                     "you already had a habit or established pattern of doing so (for "
                     'example, locking your doors "every night" or "because of the '
                     'werewolves" as if that had long been your routine). It is still '
                     "fine to say you only started doing that last night, out of "
-                    "ordinary caution or unease, without any prior pattern."
+                    "ordinary caution or unease, without any prior pattern -- but that "
+                    "unease can't be attributed to the killing itself (see rule 13), "
+                    "since you had no way of knowing about it yet."
                 )
                 parts.append("")
         return "\n".join(parts)

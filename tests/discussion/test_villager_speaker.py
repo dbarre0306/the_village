@@ -100,3 +100,35 @@ def test_guardrail_forbids_describing_alibi_as_reacting_to_the_killing():
     speaker = make_villager_speaker(state, "A")
     description = speaker._build_guardrail_description()
     assert "pre-discovery timing claim, even without the words" in description
+
+
+def test_prompt_forbids_attributing_overnight_precaution_to_the_killing():
+    state = make_discussion_state()
+    speaker = make_villager_speaker(state)
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "attributed to a killing you had no way of knowing about yet" in prompt
+
+
+def test_guardrail_forbids_attributing_overnight_precaution_to_the_killing():
+    state = make_discussion_state()
+    dead_player = next(p for p in state.players if p.name == "B")
+    dead_player.is_alive = False
+    speaker = make_villager_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "motivated by fear, worry, or unease about that specific killing" in description
+
+
+def test_prompt_first_night_unease_carveout_excludes_attributing_to_the_killing():
+    state = make_discussion_state()
+    assert state.day_number == 1
+    speaker = make_villager_speaker(state)
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "unease can't be attributed to the killing itself" in prompt
+
+
+def test_guardrail_first_night_carveout_excludes_attributing_to_the_killing():
+    state = make_discussion_state()
+    assert state.day_number == 1
+    speaker = make_villager_speaker(state)
+    description = speaker._build_guardrail_description()
+    assert "without claiming it was already an established habit or attributing it to that specific killing" in description
