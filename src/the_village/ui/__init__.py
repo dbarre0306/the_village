@@ -1918,6 +1918,10 @@ def build_app() -> gr.Blocks:
             fn=exit_to_home,
             inputs=None,
             outputs=[start_screen, result_screen],
+            # _layout_css makes .gradio-container (not window) the scrolling
+            # ancestor, so window.scrollTo is a no-op here.
+            js="() => { document.querySelector('.gradio-container')"
+            "?.scrollTo({top: 0, behavior: 'instant'}); }",
         )
 
         discussion_outputs = [
