@@ -16,9 +16,9 @@ async def _decline_and_abstain_akickoff(crew):
     has one (_VoteChoice), and a kill_next_victim crew has one or more
     tasks with only the last carrying _VictimChoice.
 
-    Shared by tests/test_flow.py and tests/test_concurrency.py -- lives
-    here (rather than being imported test-module-to-test-module) since
-    tests/ has no __init__.py, so `tests.test_flow` isn't importable as
+    Shared by tests/core/test_flow.py and tests/core/test_concurrency.py --
+    lives here (rather than being imported test-module-to-test-module) since
+    tests/ has no __init__.py, so `tests.core.test_flow` isn't importable as
     a package from the repo root.
     """
     outputs = []
