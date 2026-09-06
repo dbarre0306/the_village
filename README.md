@@ -113,3 +113,7 @@ and tasks are built in code at the point of use. Four such decisions exist:
 For support, questions, or feedback regarding CrewAI:
 
 - Visit the [documentation](https://docs.crewai.com)
+
+## Author
+
+Donald A. Barre — [donaldbarre.com](https://donaldbarre.com)
