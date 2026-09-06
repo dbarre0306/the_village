@@ -76,7 +76,7 @@ Will use the jsonc approach when possible. If not possible, then default to code
 
 # Running and Testing
 
-Requires `OPENAI_API_KEY` (and `SERPER_API_KEY`, `MODEL`) in `.env`. Uses
+Requires `OPENAI_API_KEY` (and `MODEL`) in `.env`. Uses
 [uv](https://docs.astral.sh/uv/) for dependency management — prefix commands
 with `uv run` if the venv isn't already activated.
 
