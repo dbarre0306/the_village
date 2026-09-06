@@ -57,6 +57,13 @@ GAME_OVER_HEADLINE_CLASS = "game-over-headline"
 GAME_OVER_BUTTON_ROW_CLASS = "game-over-button-row"
 PLAY_AGAIN_BUTTON_CLASS = "play-again-button"
 EXIT_BUTTON_CLASS = "exit-button"
+START_SCREEN_CLASS = "start-screen"
+START_TITLE_CLASS = "start-title"
+START_TAGLINE_CLASS = "start-tagline"
+START_DESCRIPTION_CLASS = "start-description"
+START_HOWTO_CLASS = "start-howto"
+NAME_INPUT_CLASS = "name-input"
+START_BUTTON_CLASS = "start-button"
 
 # Matches roster.py's fixed count of sampled AI villagers -- the vote
 # ballot pre-allocates this many button slots since Gradio's layout is
@@ -213,6 +220,73 @@ def _layout_css() -> str:
     .{EXIT_BUTTON_CLASS}:hover {{
         background: #275d96;
         border-color: #275d96;
+    }}
+
+    /* The landing screen: theme-aware (unlike the fixed-palette in-game
+       chronicle screens -- this is the very first thing a player sees,
+       before the story starts, so it should just follow their light/dark
+       preference like a normal app screen). Borrows --speaker-0 (already
+       defined by _speaker_color_css for both themes) as its accent instead
+       of introducing a new color pair. */
+    .{START_SCREEN_CLASS} {{
+        max-width: 560px;
+        margin: 48px auto;
+        padding: 0 20px;
+        text-align: center;
+    }}
+    .prose.{START_TITLE_CLASS} h1 {{
+        font-family: 'Fraunces', Georgia, serif;
+        font-weight: 600;
+        font-size: 2.6em;
+        letter-spacing: 0.01em;
+        margin: 0 0 4px;
+    }}
+    .prose.{START_TAGLINE_CLASS} p {{
+        font-family: 'Source Serif 4', Georgia, serif;
+        font-style: italic;
+        color: var(--body-text-color-subdued);
+        font-size: 1.05em;
+        margin: 0 0 22px;
+    }}
+    .prose.{START_DESCRIPTION_CLASS} p {{
+        font-family: 'Source Serif 4', Georgia, serif;
+        font-size: 1em;
+        line-height: 1.6;
+        margin: 0 0 20px;
+    }}
+    .{START_HOWTO_CLASS}:not(.prose) {{
+        text-align: left;
+        background: var(--background-fill-secondary);
+        border: 1px solid var(--border-color-primary);
+        border-radius: 10px;
+        padding: 4px 20px 16px;
+        margin: 0 0 26px;
+    }}
+    .prose.{START_HOWTO_CLASS} h5 {{
+        font-family: 'IBM Plex Sans', sans-serif;
+        font-size: 0.8em;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--speaker-0);
+        margin: 16px 0 10px;
+    }}
+    .prose.{START_HOWTO_CLASS} ul {{
+        font-family: 'Source Serif 4', Georgia, serif;
+        font-size: 0.94em;
+        line-height: 1.55;
+        margin: 0;
+    }}
+    .{NAME_INPUT_CLASS} textarea {{
+        font-family: 'Source Serif 4', Georgia, serif;
+        font-size: 1em;
+        text-align: center;
+    }}
+    .{START_BUTTON_CLASS} {{
+        background: var(--speaker-0);
+        border-color: var(--speaker-0);
+        color: #fff;
+        font-weight: 600;
     }}
     """
 
@@ -514,6 +588,35 @@ def _autoscroll_js() -> str:
     """
 
 
+def _autofocus_name_js() -> str:
+    # Unlike discussion_input_row (see _autofocus_js), the name field is
+    # mounted from the very first paint -- but Gradio still hydrates its
+    # <textarea> asynchronously, so a plain focus() call on script load can
+    # fire before the element exists. Same watch-and-catch pattern, just
+    # without needing to re-arm on remount since the field is never hidden.
+    return f"""
+    (() => {{
+        let focused = false;
+        const tryFocus = () => {{
+            if (focused) {{
+                return;
+            }}
+            const box = document.querySelector(".{NAME_INPUT_CLASS} textarea");
+            if (!box) {{
+                return;
+            }}
+            box.focus();
+            focused = true;
+        }};
+        new MutationObserver(tryFocus).observe(document.body, {{
+            childList: true,
+            subtree: true,
+        }});
+        tryFocus();
+    }})();
+    """
+
+
 def _autofocus_js() -> str:
     # Gradio doesn't keep the row in the DOM with display:none while
     # hidden -- it's conditionally mounted, so a fresh <div> (and a fresh
@@ -675,7 +778,9 @@ def format_latest_death_announcement(state: GameState) -> str:
     return _format_night_line(dead_days[-1], len(dead_days) - 1)
 
 
-def format_deaths_panel(state: GameState, include_current_day_death: bool = True) -> str:
+def format_deaths_panel(
+    state: GameState, include_current_day_death: bool = True
+) -> str:
     # The current day's kill lands in state (and thus here) the instant
     # WereWolfPack picks a victim -- well before the player has clicked
     # "Begin" to reveal it (see begin_discussion). include_current_day_death
@@ -1466,7 +1571,9 @@ async def cast_player_vote(bridge: SessionBridge, state: GameState, target: str 
     # arrive later.
     yield (
         gr.update(visible=False),
-        gr.update(value=f"Tallying the votes… {_typing_indicator_html()}", visible=True),
+        gr.update(
+            value=f"Tallying the votes… {_typing_indicator_html()}", visible=True
+        ),
         gr.update(),
         gr.update(),
         gr.update(),
@@ -1645,9 +1752,37 @@ def build_app() -> gr.Blocks:
         game_state = gr.State()
         session_bridge = gr.State()
 
-        with gr.Column(visible=True) as start_screen:
-            name_input = gr.Textbox(label="Your first name")
-            start_button = gr.Button("Start Game")
+        with gr.Column(visible=True, elem_classes=[START_SCREEN_CLASS]) as start_screen:
+            gr.Markdown("# The Village", elem_classes=[START_TITLE_CLASS])
+            gr.Markdown(
+                "*A game of villagers and hidden werewolves.*",
+                elem_classes=[START_TAGLINE_CLASS],
+            )
+            gr.Markdown(
+                "You and six other villagers share this town — but some of the villagers "
+                "are secretly werewolves, choosing someone to kill together "
+                "each night. Every day, the village gathers to talk, "
+                "accuse, and vote to lynch someone.",
+                elem_classes=[START_DESCRIPTION_CLASS],
+            )
+            gr.Markdown(
+                "##### How to Play\n"
+                "- Each night, the werewolves quietly choose a villager to kill.\n"
+                "- Each day, everyone discusses who they suspect, then votes "
+                "to lynch one player. Players can directly question and accuse each other.\n"
+                "- Villagers win by finding and lynching every werewolf.\n"
+                "- Werewolves win once they equal or outnumber the villagers "
+                "left standing.",
+                elem_classes=[START_HOWTO_CLASS],
+            )
+            name_input = gr.Textbox(
+                show_label=False,
+                placeholder="Enter your first name",
+                elem_classes=[NAME_INPUT_CLASS],
+            )
+            start_button = gr.Button(
+                "Start Game", interactive=False, elem_classes=[START_BUTTON_CLASS]
+            )
 
         with gr.Column(
             visible=False, elem_classes=[RESULT_SCREEN_CLASS]
@@ -1716,12 +1851,16 @@ def build_app() -> gr.Blocks:
                 with gr.Column(
                     visible=False, elem_classes=[DAY_PANEL_CLASS]
                 ) as game_over_panel:
-                    game_over_status = gr.Markdown(elem_classes=[GAME_OVER_STATUS_CLASS])
+                    game_over_status = gr.Markdown(
+                        elem_classes=[GAME_OVER_STATUS_CLASS]
+                    )
                     with gr.Row(elem_classes=[GAME_OVER_BUTTON_ROW_CLASS]):
                         play_again_button = gr.Button(
                             "Play Again", elem_classes=[PLAY_AGAIN_BUTTON_CLASS]
                         )
-                        exit_button = gr.Button("Exit", elem_classes=[EXIT_BUTTON_CLASS])
+                        exit_button = gr.Button(
+                            "Exit", elem_classes=[EXIT_BUTTON_CLASS]
+                        )
 
         start_game_outputs = [
             start_screen,
@@ -1744,7 +1883,24 @@ def build_app() -> gr.Blocks:
             live_day_card,
         ]
 
+        name_input.change(
+            fn=lambda name: gr.update(interactive=bool(name and name.strip())),
+            inputs=[name_input],
+            outputs=[start_button],
+        )
+
         start_button.click(
+            fn=start_game,
+            inputs=[name_input],
+            outputs=start_game_outputs,
+            concurrency_limit=None,
+        )
+
+        # Enter in the name field is equivalent to clicking Start Game --
+        # start_game's own blank-name guard covers submitting before typing
+        # anything, the same way it already does for a click on a
+        # (theoretically still) disabled button.
+        name_input.submit(
             fn=start_game,
             inputs=[name_input],
             outputs=start_game_outputs,

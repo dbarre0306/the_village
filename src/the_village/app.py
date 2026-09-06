@@ -1,5 +1,6 @@
 from the_village.ui import (
     _autofocus_js,
+    _autofocus_name_js,
     _autoscroll_js,
     _chronicle_css,
     _game_over_scroll_js,
@@ -12,7 +13,10 @@ from the_village.ui import (
 def main():
     build_app().launch(
         css=_speaker_color_css() + _layout_css() + _chronicle_css(),
-        js=_autoscroll_js() + _autofocus_js() + _game_over_scroll_js(),
+        js=_autoscroll_js()
+        + _autofocus_js()
+        + _autofocus_name_js()
+        + _game_over_scroll_js(),
     )
 
 
