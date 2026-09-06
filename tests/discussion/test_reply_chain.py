@@ -1,5 +1,5 @@
 from the_village.discussion.reply_chain import _ReplyChain
-from the_village.state import DiscussionMessage
+from the_village.core.state import DiscussionMessage
 
 
 class ScriptedSpeaker:

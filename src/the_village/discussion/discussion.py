@@ -6,13 +6,13 @@ from typing import Final
 
 from crewai import Agent
 
-from the_village.bridge import SessionBridge
+from the_village.core.bridge import SessionBridge
 from the_village.discussion.human_speaker import _HumanSpeaker
 from the_village.discussion.reply_chain import _ReplyChain
 from the_village.discussion.speaker import _Speaker
 from the_village.discussion.villager_speaker import _VillagerSpeaker
 from the_village.discussion.werewolf_speaker import _WerewolfSpeaker
-from the_village.state import WEEKDAYS, DiscussionMessage, GameState
+from the_village.core.state import WEEKDAYS, DiscussionMessage, GameState
 
 logger = logging.getLogger(__name__)
 

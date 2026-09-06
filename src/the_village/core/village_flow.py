@@ -6,11 +6,11 @@ from crewai import Agent
 from crewai.flow import Flow, listen, router, start
 
 from the_village.agents import build_agent, build_conversation_analyst_agent
-from the_village.bridge import FlowStatus, GameOverResult, PlayerInput, SessionBridge
+from the_village.core.bridge import FlowStatus, GameOverResult, PlayerInput, SessionBridge
 from the_village.discussion import Discussion
 from the_village.pick_victim import WereWolfPack, kill_first_victim
 from the_village.roster import build_initial_roster
-from the_village.state import GameState
+from the_village.core.state import GameState
 from the_village.voting import Voting
 
 logger = logging.getLogger(__name__)

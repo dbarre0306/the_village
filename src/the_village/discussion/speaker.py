@@ -4,8 +4,8 @@ import logging
 from crewai import Agent
 from pydantic import BaseModel, Field
 
-from the_village.bridge import SessionBridge
-from the_village.state import DiscussionMessage, GameState, Player
+from the_village.core.bridge import SessionBridge
+from the_village.core.state import DiscussionMessage, GameState, Player
 
 logger = logging.getLogger(__name__)
 

@@ -2,9 +2,9 @@
 import asyncio
 from unittest.mock import patch
 
-from the_village.bridge import FlowStatus, GameOverResult, PlayerInput, SessionBridge
-from the_village.state import Player
-from the_village.village_flow import VillageFlow
+from the_village.core.bridge import FlowStatus, GameOverResult, PlayerInput, SessionBridge
+from the_village.core.state import Player
+from the_village.core.village_flow import VillageFlow
 from the_village.voting import VoteOutcome
 
 from conftest import _decline_and_abstain_akickoff
@@ -163,7 +163,7 @@ async def test_village_flow_ends_the_game_when_a_night_kill_reaches_werewolf_par
     flow = VillageFlow(bridge=bridge)
 
     with patch(
-        "the_village.village_flow.build_initial_roster", return_value=custom_roster
+        "the_village.core.village_flow.build_initial_roster", return_value=custom_roster
     ):
         task = asyncio.create_task(
             flow.kickoff_async(inputs={"user_player_name": "Dana"})
@@ -196,7 +196,7 @@ async def test_village_flow_ends_the_game_when_a_lynch_eliminates_the_last_werew
     flow = VillageFlow(bridge=bridge)
 
     with patch(
-        "the_village.village_flow.build_initial_roster", return_value=custom_roster
+        "the_village.core.village_flow.build_initial_roster", return_value=custom_roster
     ), patch("crewai.Crew.akickoff", new=_decline_and_abstain_akickoff):
         task = asyncio.create_task(
             flow.kickoff_async(inputs={"user_player_name": "Dana"})

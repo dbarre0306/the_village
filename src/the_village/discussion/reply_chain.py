@@ -2,7 +2,7 @@ import logging
 from typing import Final
 
 from .speaker import _Speaker
-from the_village.state import DiscussionMessage
+from the_village.core.state import DiscussionMessage
 
 logger = logging.getLogger(__name__)
 

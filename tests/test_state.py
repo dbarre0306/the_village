@@ -1,5 +1,5 @@
 from the_village.discussion.speaker import DECLINED_TO_RESPOND
-from the_village.state import WEEKDAYS, Day, DiscussionMessage, GameState, Player, VoteRecord
+from the_village.core.state import WEEKDAYS, Day, DiscussionMessage, GameState, Player, VoteRecord
 
 
 def test_player_defaults():

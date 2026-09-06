@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock, patch
 
 from crewai import Agent
 
-from the_village.bridge import SessionBridge
-from the_village.state import Day, DiscussionMessage, GameState, Player
+from the_village.core.bridge import SessionBridge
+from the_village.core.state import Day, DiscussionMessage, GameState, Player
 from the_village.voting.ai_voter import _AiVoter, _VoteChoice
 from the_village.voting.villager_voter import _VillagerVoter
 

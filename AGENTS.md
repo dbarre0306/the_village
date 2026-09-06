@@ -11,11 +11,11 @@ happened in the game so far. The game is played through a Gradio UI
 # Architecture
 
 The project is a single CrewAI **Flow** (not a Crew), driven by
-`VillageFlow` in `village_flow.py`. `GameState` (`state.py`) is the flow's
-pydantic state and the single source of truth for the game: player roster,
-per-day discussion transcript, votes, and deaths. `GameState.known_facts()`
-renders that state into the markdown context every agent prompt is built on
-— read it before changing what agents "know."
+`VillageFlow` in `core/village_flow.py`. `GameState` (`core/state.py`) is
+the flow's pydantic state and the single source of truth for the game:
+player roster, per-day discussion transcript, votes, and deaths.
+`GameState.known_facts()` renders that state into the markdown context every
+agent prompt is built on — read it before changing what agents "know."
 
 Flow steps (`@start`/`@router`/`@listen`) walk: `setup_game` → night-one kill
 (`pick_victim/kill_first_victim.py`, unconditional random target) →
@@ -23,7 +23,9 @@ Flow steps (`@start`/`@router`/`@listen`) walk: `setup_game` → night-one kill
 night's kill (`pick_victim/werewolf_pack.py`) → repeat, until
 `GameState.determine_winner()` returns a winner.
 
-- **`bridge.py`** — `SessionBridge` is the only channel between the
+- **`core/`** — `village_flow.py`, `state.py`, and `bridge.py`: the Flow
+  orchestrator, its pydantic game state, and the UI↔Flow channel.
+- **`core/bridge.py`** — `SessionBridge` is the only channel between the
   background Flow task and the Gradio UI: an `asyncio.Queue` (`outbox`)
   carries Flow → UI updates, and a reused `asyncio.Future` (`pending_input`)
   is how a paused flow step waits on one UI → Flow value at a time. Read the
@@ -70,7 +72,7 @@ with `uv run` if the venv isn't already activated.
 
 - `crewai run` (alias: `uv run kickoff`) — headless CLI run of the full Flow.
   There's no live UI to answer pauses, so every AI/human turn auto-declines
-  or auto-abstains (`village_flow._auto_play_consumer`); this drives the
+  or auto-abstains (`core.village_flow._auto_play_consumer`); this drives the
   game to a `GameOverResult` as a smoke test, not a way to actually play.
 - `uv run app` — launches the real Gradio UI (`the_village.app:main`).
 - `uv run pytest` — runs the unit test suite (`tests/`, 300+ tests). Tests

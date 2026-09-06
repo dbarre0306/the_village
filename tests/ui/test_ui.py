@@ -4,14 +4,14 @@ import gradio as gr
 import pytest
 
 from the_village import ui
-from the_village.bridge import (
+from the_village.core.bridge import (
     FlowFailed,
     FlowStatus,
     GameOverResult,
     PlayerInput,
     SessionBridge,
 )
-from the_village.state import Day, DiscussionMessage, GameState, Player, VoteRecord
+from the_village.core.state import Day, DiscussionMessage, GameState, Player, VoteRecord
 from the_village.ui import (
     begin_discussion,
     cast_player_abstain,

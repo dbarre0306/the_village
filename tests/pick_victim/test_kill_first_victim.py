@@ -4,7 +4,7 @@ import pytest
 
 from the_village.pick_victim import kill_first_victim
 from the_village.roster import build_initial_roster
-from the_village.state import GameState, Player
+from the_village.core.state import GameState, Player
 
 
 def make_state() -> GameState:

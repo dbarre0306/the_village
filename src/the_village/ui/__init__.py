@@ -4,7 +4,7 @@ from typing import NamedTuple
 
 import gradio as gr
 
-from the_village.bridge import (
+from the_village.core.bridge import (
     FlowFailed,
     FlowStatus,
     GameOverResult,
@@ -12,9 +12,9 @@ from the_village.bridge import (
     SessionBridge,
     run_flow,
 )
-from the_village.village_flow import VillageFlow
+from the_village.core.village_flow import VillageFlow
 from the_village.roster import NUMBER_OF_AI_PLAYERS
-from the_village.state import WEEKDAYS, Day, DiscussionMessage, GameState
+from the_village.core.state import WEEKDAYS, Day, DiscussionMessage, GameState
 from the_village.voting import VoteOutcome, tally_votes
 
 logger = logging.getLogger(__name__)

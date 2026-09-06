@@ -2,10 +2,10 @@ import logging
 
 from crewai import Agent
 
-from the_village.bridge import SessionBridge
+from the_village.core.bridge import SessionBridge
 from the_village.discussion.ai_speaker import _AiSpeaker
 
-from the_village.state import GameState
+from the_village.core.state import GameState
 
 logger = logging.getLogger(__name__)
 

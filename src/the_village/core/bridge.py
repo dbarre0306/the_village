@@ -7,7 +7,7 @@ from enum import Enum
 
 from crewai import Agent
 
-from the_village.state import Winner
+from the_village.core.state import Winner
 
 logger = logging.getLogger(__name__)
 

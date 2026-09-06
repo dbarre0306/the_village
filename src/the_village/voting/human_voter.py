@@ -1,5 +1,5 @@
-from the_village.bridge import FlowStatus, SessionBridge
-from the_village.state import GameState
+from the_village.core.bridge import FlowStatus, SessionBridge
+from the_village.core.state import GameState
 
 from .voter import _Voter
 

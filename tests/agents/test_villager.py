@@ -1,5 +1,5 @@
 from the_village.agents.villager import _build_villager_agent
-from the_village.state import Player
+from the_village.core.state import Player
 
 
 def test_backstory_establishes_identity_and_goal():

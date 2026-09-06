@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 from crewai import Agent, Process
 
 from the_village.pick_victim.werewolf_pack import WereWolfPack, _VictimChoice
-from the_village.state import Day, GameState, Player
+from the_village.core.state import Day, GameState, Player
 
 
 def make_state(werewolves: list[Player], day_number: int = 1) -> GameState:

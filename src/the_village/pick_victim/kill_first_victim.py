@@ -1,6 +1,6 @@
 import random
 
-from the_village.state import GameState
+from the_village.core.state import GameState
 
 
 def kill_first_victim(state: GameState, rng: random.Random | None = None) -> None:

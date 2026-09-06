@@ -6,9 +6,9 @@ from crewai import Agent, LLM
 from crewai.tasks.llm_guardrail import LLMGuardrail
 from crewai.tasks.task_output import TaskOutput
 
-from the_village.bridge import SessionBridge
+from the_village.core.bridge import SessionBridge
 from the_village.discussion.ai_speaker import _AiSpeaker
-from the_village.state import GameState, Player
+from the_village.core.state import GameState, Player
 
 pytestmark = [
     pytest.mark.integration,

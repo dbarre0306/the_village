@@ -2,8 +2,8 @@
 import asyncio
 from unittest.mock import patch
 
-from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
-from the_village.village_flow import VillageFlow
+from the_village.core.bridge import FlowStatus, PlayerInput, SessionBridge
+from the_village.core.village_flow import VillageFlow
 
 from conftest import _decline_and_abstain_akickoff
 

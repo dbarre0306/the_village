@@ -1,7 +1,7 @@
 import asyncio
 
-from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
-from the_village.state import GameState, Player
+from the_village.core.bridge import FlowStatus, PlayerInput, SessionBridge
+from the_village.core.state import GameState, Player
 from the_village.voting.human_voter import _HumanVoter
 
 

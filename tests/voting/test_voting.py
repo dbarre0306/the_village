@@ -4,8 +4,8 @@ from unittest.mock import patch
 
 from crewai import Agent
 
-from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
-from the_village.state import Day, GameState, Player, VoteRecord
+from the_village.core.bridge import FlowStatus, PlayerInput, SessionBridge
+from the_village.core.state import Day, GameState, Player, VoteRecord
 from the_village.voting.ai_voter import _AiVoter, _VoteChoice
 from the_village.voting.human_voter import _HumanVoter
 from the_village.voting.voting import Voting, tally_votes

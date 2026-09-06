@@ -1,8 +1,8 @@
 from crewai import Agent
 from pydantic import BaseModel
 
-from the_village.bridge import SessionBridge
-from the_village.state import GameState, VoteRecord
+from the_village.core.bridge import SessionBridge
+from the_village.core.state import GameState, VoteRecord
 
 from .human_voter import _HumanVoter
 from .villager_voter import _VillagerVoter

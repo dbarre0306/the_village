@@ -1,6 +1,6 @@
 import asyncio
 
-from the_village.bridge import FlowStatus, GameOverResult, PlayerInput, SessionBridge
+from the_village.core.bridge import FlowStatus, GameOverResult, PlayerInput, SessionBridge
 
 
 def test_flow_status_includes_voting_states():
@@ -45,7 +45,7 @@ async def test_wait_for_input_clears_pending_input_after_resolving():
 
 
 async def test_run_flow_pushes_flow_failed_onto_the_outbox_on_exception():
-    from the_village.bridge import FlowFailed, run_flow
+    from the_village.core.bridge import FlowFailed, run_flow
 
     bridge = SessionBridge()
 
@@ -60,7 +60,7 @@ async def test_run_flow_pushes_flow_failed_onto_the_outbox_on_exception():
 
 
 async def test_run_flow_does_not_touch_the_outbox_on_success():
-    from the_village.bridge import run_flow
+    from the_village.core.bridge import run_flow
 
     bridge = SessionBridge()
 

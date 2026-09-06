@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from crewai import Agent
 
-from the_village.state import Player
+from the_village.core.state import Player
 
 
 def _build_werewolf_agent(player: Player, all_players: list[Player]) -> Agent:

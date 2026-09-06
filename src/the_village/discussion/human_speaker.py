@@ -1,7 +1,7 @@
 from crewai import Agent, Crew, Task
 
-from the_village.bridge import FlowStatus, SessionBridge
-from the_village.state import DiscussionMessage, GameState, Player
+from the_village.core.bridge import FlowStatus, SessionBridge
+from the_village.core.state import DiscussionMessage, GameState, Player
 
 from .speaker import DECLINED_TO_RESPOND, _AddressResolution, _Speaker
 

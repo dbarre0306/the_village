@@ -4,10 +4,10 @@ from unittest.mock import AsyncMock, patch
 
 from crewai import Agent
 
-from the_village.bridge import FlowStatus, PlayerInput, SessionBridge
+from the_village.core.bridge import FlowStatus, PlayerInput, SessionBridge
 from the_village.discussion.human_speaker import _HumanSpeaker
 from the_village.discussion.speaker import DECLINED_TO_RESPOND, _AddressResolution
-from the_village.state import GameState, Player
+from the_village.core.state import GameState, Player
 
 
 def make_discussion_state() -> GameState:

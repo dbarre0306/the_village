@@ -7,10 +7,10 @@ from crewai import LLM, Agent, Crew, Process, Task
 from crewai.tasks.llm_guardrail import LLMGuardrail
 from pydantic import BaseModel, Field
 
-from the_village.bridge import SessionBridge
+from the_village.core.bridge import SessionBridge
 
 from .speaker import _Speaker, DECLINED_TO_RESPOND
-from the_village.state import DiscussionMessage, GameState, Player
+from the_village.core.state import DiscussionMessage, GameState, Player
 
 logger = logging.getLogger(__name__)
 
