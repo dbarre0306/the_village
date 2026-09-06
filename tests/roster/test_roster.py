@@ -2,7 +2,7 @@ import random
 
 import pytest
 
-from the_village.personalities import PERSONALITIES
+from the_village.roster.personalities import PERSONALITIES
 from the_village.roster import PLAYER_NAME_POOL, build_initial_roster
 
 

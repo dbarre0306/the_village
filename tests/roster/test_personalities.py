@@ -1,4 +1,4 @@
-from the_village.personalities import PERSONALITIES
+from the_village.roster.personalities import PERSONALITIES
 
 
 def test_has_six_distinct_personalities():

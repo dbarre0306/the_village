@@ -1,9 +1,9 @@
 import random
 
-from the_village.personalities import PERSONALITIES
+from the_village.roster.personalities import PERSONALITIES
 from the_village.state import GameState, Player
 
-NUMBER_OF_PLAYERS = 6
+NUMBER_OF_AI_PLAYERS = 6
 NUMBER_OF_WEREWOLVES = 1
 
 PLAYER_NAME_POOL = [
@@ -34,7 +34,7 @@ def build_initial_roster(
         for name in PLAYER_NAME_POOL
         if name.lower() != user_player_name.strip().lower()
     ]
-    ai_names = rng.sample(available_names, NUMBER_OF_PLAYERS)
+    ai_names = rng.sample(available_names, NUMBER_OF_AI_PLAYERS)
     players = [Player(name=user_player_name, player_type="user")]
     players += [Player(name=name, player_type="villager") for name in ai_names]
 
