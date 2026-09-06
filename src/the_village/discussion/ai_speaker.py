@@ -1,7 +1,7 @@
 from abc import abstractmethod
 import logging
 import os
-from typing import Any
+from typing import Any, Callable, NamedTuple
 
 from crewai import LLM, Agent, Crew, Process, Task
 from crewai.tasks.llm_guardrail import LLMGuardrail
@@ -51,6 +51,124 @@ class _SpeakerOutput(BaseModel):
             "players, or if you have nothing to say."
         ),
     )
+
+
+class _ConditionalRule(NamedTuple):
+    """A single behavioral constraint that's both taught to the speaker
+    (prompt_text, a proactive instruction) and enforced against its output
+    (guardrail_text, a rejection criterion). Keeping the two phrasings next
+    to each other, behind one `applies` check, is what stops a future fix
+    from patching one side and forgetting the other."""
+
+    applies: Callable[[GameState, str], bool]
+    prompt_text: str
+    guardrail_text: str
+
+
+_ALREADY_ANSWERED_QUESTION_RULE = _ConditionalRule(
+    applies=lambda state, player_name: True,
+    prompt_text=(
+        "Before asking a player whether they still hold a belief or suspicion, "
+        "asking them to reconsider or justify one, or asking them to explain or "
+        "account again for a specific fact or inconsistency they've already "
+        "explained, check whether their own words in Discussion so far already "
+        "answer that. If they do, don't ask it again -- respond to what they "
+        "actually said instead (agree, push back on it, or move on to a different "
+        "angle)."
+    ),
+    guardrail_text=(
+        "Reject only if the text asks a named player whether they "
+        "still hold, or asks them to reconsider or justify, a "
+        "specific belief or suspicion, or asks them to explain or "
+        "account again for a specific fact or inconsistency, that "
+        "player has already explicitly and unambiguously answered or "
+        "abandoned earlier in Discussion so far (e.g. asking Don "
+        "\"do you still think Bruce was the werewolf?\" right after "
+        "Don said he was wrong to suspect Bruce, or asking Kestrel "
+        "again how she knew about a killing before it was announced "
+        "after she already explained her wording was a mistake). "
+        "Quote or closely paraphrase the player's own prior "
+        "statement to check this -- only reject when it already and "
+        "directly settles the question being asked, not when the "
+        "prior statement was hedged or ambiguous. A question about "
+        "why they changed their mind, what they think now, or "
+        "anything else not already settled by their own prior words, "
+        "is valid."
+    ),
+)
+
+_PRE_ANNOUNCEMENT_KNOWLEDGE_RULE = _ConditionalRule(
+    applies=lambda state, player_name: bool(state.dead_players_names())
+    and not state.is_werewolf(player_name),
+    prompt_text=(
+        "You only learn that someone was killed when their body is found the "
+        "next morning, as recorded in Known Facts above -- you have no knowledge "
+        "of a death before it's discovered. Never claim to have heard, suspected, "
+        "or known about a killing before it was found (for example, hearing the "
+        'news "last night," or before the morning it was announced). This also '
+        "applies to your alibi for that night -- don't describe reacting to, "
+        "mourning, or processing the killing as something you were doing "
+        "overnight, and don't explain a precaution you took that night -- "
+        "locking your doors, staying inside, and the like -- as motivated by "
+        'fear or worry about that specific killing (e.g. "I was worried after '
+        'what happened" or "I locked myself in out of fear after what happened '
+        'to [victim]"). That killing could only be known, and reacted or '
+        "responded to, after the body was found the next morning; any "
+        "overnight caution you describe must be generic, not attributed to a "
+        "killing you had no way of knowing about yet."
+    ),
+    guardrail_text=(
+        "Reject only if the text explicitly claims the speaker personally "
+        "knew, heard, suspected, or otherwise learned that a specific "
+        "killing had happened before it was found and announced in Known "
+        'Facts above (e.g. claiming to have heard the news "last night," '
+        "or before the morning the body was discovered). This includes "
+        "describing an alibi for the night of the killing as time spent "
+        'reacting to, mourning, or "processing" that killing (e.g. '
+        '"gathering my thoughts about the murder" as an account of what '
+        "the speaker was doing that night), and it includes explaining an "
+        "overnight precaution -- locking doors, staying inside, and the "
+        "like -- as motivated by fear, worry, or unease about that "
+        'specific killing (e.g. "I was worried after what happened," or '
+        '"I locked myself in out of fear after what happened to Joan") '
+        "-- the reaction itself is a pre-discovery timing claim, even "
+        'without the words "last night" and even when phrased as fear '
+        "or worry rather than explicit knowledge. A statement that only "
+        "refers to a death after it was found, or a generic reaction to "
+        "the news given as a present-tense response in today's "
+        "discussion, is valid."
+    ),
+)
+
+_NO_PRIOR_WEREWOLF_FEAR_RULE = _ConditionalRule(
+    applies=lambda state, player_name: state.day_number == 1
+    and not state.is_werewolf(player_name),
+    prompt_text=(
+        "Last night was the first night the village has ever had -- "
+        "nothing had happened before it. You had no reason yet to fear, "
+        "suspect, or take precautions against werewolves, so never claim "
+        "you already had a habit or established pattern of doing so (for "
+        'example, locking your doors "every night" or "because of the '
+        'werewolves" as if that had long been your routine). It is still '
+        "fine to say you only started doing that last night, out of "
+        "ordinary caution or unease, without any prior pattern -- but that "
+        "unease can't be attributed to the killing itself (see rule 13), "
+        "since you had no way of knowing about it yet."
+    ),
+    guardrail_text=(
+        "Last night was the first night the village has ever had -- "
+        "before that first night, nothing had happened yet. Reject only "
+        "if the text explicitly claims the speaker already had a habit "
+        "or established pattern of fearing, suspecting, or taking "
+        'precautions against werewolves predating last night (e.g. "I '
+        'always lock my doors because of the werewolves," or "ever '
+        'since the killings started" when only last night\'s death has '
+        "happened). A statement that only describes what the speaker "
+        "did or started doing last night itself, without claiming it "
+        "was already an established habit or attributing it to that "
+        "specific killing, is valid."
+    ),
+)
 
 
 class _AiSpeaker(_Speaker):
@@ -217,23 +335,7 @@ class _AiSpeaker(_Speaker):
             "unstated motive, intent, or hidden agenda (e.g. accusing them "
             "of using a true statement as a distraction) is inference, not "
             "a claim about their recorded words, and is valid.",
-            "Reject only if the text asks a named player whether they "
-            "still hold, or asks them to reconsider or justify, a "
-            "specific belief or suspicion, or asks them to explain or "
-            "account again for a specific fact or inconsistency, that "
-            "player has already explicitly and unambiguously answered or "
-            "abandoned earlier in Discussion so far (e.g. asking Don "
-            "\"do you still think Bruce was the werewolf?\" right after "
-            "Don said he was wrong to suspect Bruce, or asking Kestrel "
-            "again how she knew about a killing before it was announced "
-            "after she already explained her wording was a mistake). "
-            "Quote or closely paraphrase the player's own prior "
-            "statement to check this -- only reject when it already and "
-            "directly settles the question being asked, not when the "
-            "prior statement was hedged or ambiguous. A question about "
-            "why they changed their mind, what they think now, or "
-            "anything else not already settled by their own prior words, "
-            "is valid.",
+            _ALREADY_ANSWERED_QUESTION_RULE.guardrail_text,
         ]
         dead_names = self._state.dead_players_names()
         if dead_names:
@@ -280,44 +382,9 @@ class _AiSpeaker(_Speaker):
                 'seemed to think Martha was acting suspicious"), as long as '
                 "it's grounded in Discussion so far or Known facts."
             )
-        if dead_names and not self._state.is_werewolf(self._player_name):
-            parts.append(
-                "Reject only if the text explicitly claims the speaker personally "
-                "knew, heard, suspected, or otherwise learned that a specific "
-                "killing had happened before it was found and announced in Known "
-                'Facts above (e.g. claiming to have heard the news "last night," '
-                "or before the morning the body was discovered). This includes "
-                "describing an alibi for the night of the killing as time spent "
-                'reacting to, mourning, or "processing" that killing (e.g. '
-                '"gathering my thoughts about the murder" as an account of what '
-                "the speaker was doing that night), and it includes explaining an "
-                "overnight precaution -- locking doors, staying inside, and the "
-                "like -- as motivated by fear, worry, or unease about that "
-                'specific killing (e.g. "I was worried after what happened," or '
-                '"I locked myself in out of fear after what happened to Joan") '
-                "-- the reaction itself is a pre-discovery timing claim, even "
-                'without the words "last night" and even when phrased as fear '
-                "or worry rather than explicit knowledge. A statement that only "
-                "refers to a death after it was found, or a generic reaction to "
-                "the news given as a present-tense response in today's "
-                "discussion, is valid."
-            )
-        if self._state.day_number == 1 and not self._state.is_werewolf(
-            self._player_name
-        ):
-            parts.append(
-                "Last night was the first night the village has ever had -- "
-                "before that first night, nothing had happened yet. Reject only "
-                "if the text explicitly claims the speaker already had a habit "
-                "or established pattern of fearing, suspecting, or taking "
-                'precautions against werewolves predating last night (e.g. "I '
-                'always lock my doors because of the werewolves," or "ever '
-                'since the killings started" when only last night\'s death has '
-                "happened). A statement that only describes what the speaker "
-                "did or started doing last night itself, without claiming it "
-                "was already an established habit or attributing it to that "
-                "specific killing, is valid."
-            )
+        for rule in (_PRE_ANNOUNCEMENT_KNOWLEDGE_RULE, _NO_PRIOR_WEREWOLF_FEAR_RULE):
+            if rule.applies(self._state, self._player_name):
+                parts.append(rule.guardrail_text)
         return "\n\n".join(parts)
 
     def _build_speak_prompt(self, addressed_by: DiscussionMessage | None) -> str:
@@ -389,13 +456,7 @@ class _AiSpeaker(_Speaker):
             "",
             "9. Any statements, questions, or accusations must be consistent with what you previously said.",
             "",
-            "10. Before asking a player whether they still hold a belief or suspicion, "
-            "asking them to reconsider or justify one, or asking them to explain or "
-            "account again for a specific fact or inconsistency they've already "
-            "explained, check whether their own words in Discussion so far already "
-            "answer that. If they do, don't ask it again -- respond to what they "
-            "actually said instead (agree, push back on it, or move on to a different "
-            "angle).",
+            f"10. {_ALREADY_ANSWERED_QUESTION_RULE.prompt_text}",
             "",
             "11. Check the \"Heavily Discussed Today\" list in Known Facts above. If a "
             "player listed there keeps coming up without new information, don't just "
@@ -410,23 +471,7 @@ class _AiSpeaker(_Speaker):
             "",
         ]
         if not self._state.is_werewolf(self._player_name):
-            parts.append(
-                "13. You only learn that someone was killed when their body is found the "
-                "next morning, as recorded in Known Facts above -- you have no knowledge "
-                "of a death before it's discovered. Never claim to have heard, suspected, "
-                "or known about a killing before it was found (for example, hearing the "
-                'news "last night," or before the morning it was announced). This also '
-                "applies to your alibi for that night -- don't describe reacting to, "
-                "mourning, or processing the killing as something you were doing "
-                "overnight, and don't explain a precaution you took that night -- "
-                "locking your doors, staying inside, and the like -- as motivated by "
-                'fear or worry about that specific killing (e.g. "I was worried after '
-                'what happened" or "I locked myself in out of fear after what happened '
-                'to [victim]"). That killing could only be known, and reacted or '
-                "responded to, after the body was found the next morning; any "
-                "overnight caution you describe must be generic, not attributed to a "
-                "killing you had no way of knowing about yet."
-            )
+            parts.append(f"13. {_PRE_ANNOUNCEMENT_KNOWLEDGE_RULE.prompt_text}")
             parts.append("")
             parts.append(
                 "14. When inventing your own alibi, never base it on what another player "
@@ -443,19 +488,8 @@ class _AiSpeaker(_Speaker):
                 "other evidence, or the player is being evasive when asked about it."
             )
             parts.append("")
-            if self._state.day_number == 1:
-                parts.append(
-                    "16. Last night was the first night the village has ever had -- "
-                    "nothing had happened before it. You had no reason yet to fear, "
-                    "suspect, or take precautions against werewolves, so never claim "
-                    "you already had a habit or established pattern of doing so (for "
-                    'example, locking your doors "every night" or "because of the '
-                    'werewolves" as if that had long been your routine). It is still '
-                    "fine to say you only started doing that last night, out of "
-                    "ordinary caution or unease, without any prior pattern -- but that "
-                    "unease can't be attributed to the killing itself (see rule 13), "
-                    "since you had no way of knowing about it yet."
-                )
+            if _NO_PRIOR_WEREWOLF_FEAR_RULE.applies(self._state, self._player_name):
+                parts.append(f"16. {_NO_PRIOR_WEREWOLF_FEAR_RULE.prompt_text}")
                 parts.append("")
         return "\n".join(parts)
 
