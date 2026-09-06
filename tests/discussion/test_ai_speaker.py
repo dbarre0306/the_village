@@ -165,10 +165,22 @@ def test_speak_prompt_tells_agents_to_avoid_repeating_heavily_discussed_topics()
 
 def test_speak_prompt_encourages_checking_victims_own_voting_history():
     state = make_discussion_state()
+    state.advance_day()
     speaker = make_ai_speaker(state, "A")
     prompt = speaker._build_speak_prompt(addressed_by=None)
     assert "own voting history" in prompt
     assert "lone or minority vote" in prompt
+
+
+def test_speak_prompt_omits_voting_history_rule_on_the_first_day():
+    """Night one's kill happens before any vote has ever been cast, so
+    nothing exists to check -- keeping this rule active on day 1 is what
+    prompted agents to invent a vote for the victim that never happened."""
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "own voting history" not in prompt
+    assert "lone or minority vote" not in prompt
 
 
 def test_speak_task_expected_output_requires_a_question_or_demand_not_just_an_accusation():
@@ -337,6 +349,17 @@ def test_guardrail_description_allows_vague_vote_references():
     speaker = make_ai_speaker(state, "A")
     description = speaker._build_guardrail_description()
     assert "not a claim that can be checked" in description.lower()
+
+
+def test_guardrail_description_forbids_a_vote_claim_with_no_recorded_vote_at_all():
+    """No vote has ever been recorded on day 1, so a claim like "Hattie voted
+    for Joan last night" has nothing to contradict -- the old wording only
+    caught contradictions of an actual record, letting this fabrication
+    through."""
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "no vote is recorded for that player" in description.lower()
 
 
 def test_guardrail_description_forbids_misstated_prior_statements():

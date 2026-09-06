@@ -317,12 +317,14 @@ class _AiSpeaker(_Speaker):
             "anyone.",
             "Reject only if the text explicitly claims a specific player "
             "voted for, or abstained from voting for, a specific lynch "
-            "target, and that claim contradicts the actual vote recorded "
-            'for them in Known Facts above (e.g. "you voted for Henry '
-            'yesterday" when Known Facts records that player voting for '
-            "Alice). A vague or unattributed reference to a past vote "
-            '(e.g. "remember who you voted for") is not a claim that can '
-            "be checked, and is valid.",
+            "target, and either no vote is recorded for that player at all "
+            "in Known Facts above, or the claim contradicts the actual vote "
+            'recorded for them (e.g. "you voted for Henry yesterday" when '
+            "Known Facts records that player voting for Alice, or "
+            '"Hattie voted for Joan last night" when the game has had no '
+            "vote at all yet). A vague or unattributed reference to a past "
+            'vote (e.g. "remember who you voted for") is not a claim that '
+            "can be checked, and is valid.",
             "Reject only if the text states, as fact, a specific position, "
             "priority, or preference for a named player that directly "
             "contradicts what that player actually said earlier in "
@@ -463,13 +465,19 @@ class _AiSpeaker(_Speaker):
             "restate a question or accusation about them -- either add something "
             "genuinely new, or shift focus to a different player or angle.",
             "",
-            "12. When someone new turns up dead, check their own voting history in the "
-            "Daily History in Known Facts above. If they cast a lone or minority vote "
-            "for someone who's still alive, that's worth raising as a possible reason "
-            "the werewolves targeted them.",
-            "",
             "",
         ]
+        if self._state.day_number > 1:
+            # Night one's kill happens before any vote has ever been cast, so
+            # there is no voting history yet to check -- keeping this rule
+            # unconditional prompted agents to invent one for the victim.
+            parts.append(
+                "12. When someone new turns up dead, check their own voting history in "
+                "the Daily History in Known Facts above. If they cast a lone or "
+                "minority vote for someone who's still alive, that's worth raising as "
+                "a possible reason the werewolves targeted them."
+            )
+            parts.append("")
         if not self._state.is_werewolf(self._player_name):
             parts.append(f"13. {_PRE_ANNOUNCEMENT_KNOWLEDGE_RULE.prompt_text}")
             parts.append("")
