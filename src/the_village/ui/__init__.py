@@ -1760,7 +1760,7 @@ def build_app() -> gr.Blocks:
             )
             gr.Markdown(
                 "You and six other villagers share this town — but some of the villagers "
-                "are secretly werewolves, choosing someone to kill together "
+                "are secretly werewolves, choosing someone to kill "
                 "each night. Every day, the village gathers to talk, "
                 "accuse, and vote to lynch someone.",
                 elem_classes=[START_DESCRIPTION_CLASS],
