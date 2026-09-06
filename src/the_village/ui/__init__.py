@@ -707,12 +707,12 @@ def _discussion_complete_notice(state: GameState) -> str:
     #
     # A dead human player never gets a ballot (Voting._build_voters only
     # builds voters for living players -- see voting.py), so asking them
-    # "The werewolf is among you. Who do you think it is?" is misleading; skip
+    # "A werewolf is among you. Who do you think it is?" is misleading; skip
     # the question entirely once they're out of the game.
     is_human_alive = state.user_player_name in state.living_player_names()
     ballot_question = (
         f'<div class="{BALLOT_QUESTION_CLASS}">'
-        "The werewolf is among you. Who do you think it is?"
+        "A werewolf is among you. Who do you think it is?"
         "</div>\n\n"
         if is_human_alive
         else ""
@@ -729,7 +729,7 @@ def _discussion_complete_notice(state: GameState) -> str:
 
 def _voting_results_notice(state: GameState) -> str:
     # Swaps in for _discussion_complete_notice's ballot question once the
-    # outcome is known -- the vote is over, so "The werewolf is among you. Who
+    # outcome is known -- the vote is over, so "A werewolf is among you. Who
     # do you think it is?" no longer applies and would otherwise sit there
     # unchanged (discussion_status is not touched again after this) through
     # the tally and past the final lynch result.

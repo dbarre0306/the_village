@@ -207,7 +207,7 @@ def test_discussion_complete_notice_asks_the_ballot_question_when_human_is_alive
         days=[Day(day_number=1)],
     )
     assert (
-        "The werewolf is among you. Who do you think it is?"
+        "A werewolf is among you. Who do you think it is?"
         in ui._discussion_complete_notice(state)
     )
 
@@ -225,7 +225,7 @@ def test_discussion_complete_notice_omits_the_ballot_question_when_human_is_dead
         days=[Day(day_number=1)],
     )
     assert (
-        "The werewolf is among you. Who do you think it is?"
+        "A werewolf is among you. Who do you think it is?"
         not in ui._discussion_complete_notice(state)
     )
 
@@ -1121,7 +1121,7 @@ async def test_start_voting_renders_a_vote_outcome_before_voting_complete():
     # too -- cast_player_vote never runs in this human-is-dead path to do it.
     assert "The Village Votes" in discussion_status_update["value"]
     assert (
-        "The werewolf is among you. Who do you think it is?"
+        "A werewolf is among you. Who do you think it is?"
         not in discussion_status_update["value"]
     )
     (
@@ -1338,7 +1338,7 @@ async def test_cast_player_vote_resolves_the_ballot_and_hides_controls_before_th
     # The ballot question is answered the moment the player picks -- it
     # shouldn't linger through tallying until the outcome arrives.
     assert (
-        "The werewolf is among you. Who do you think it is?"
+        "A werewolf is among you. Who do you think it is?"
         not in discussion_status_update["value"]
     )
     assert "The Village Votes" in discussion_status_update["value"]
@@ -1417,7 +1417,7 @@ async def test_cast_player_vote_reveals_outcome_and_updates_panels(monkeypatch):
 async def test_cast_player_vote_replaces_the_ballot_question_with_a_results_label(
     monkeypatch,
 ):
-    # discussion_status keeps showing "The werewolf is among you. Who do you think it is?"
+    # discussion_status keeps showing "A werewolf is among you. Who do you think it is?"
     # (set when discussion ended, see _discussion_complete_notice) unless
     # cast_player_vote itself swaps it out once the outcome is known -- it's
     # not touched anywhere else in the voting flow.
@@ -1443,7 +1443,7 @@ async def test_cast_player_vote_replaces_the_ballot_question_with_a_results_labe
     discussion_status_update = outcome_event[7]
 
     assert (
-        "The werewolf is among you. Who do you think it is?"
+        "A werewolf is among you. Who do you think it is?"
         not in discussion_status_update["value"]
     )
     assert "The Village Votes" in discussion_status_update["value"]
