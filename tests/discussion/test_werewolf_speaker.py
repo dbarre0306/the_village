@@ -24,11 +24,30 @@ def make_werewolf_speaker(state: GameState, player_name: str = "A") -> _Werewolf
     )
 
 
-def test_prompt_requires_suspicion_grounded_in_actual_discussion():
+def test_prompt_allows_inventing_ungrounded_behavior_claims():
+    """Werewolves need latitude to deflect suspicion by claiming another
+    player seemed nervous, evasive, or dismissive even without anything in
+    the discussion to back it up -- that's the deception the role exists
+    for."""
     state = make_discussion_state()
     speaker = make_werewolf_speaker(state)
     prompt = speaker._build_speak_prompt(addressed_by=None)
-    assert "grounded in something that was actually said" in prompt
+    assert (
+        "may freely invent misleading claims about how another player has "
+        "been behaving"
+        in prompt
+    )
+
+
+def test_prompt_still_forbids_fabricating_hard_facts():
+    """Latitude to lie about demeanor doesn't extend to checkable facts --
+    votes, alibis, life/death status, or direct quotes must still never be
+    fabricated, since those are the "easy to spot" lies the guardrail keeps
+    blocking for every role."""
+    state = make_discussion_state()
+    speaker = make_werewolf_speaker(state)
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "Never fabricate a hard, checkable fact though" in prompt
 
 
 def test_prompt_forbids_revealing_werewolf_identity():

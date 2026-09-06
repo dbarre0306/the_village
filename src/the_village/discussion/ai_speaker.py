@@ -16,6 +16,21 @@ logger = logging.getLogger(__name__)
 
 _DEAD_AND_OUT_OF_GAME = "dead and out of the game"
 
+# Villagers have no reason to lie, so an ungrounded read on someone's demeanor
+# is treated as a hallucination and rejected. Werewolves need exactly that
+# latitude to deflect suspicion, so this text is only appended to the
+# guardrail for non-werewolf speakers -- see _build_guardrail_description.
+_DEMEANOR_GROUNDING_GUARDRAIL_TEXT = (
+    "Reject only if the text explicitly asserts, about a specific named "
+    "player, that they have been acting oddly/strangely/suspiciously/"
+    "nervously/shady/defensively/evasively, or displaying any other "
+    "suspicious demeanor or reaction, or references their movements, "
+    "without grounding it in something specific. This covers any wording "
+    "with that same meaning, not just the examples listed. A generic "
+    "question or request directed at the group is not a behavior claim "
+    "about anyone."
+)
+
 # The guardrail judges speaker output against a multi-clause conditional
 # prompt ("reject only if explicit", "don't infer"). The player's own model
 # (MODEL, often a small/cheap one) proved unreliable at following those
@@ -306,15 +321,6 @@ class _AiSpeaker(_Speaker):
             "questioned Della's silence earlier\") is grounded reportage "
             "of what was said, not a fresh turn-order complaint, and is "
             "valid.",
-            "Reject only if the text explicitly asserts, about a specific "
-            "named player, that they have been acting oddly/strangely/"
-            "suspiciously/nervously/shady/defensively/evasively, or "
-            "displaying any other suspicious demeanor or reaction, or "
-            "references their movements, without grounding it in "
-            "something specific. This covers any wording with that same "
-            "meaning, not just the examples listed. A generic question or "
-            "request directed at the group is not a behavior claim about "
-            "anyone.",
             "Reject only if the text explicitly claims a specific player "
             "voted for, or abstained from voting for, a specific lynch "
             "target, and either no vote is recorded for that player at all "
@@ -384,6 +390,8 @@ class _AiSpeaker(_Speaker):
                 'seemed to think Martha was acting suspicious"), as long as '
                 "it's grounded in Discussion so far or Known facts."
             )
+        if not self._state.is_werewolf(self._player_name):
+            parts.append(_DEMEANOR_GROUNDING_GUARDRAIL_TEXT)
         for rule in (_PRE_ANNOUNCEMENT_KNOWLEDGE_RULE, _NO_PRIOR_WEREWOLF_FEAR_RULE):
             if rule.applies(self._state, self._player_name):
                 parts.append(rule.guardrail_text)
@@ -426,9 +434,7 @@ class _AiSpeaker(_Speaker):
             "2. You may make things up about yourself -- for example, inventing an alibi. You must "
             "remain consistent throughout all of the discussions.  Do NOT say contradictory things.",
             "",
-            "3. Anything you say about someone else must be grounded in what you actually know or "
-            "what has already been said.  Do NOT make any claims about what another villager did, "
-            "or said.",
+            f"3. {self._grounding_rule_text()}",
             "",
             f"4. {self._inner_prompt_instructions().strip()}",
             "",
@@ -500,6 +506,23 @@ class _AiSpeaker(_Speaker):
                 parts.append(f"16. {_NO_PRIOR_WEREWOLF_FEAR_RULE.prompt_text}")
                 parts.append("")
         return "\n".join(parts)
+
+    def _grounding_rule_text(self) -> str:
+        if self._state.is_werewolf(self._player_name):
+            return (
+                "Anything you say about someone else's words, votes, alibi, "
+                "or life-or-death status must be grounded in what you "
+                "actually know or what has already been said -- never "
+                "invent or misstate one of those. Behavior and demeanor are "
+                "fair game to spin: you may claim another player seemed "
+                "nervous, evasive, dismissive, or otherwise suspicious even "
+                "without solid grounding, to deflect suspicion."
+            )
+        return (
+            "Anything you say about someone else must be grounded in what "
+            "you actually know or what has already been said.  Do NOT make "
+            "any claims about what another villager did, or said."
+        )
 
     @abstractmethod
     def _inner_prompt_instructions(self) -> str:

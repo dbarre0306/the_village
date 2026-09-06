@@ -7,6 +7,7 @@ from the_village.core.bridge import SessionBridge
 from the_village.discussion.ai_speaker import _GUARDRAIL_MODEL, _AiSpeaker, _SpeakerOutput
 from the_village.discussion.speaker import DECLINED_TO_RESPOND
 from the_village.discussion.villager_speaker import _VillagerSpeaker
+from the_village.discussion.werewolf_speaker import _WerewolfSpeaker
 from the_village.core.state import GameState, Player
 
 
@@ -14,6 +15,15 @@ def make_discussion_state() -> GameState:
     players = [
         Player(name="Dana", player_type="user"),
         Player(name="A", player_type="villager"),
+        Player(name="B", player_type="villager"),
+    ]
+    return GameState(user_player_name="Dana", players=players)
+
+
+def make_discussion_state_with_werewolf() -> GameState:
+    players = [
+        Player(name="Dana", player_type="user"),
+        Player(name="A", player_type="werewolf"),
         Player(name="B", player_type="villager"),
     ]
     return GameState(user_player_name="Dana", players=players)
@@ -38,6 +48,12 @@ def make_ai_speaker(state: GameState, player_name: str = "A") -> _AiSpeaker:
     behavior shared by all speakers, not villager- or werewolf-specific
     wording."""
     return _VillagerSpeaker(
+        state, SessionBridge(), player_name, _stub_agent(), _stub_agent()
+    )
+
+
+def make_werewolf_speaker(state: GameState, player_name: str = "A") -> _AiSpeaker:
+    return _WerewolfSpeaker(
         state, SessionBridge(), player_name, _stub_agent(), _stub_agent()
     )
 
@@ -117,6 +133,21 @@ def test_speak_prompt_forbids_ungrounded_claims():
     speaker = make_ai_speaker(state, "A")
     prompt = speaker._build_speak_prompt(addressed_by=None)
     assert "Do NOT make any claims about what another villager did, " in prompt
+
+
+def test_speak_prompt_allows_werewolves_to_invent_demeanor_claims():
+    state = make_discussion_state_with_werewolf()
+    speaker = make_werewolf_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "fair game to spin" in prompt
+    assert "Do NOT make any claims about what another villager did, " not in prompt
+
+
+def test_speak_prompt_still_forbids_werewolves_from_fabricating_hard_facts():
+    state = make_discussion_state_with_werewolf()
+    speaker = make_werewolf_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "never invent or misstate one of those" in prompt
 
 
 def test_speak_prompt_forbids_treating_dead_players_as_active_suspects():
@@ -290,6 +321,33 @@ def test_guardrail_description_behavior_claim_rule_is_not_limited_to_a_fixed_wor
     speaker = make_ai_speaker(state, "A")
     description = speaker._build_guardrail_description()
     assert "not just the examples listed" in description.lower()
+
+
+def test_guardrail_description_omits_unfounded_behavior_claim_rule_for_werewolves():
+    """Werewolves need latitude to invent an ungrounded demeanor claim (e.g.
+    that another player "dismissed" the situation) as a deflection tactic --
+    only villagers, who have no reason to lie, are held to this rule."""
+    state = make_discussion_state_with_werewolf()
+    speaker = make_werewolf_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "acting oddly" not in description.lower()
+
+
+def test_guardrail_description_still_forbids_misstated_vote_claims_for_werewolves():
+    """Ungrounded demeanor claims are fair game for werewolves, but hard,
+    checkable facts like votes must still not be fabricated -- that's the
+    "easy to spot" lie that stays off-limits for every role."""
+    state = make_discussion_state_with_werewolf()
+    speaker = make_werewolf_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "contradicts the actual vote recorded" in description.lower()
+
+
+def test_guardrail_description_still_forbids_misstated_prior_statements_for_werewolves():
+    state = make_discussion_state_with_werewolf()
+    speaker = make_werewolf_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "contradicts what that player actually said" in description.lower()
 
 
 def test_guardrail_description_names_the_dead_player():
