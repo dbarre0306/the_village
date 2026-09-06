@@ -150,6 +150,37 @@ def test_speak_prompt_still_forbids_werewolves_from_fabricating_hard_facts():
     assert "never invent or misstate one of those" in prompt
 
 
+def test_speak_prompt_forbids_adopting_another_players_unverified_accusation():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "that player's own unverified opinion" in prompt
+
+
+def test_speak_prompt_allows_werewolves_to_adopt_unverified_accusations():
+    """Werewolves are explicitly meant to pile onto and amplify accusations
+    others raise -- the new grounding rule only reins in villagers who'd
+    otherwise co-sign a packmate's fabricated demeanor claim as fact."""
+    state = make_discussion_state_with_werewolf()
+    speaker = make_werewolf_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "that player's own unverified opinion" not in prompt
+
+
+def test_guardrail_description_forbids_affirming_another_players_demeanor_claim():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "beyond the fact that the other player said so" in description
+
+
+def test_guardrail_description_allows_werewolves_to_affirm_demeanor_claims():
+    state = make_discussion_state_with_werewolf()
+    speaker = make_werewolf_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "beyond the fact that the other player said so" not in description
+
+
 def test_speak_prompt_forbids_treating_dead_players_as_active_suspects():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")

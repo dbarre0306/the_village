@@ -217,6 +217,35 @@ _NO_BLAME_FOR_UNSPOKEN_PLAYERS_RULE = _ConditionalRule(
 )
 
 
+_NO_ADOPTING_UNVERIFIED_ACCUSATIONS_RULE = _ConditionalRule(
+    applies=lambda state, player_name: not state.is_werewolf(player_name),
+    prompt_text=(
+        "When another player claims a third player is acting calm, nervous, "
+        "evasive, defensive, or otherwise suspicious, that claim is only that "
+        "player's own unverified opinion -- not a fact, and not something you "
+        "may treat as confirmed just because it was said. If asked to weigh "
+        "in, don't co-sign it as true (e.g. \"I share your concern, their "
+        "calmness does seem unusual\") unless you have your own independent "
+        "reason -- grounded in Known Facts above or something the target "
+        "actually said or did -- to think so. Instead, you can note that they "
+        "raised it, ask what makes them think that, push back on it, or offer "
+        "a separate observation of your own that's actually grounded."
+    ),
+    guardrail_text=(
+        "Reject only if the text affirms, restates as true, or otherwise "
+        "agrees with another player's demeanor or suspicion claim about a "
+        "third named player (e.g. echoing that someone \"does seem\" calm, "
+        "nervous, evasive, or suspicious right after another player raised "
+        "it) without the speaker giving their own independent grounding -- "
+        "from Known Facts above or something the target actually said or "
+        "did -- beyond the fact that the other player said so. Merely "
+        "reporting that another player made the claim, asking them what "
+        "makes them think that, pushing back on it, or offering a separate "
+        "independently-grounded observation is valid."
+    ),
+)
+
+
 class _AiSpeaker(_Speaker):
 
     def __init__(
@@ -424,7 +453,11 @@ class _AiSpeaker(_Speaker):
             )
         if not self._state.is_werewolf(self._player_name):
             parts.append(_DEMEANOR_GROUNDING_GUARDRAIL_TEXT)
-        for rule in (_PRE_ANNOUNCEMENT_KNOWLEDGE_RULE, _NO_PRIOR_WEREWOLF_FEAR_RULE):
+        for rule in (
+            _PRE_ANNOUNCEMENT_KNOWLEDGE_RULE,
+            _NO_PRIOR_WEREWOLF_FEAR_RULE,
+            _NO_ADOPTING_UNVERIFIED_ACCUSATIONS_RULE,
+        ):
             if rule.applies(self._state, self._player_name):
                 parts.append(rule.guardrail_text)
         return "\n\n".join(parts)
@@ -539,6 +572,8 @@ class _AiSpeaker(_Speaker):
             if _NO_PRIOR_WEREWOLF_FEAR_RULE.applies(self._state, self._player_name):
                 parts.append(f"17. {_NO_PRIOR_WEREWOLF_FEAR_RULE.prompt_text}")
                 parts.append("")
+            parts.append(f"18. {_NO_ADOPTING_UNVERIFIED_ACCUSATIONS_RULE.prompt_text}")
+            parts.append("")
         return "\n".join(parts)
 
     def _grounding_rule_text(self) -> str:
