@@ -434,6 +434,24 @@ def test_guardrail_description_allows_dead_player_as_time_reference():
     assert "alibi for when" in description.lower()
 
 
+def test_guardrail_description_forbids_attributing_a_later_killing_to_a_dead_player():
+    state = make_discussion_state()
+    dead_player = next(p for p in state.players if p.name == "B")
+    dead_player.is_alive = False
+    speaker = make_ai_speaker(state, "A")
+    description = speaker._build_guardrail_description()
+    assert "responsibility or involvement" in description.lower()
+    assert "happened after the day they died" in description.lower()
+
+
+def test_speak_prompt_forbids_attributing_a_later_killing_to_a_dead_player():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "cannot be responsible for anything that" in prompt
+    assert "attributed to a player who's still alive" in prompt
+
+
 def test_guardrail_description_forbids_misstated_vote_claims():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")

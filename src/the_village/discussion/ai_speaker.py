@@ -434,6 +434,19 @@ class _AiSpeaker(_Speaker):
                 "only be described as something from before they died."
             )
             parts.append(
+                "Reject also if the text attributes responsibility or "
+                "involvement for anything that happened after a dead "
+                "player's own death to them -- for example, tying a later "
+                'killing to their "involvement," suggesting they were '
+                '"behind" a death that came after theirs, or implying '
+                "they are still targeting or acting against players who "
+                "question them. A dead player cannot cause, contribute "
+                "to, or participate in any event -- a killing, a vote, "
+                "or anything else -- that happened after the day they "
+                "died; a later death can only be discussed as something "
+                "someone else, still alive, is responsible for."
+            )
+            parts.append(
                 "Everything else about a dead player is valid: discussing "
                 "why or how they died; asking a living player about their "
                 "own whereabouts or actions, even when the dead player's "
@@ -523,7 +536,13 @@ class _AiSpeaker(_Speaker):
             "don't name them as a current suspect, float them as the possible "
             "werewolf, or urge the group to keep an eye on them going forward. "
             "It's still fine to analyze what a dead player did or seemed to "
-            "believe while they were alive as reasoning about who's guilty now.",
+            "believe while they were alive as reasoning about who's guilty now. "
+            "A dead player also cannot be responsible for anything that "
+            "happens after their own death -- don't tie a later killing or "
+            "any other event to their \"involvement,\" suggest they were "
+            "\"behind\" it, or imply they're still targeting players who "
+            "question them; a death that happens after someone died must be "
+            "attributed to a player who's still alive.",
             "",
             "8. When referring to another player, always use their name -- never a pronoun.",
             "",
