@@ -35,25 +35,35 @@ night's kill (`pick_victim/werewolf_pack.py`) → repeat, until
 - **`agents/`** — `agent_factory.build_agent()` dispatches to
   `villager.py`/`werewolf.py` builders by `Player.player_type`. Werewolf
   agents are additionally told who their packmates are.
+  `conversation_analyst.py` builds a separate, single-purpose Agent (owned
+  by `VillageFlow`, not tied to any player) that judges who a discussion
+  message addresses, feeding `discussion/speaker.py`'s address resolution.
 - **`discussion/`** — `Discussion` runs a fixed number of speaking rounds per
   day in shuffled order (with rules against the same/human player opening
-  cold). Each living player gets a `_Speaker` (`_HumanSpeaker` /
-  `_VillagerSpeaker` / `_WerewolfSpeaker` in their own files, common base in
-  `speaker.py`). A message that addresses another player triggers
-  `reply_chain.py` before the round continues.
+  cold). Each living player gets a `_Speaker` (base in `speaker.py`);
+  `_HumanSpeaker` (`human_speaker.py`) subclasses it directly, while
+  `_VillagerSpeaker`/`_WerewolfSpeaker` (their own files) share AI-only
+  behavior via an intermediate `_AiSpeaker` base in `ai_speaker.py`. A
+  message that addresses another player triggers `reply_chain.py` before
+  the round continues.
 - **`voting/`** — `Voting` casts votes in a fixed order (human always first,
   for UX reasons — see `_voting_order()`), one `_Voter` per living player
-  (`_HumanVoter` / `_VillagerVoter` / `_WerewolfVoter`, base in `voter.py`),
-  then tallies and resolves a lynch (no lynch on a tie).
-  `pick_victim/werewolf_pack.py` follows the same per-role-subclass pattern
-  for the nightly kill, plus a CrewAI `Task` guardrail that forces the choice
-  onto a living, non-werewolf target, and a random fallback if the Crew run
-  or guardrail retries fail — a kill must always happen.
-- **`roster.py`** — builds the initial 7-player roster with two random
-  werewolves (one flagged pack leader).
-- **`ui.py`** — the Gradio app; owns a `SessionBridge` per session via
-  `gr.State` and paces discussion messages onto screen independently of how
-  fast the background Flow task produces them.
+  (base in `voter.py`); `_HumanVoter` subclasses it directly, while
+  `_VillagerVoter`/`_WerewolfVoter` share AI-only behavior via an
+  intermediate `_AiVoter` base in `ai_voter.py`. Votes are tallied and a
+  lynch resolved (no lynch on a tie). `pick_victim/werewolf_pack.py` follows
+  the same per-role-subclass pattern for the nightly kill, plus a CrewAI
+  `Task` guardrail that forces the choice onto a living, non-werewolf
+  target, and a random fallback if the Crew run or guardrail retries fail —
+  a kill must always happen.
+- **`roster/`** — `roster.py`'s `build_initial_roster()` builds the initial
+  7-player roster with two random werewolves (one flagged pack leader), each
+  villager randomly assigned a flavor personality from `personalities.py`.
+- **`ui/`** — the Gradio app; `build_app()` owns a `SessionBridge` per
+  session via `gr.State` and paces discussion messages onto screen
+  independently of how fast the background Flow task produces them.
+  `app.py` (`the_village.app:main`) is the thin launch entrypoint that wires
+  CSS/JS and calls `build_app().launch()`.
 
 `README.md` still describes the generic `crewai create flow` template
 (`config/agents.yaml`, `config/tasks.yaml`, `crew.py`) — none of that exists
