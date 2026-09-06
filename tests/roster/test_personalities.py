@@ -1,8 +1,8 @@
 from the_village.roster.personalities import PERSONALITIES
 
 
-def test_has_six_distinct_personalities():
-    assert len(PERSONALITIES) == 6
+def test_has_five_distinct_personalities():
+    assert len(PERSONALITIES) == 5
 
 
 def test_every_personality_has_a_nonempty_description():

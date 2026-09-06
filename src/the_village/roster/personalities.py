@@ -9,11 +9,6 @@ PERSONALITIES: Final[dict[str, str]] = {
         "as though keeping a running mental list of inconsistencies to "
         "revisit later."
     ),
-    "The Quiet Observer": (
-        "You say very little early on, content to blend into the "
-        "background until you're addressed directly or a vote forces you "
-        "to commit to a position."
-    ),
     "The Loud Accuser": (
         "You point fingers at others right away to drive the conversation "
         "and deflect attention from yourself, even though it risks making "
