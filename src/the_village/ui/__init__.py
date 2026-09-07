@@ -281,7 +281,7 @@ def _layout_css() -> str:
         border: 1px solid var(--border-color-primary);
         border-radius: 10px;
         padding: 4px 20px 16px;
-        margin: 0 0 26px;
+        margin: 0 0 12px;
     }}
     .prose.{START_HOWTO_CLASS} h5 {{
         font-family: 'IBM Plex Sans', sans-serif;
