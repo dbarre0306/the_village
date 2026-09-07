@@ -1,0 +1,16 @@
+name: Keep Hugging Face Space Alive
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+env:
+  HF_SPACE_URL: https://dbarre0306-thevillage.hf.space
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Hugging Face Space
+        run: curl --fail --silent --show-error --max-time 30 "$HF_SPACE_URL" > /dev/null
