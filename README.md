@@ -1,3 +1,15 @@
+---
+title: The Village
+emoji: 🐺
+colorFrom: gray
+colorTo: red
+sdk: gradio
+sdk_version: "6.24.0"
+python_version: "3.11"
+app_file: app.py
+pinned: false
+---
+
 # The Village
 
 The Village is a Werewolf/Mafia-style social-deduction game built with
