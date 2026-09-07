@@ -32,7 +32,7 @@ def make_discussion_state_with_werewolf() -> GameState:
 def _stub_agent() -> Agent:
     """A minimal real Agent -- Task/Crew construction validates that `agent`
     fields are actual Agent instances, so a plain object() won't do, even
-    though Crew.akickoff is mocked in these tests."""
+    though Crew.kickoff_async is mocked in these tests."""
     return Agent(role="Stub", goal="stub", backstory="stub")
 
 
@@ -207,14 +207,14 @@ def test_speak_prompt_tells_agents_not_to_ask_already_answered_questions():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
     prompt = speaker._build_speak_prompt(addressed_by=None)
-    assert "check whether their own words in Discussion so far already answer that" in prompt
+    assert "re-read their own messages in Discussion so far" in prompt
 
 
 def test_speak_prompt_tells_agents_not_to_reask_an_already_explained_fact():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
     prompt = speaker._build_speak_prompt(addressed_by=None)
-    assert "a specific fact or inconsistency they've already explained" in prompt
+    assert "do not raise it again in ANY form" in prompt
 
 
 def test_speak_prompt_tells_agents_to_avoid_repeating_heavily_discussed_topics():
@@ -271,7 +271,7 @@ async def test_returns_none_on_scheduled_decline():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
     with patch(
-        "crewai.Crew.akickoff",
+        "crewai.Crew.kickoff_async",
         new=AsyncMock(
             return_value=_crew_result(_SpeakerOutput(has_something_to_say=False))
         ),
@@ -286,7 +286,7 @@ async def test_records_decline_placeholder_when_owed_a_reply():
     speaker = make_ai_speaker(state, "A")
     asking = speaker._record_message("Where were you?", addressed_to="A")
     with patch(
-        "crewai.Crew.akickoff",
+        "crewai.Crew.kickoff_async",
         new=AsyncMock(
             return_value=_crew_result(_SpeakerOutput(has_something_to_say=False))
         ),
@@ -301,7 +301,7 @@ async def test_records_message_and_resolved_address():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
     with patch(
-        "crewai.Crew.akickoff",
+        "crewai.Crew.kickoff_async",
         new=AsyncMock(
             return_value=_crew_result(
                 _SpeakerOutput(
@@ -513,14 +513,14 @@ def test_guardrail_description_forbids_asking_about_an_already_reversed_belief()
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
     description = speaker._build_guardrail_description()
-    assert "explicitly and unambiguously answered or abandoned" in description.lower()
+    assert "explicitly and unambiguously stated or answered" in description.lower()
 
 
 def test_guardrail_description_forbids_reasking_an_already_explained_fact():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
     description = speaker._build_guardrail_description()
-    assert "account again for a specific fact or inconsistency" in description.lower()
+    assert "request to justify/reconsider/explain it again" in description.lower()
 
 
 def test_guardrail_description_allows_asking_why_they_changed_their_mind():
@@ -567,7 +567,7 @@ async def test_returns_none_when_guardrail_keeps_failing_and_no_reply_owed():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
     with patch(
-        "crewai.Crew.akickoff",
+        "crewai.Crew.kickoff_async",
         new=AsyncMock(
             side_effect=Exception(
                 "Task failed guardrail validation after 3 retries. Last "
@@ -585,7 +585,7 @@ async def test_records_decline_placeholder_when_guardrail_keeps_failing_and_repl
     speaker = make_ai_speaker(state, "A")
     asking = speaker._record_message("Where were you?", addressed_to="A")
     with patch(
-        "crewai.Crew.akickoff",
+        "crewai.Crew.kickoff_async",
         new=AsyncMock(
             side_effect=Exception("Task failed guardrail validation after 3 retries.")
         ),
@@ -600,7 +600,7 @@ async def test_reraises_non_guardrail_errors():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
     with patch(
-        "crewai.Crew.akickoff",
+        "crewai.Crew.kickoff_async",
         new=AsyncMock(side_effect=RuntimeError("boom")),
     ):
         try:
@@ -618,7 +618,7 @@ async def test_ignores_addressed_to_when_declining_with_nothing_to_say():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
     with patch(
-        "crewai.Crew.akickoff",
+        "crewai.Crew.kickoff_async",
         new=AsyncMock(
             return_value=_crew_result(
                 _SpeakerOutput(has_something_to_say=False, addressed_to="B"),

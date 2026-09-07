@@ -83,32 +83,43 @@ class _ConditionalRule(NamedTuple):
 _ALREADY_ANSWERED_QUESTION_RULE = _ConditionalRule(
     applies=lambda state, player_name: True,
     prompt_text=(
-        "Before asking a player whether they still hold a belief or suspicion, "
-        "asking them to reconsider or justify one, or asking them to explain or "
-        "account again for a specific fact or inconsistency they've already "
-        "explained, check whether their own words in Discussion so far already "
-        "answer that. If they do, don't ask it again -- respond to what they "
-        "actually said instead (agree, push back on it, or move on to a different "
-        "angle)."
+        "Before asking a player anything -- a question, a challenge, a "
+        "rhetorical jab, a request to justify or reconsider -- about a "
+        "specific fact, alibi, whereabouts, belief, or suspicion of theirs, "
+        "do this check first: re-read their own messages in Discussion so "
+        "far and see if they already stated that fact plainly. If they did, "
+        "do not raise it again in ANY form, including ones that don't look "
+        "like a repeat question, such as: mocking or expressing disbelief "
+        'at the answer they gave (e.g. "do you really think sleeping '
+        'through it is a solid excuse?"), asking them to justify or '
+        "reconsider it, or asking them to explain or account for it again. "
+        "All of those are the same forbidden move wearing different words. "
+        "Instead, respond to what they actually said: agree with it, "
+        "explain specifically why you don't buy it, or move on to a "
+        "different player or angle entirely."
     ),
     guardrail_text=(
-        "Reject only if the text asks a named player whether they "
-        "still hold, or asks them to reconsider or justify, a "
-        "specific belief or suspicion, or asks them to explain or "
-        "account again for a specific fact or inconsistency, that "
-        "player has already explicitly and unambiguously answered or "
-        "abandoned earlier in Discussion so far (e.g. asking Don "
-        "\"do you still think Bruce was the werewolf?\" right after "
-        "Don said he was wrong to suspect Bruce, or asking Kestrel "
-        "again how she knew about a killing before it was announced "
-        "after she already explained her wording was a mistake). "
-        "Quote or closely paraphrase the player's own prior "
-        "statement to check this -- only reject when it already and "
-        "directly settles the question being asked, not when the "
-        "prior statement was hedged or ambiguous. A question about "
-        "why they changed their mind, what they think now, or "
-        "anything else not already settled by their own prior words, "
-        "is valid."
+        "Reject only if the text raises a specific fact, alibi, "
+        "whereabouts, belief, or suspicion of a named player's that "
+        "they have already explicitly and unambiguously stated or "
+        "answered earlier in Discussion so far, in ANY form -- a "
+        "direct re-ask, a request to justify/reconsider/explain it "
+        "again, or a rhetorical challenge or expression of disbelief "
+        "aimed at the answer already given (e.g. Martha already said "
+        '"I was at home, just trying to get some sleep too," then '
+        'being asked "do you really think that sleeping through all '
+        'the noise is a solid excuse for not seeing anything?"; or '
+        'asking Don "do you still think Bruce was the werewolf?" '
+        "right after Don said he was wrong to suspect Bruce). These "
+        "are the same forbidden move regardless of phrasing -- judge "
+        "by whether the player's own prior words already settle the "
+        "point being raised, not by whether the sentence is phrased "
+        "as a question. Quote or closely paraphrase the player's own "
+        "prior statement to check this -- only reject when it already "
+        "and directly settles the point, not when the prior statement "
+        "was hedged or ambiguous. A question about why they changed "
+        "their mind, what they think now, or anything else not "
+        "already settled by their own prior words, is valid."
     ),
 )
 
@@ -177,7 +188,7 @@ _NO_PRIOR_WEREWOLF_FEAR_RULE = _ConditionalRule(
         "or established pattern of fearing, suspecting, or taking "
         'precautions against werewolves predating last night (e.g. "I '
         'always lock my doors because of the werewolves," or "ever '
-        'since the killings started" when only last night\'s death has '
+        "since the killings started\" when only last night's death has "
         "happened). A statement that only describes what the speaker "
         "did or started doing last night itself, without claiming it "
         "was already an established habit or attributing it to that "
@@ -205,7 +216,7 @@ _NO_BLAME_FOR_UNSPOKEN_PLAYERS_RULE = _ConditionalRule(
         "player as not having shared, given, or provided some piece of "
         "information -- an alibi, their whereabouts, or anything else -- "
         "when today's Discussion in Known Facts above shows zero messages "
-        'from that player so far today (e.g. "Don and Bruce haven\'t '
+        "from that player so far today (e.g. \"Don and Bruce haven't "
         'given us much information yet" when neither Don nor Bruce has '
         "spoken today). That player simply hasn't had a turn yet, so "
         "framing their lack of a turn as if it reflects something about "
@@ -225,7 +236,7 @@ _NO_ADOPTING_UNVERIFIED_ACCUSATIONS_RULE = _ConditionalRule(
         "player's own unverified opinion -- not a fact, and not something you "
         "may treat as confirmed just because it was said. If asked to weigh "
         "in, don't co-sign it as true (e.g. \"I share your concern, their "
-        "calmness does seem unusual\") unless you have your own independent "
+        'calmness does seem unusual") unless you have your own independent '
         "reason -- grounded in Known Facts above or something the target "
         "actually said or did -- to think so. Instead, you can note that they "
         "raised it, ask what makes them think that, push back on it, or offer "
@@ -234,7 +245,7 @@ _NO_ADOPTING_UNVERIFIED_ACCUSATIONS_RULE = _ConditionalRule(
     guardrail_text=(
         "Reject only if the text affirms, restates as true, or otherwise "
         "agrees with another player's demeanor or suspicion claim about a "
-        "third named player (e.g. echoing that someone \"does seem\" calm, "
+        'third named player (e.g. echoing that someone "does seem" calm, '
         "nervous, evasive, or suspicious right after another player raised "
         "it) without the speaker giving their own independent grounding -- "
         "from Known Facts above or something the target actually said or "
@@ -268,7 +279,15 @@ class _AiSpeaker(_Speaker):
         crew = self._build_crew(speak_task)
 
         try:
-            result = await crew.akickoff()
+            # kickoff_async (not akickoff): this crew's guardrail is a real
+            # LLMGuardrail making its own blocking LLM call synchronously
+            # (crewai invokes guardrails as a plain, un-awaited `def` even on
+            # the akickoff() path) -- on akickoff() that call freezes the
+            # whole shared event loop, stalling every other concurrent
+            # session for its duration. kickoff_async() runs the entire
+            # kickoff (agent turn + guardrail) via asyncio.to_thread, which
+            # actually keeps the loop free for other sessions.
+            result = await crew.kickoff_async()
         except Exception as exc:
             if "guardrail" not in str(exc).lower():
                 raise
@@ -526,7 +545,7 @@ class _AiSpeaker(_Speaker):
             "them, and so on), and never describe their reactions, "
             "feelings, or behavior as happening after the day they died -- "
             "for example, a dead player can't be \"defensive after the "
-            "lynching\" or \"feel cornered\" over something that happened "
+            'lynching" or "feel cornered" over something that happened '
             "after their own death. It's still fine to discuss why or how a "
             "dead player died, and to ask living players about their own "
             "whereabouts or actions.",
@@ -539,8 +558,8 @@ class _AiSpeaker(_Speaker):
             "believe while they were alive as reasoning about who's guilty now. "
             "A dead player also cannot be responsible for anything that "
             "happens after their own death -- don't tie a later killing or "
-            "any other event to their \"involvement,\" suggest they were "
-            "\"behind\" it, or imply they're still targeting players who "
+            'any other event to their "involvement," suggest they were '
+            '"behind" it, or imply they\'re still targeting players who '
             "question them; a death that happens after someone died must be "
             "attributed to a player who's still alive.",
             "",
@@ -550,7 +569,7 @@ class _AiSpeaker(_Speaker):
             "",
             f"10. {_ALREADY_ANSWERED_QUESTION_RULE.prompt_text}",
             "",
-            "11. Check the \"Heavily Discussed Today\" list in Known Facts above. If a "
+            '11. Check the "Heavily Discussed Today" list in Known Facts above. If a '
             "player listed there keeps coming up without new information, don't just "
             "restate a question or accusation about them -- either add something "
             "genuinely new, or shift focus to a different player or angle.",
