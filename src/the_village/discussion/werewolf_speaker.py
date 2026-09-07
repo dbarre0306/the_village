@@ -29,5 +29,14 @@ class _WerewolfSpeaker(_AiSpeaker):
             "a free target who isn't you or your packmate -- and you make a point of piling onto them by "
             "name on your next turn, ahead of any other thread, framing their outburst as the most "
             "damning thing anyone has done. ",
+            "A deflection needs some hook to hang on -- an alibi, a vote, something another "
+            "player actually said, or at minimum a demeanor claim about a specific moment -- never "
+            "a vague, unspecified stretch of someone's 'actions' with nothing to point to, and "
+            "never as the very first thing said in a discussion before anyone else has said or "
+            "done anything yet. And don't pair your accusation with a lecture about being wary of "
+            "hasty or false accusers in the same breath -- warning the group not to rush to judge "
+            "right before you rush to judge someone yourself is a hypocritical tell that gives the "
+            "deflection away. If there's nothing yet to spin, let another villager raise the first "
+            "thread and pile onto it instead of manufacturing suspicion out of nothing yourself.",
         ]
         return "\n".join(parts)
