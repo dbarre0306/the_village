@@ -29,8 +29,8 @@ Add `OPENAI_API_KEY` (and `MODEL`) to a `.env` file at the project root.
 
 ## Running the Project
 
-- `uv run app` — launches the real Gradio UI. This is how you actually play
-  the game.
+- `uv run python app.py` — launches the real Gradio UI. This is how you
+  actually play the game.
 - `crewai run` (alias: `uv run kickoff`) — a headless CLI run of the full
   Flow. There's no live UI to answer pauses, so every AI/human turn
   auto-declines or auto-abstains; this drives the game to completion as a

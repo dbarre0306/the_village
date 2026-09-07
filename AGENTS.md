@@ -62,8 +62,11 @@ night's kill (`pick_victim/werewolf_pack.py`) → repeat, until
 - **`ui/`** — the Gradio app; `build_app()` owns a `SessionBridge` per
   session via `gr.State` and paces discussion messages onto screen
   independently of how fast the background Flow task produces them.
-  `app.py` (`the_village.app:main`) is the thin launch entrypoint that wires
-  CSS/JS and calls `build_app().launch()`.
+  The project root's `app.py` is the thin launch entrypoint that wires
+  CSS/JS and calls `build_app().launch()` — it lives at the repo root
+  (not under `src/the_village/`) because Hugging Face Spaces expects the
+  Gradio entrypoint there, and it prepends `src/` to `sys.path` itself so
+  `the_village` imports resolve without the package being installed.
 
 `README.md` still describes the generic `crewai create flow` template
 (`config/agents.yaml`, `config/tasks.yaml`, `crew.py`) — none of that exists
@@ -84,7 +87,7 @@ with `uv run` if the venv isn't already activated.
   There's no live UI to answer pauses, so every AI/human turn auto-declines
   or auto-abstains (`core.village_flow._auto_play_consumer`); this drives the
   game to a `GameOverResult` as a smoke test, not a way to actually play.
-- `uv run app` — launches the real Gradio UI (`the_village.app:main`).
+- `uv run python app.py` — launches the real Gradio UI (root `app.py`).
 - `uv run pytest` — runs the unit test suite (`tests/`, 300+ tests). Tests
   marked `integration` (hit a real LLM — slow, costs tokens) are excluded by
   default via `addopts` in `pyproject.toml`; run them explicitly with

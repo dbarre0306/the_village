@@ -1,3 +1,8 @@
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
 from the_village.ui import (
     _autofocus_js,
     _autofocus_name_js,
