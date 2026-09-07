@@ -101,7 +101,19 @@ def _speaker_color_css() -> str:
     }}
     .dark {{ {dark_vars}; --death-color: {dark}; }}
     .{DISCUSSION_TRANSCRIPT_CLASS} .speaker-name {{ font-weight: 600; }}
-    .{DEATH_LINE_CLASS} {{ color: var(--death-color); }}
+    /* !important: this and every other color/background override below
+       that touches text or buttons rendered inside a gr.Markdown's .prose
+       wrapper or a gr.Button needs it -- Gradio's own compiled component
+       CSS reaches these same elements through selectors carrying two
+       scoped classes (e.g. ".gradio-container-N .prose *", or a button's
+       ".secondary.svelte-<hash>" variant class), which either outweighs or
+       ties the specificity of a single custom elem_class selector.
+       A tie is broken by stylesheet order, and this app's css is handed to
+       gr.Blocks.launch() as one plain <style> block that lands *before*
+       Gradio's own component stylesheet in the document -- so on a tie
+       Gradio's rule is the one applied. See the matching note on
+       BEGIN_DISCUSSION_BUTTON_CLASS below for the button-side case. */
+    .{DEATH_LINE_CLASS} {{ color: var(--death-color) !important; }}
     {_vote_button_color_css()}
     """
 
@@ -112,11 +124,12 @@ def _vote_button_color_css() -> str:
     # villager's speaker slot rather than a fixed per-button color.
     rules = "\n".join(
         f".{VOTE_CANDIDATE_BUTTON_CLASS}.speaker-btn-{i} {{ "
-        f"background: var(--speaker-{i}); border-color: var(--speaker-{i}); }}"
+        f"background: var(--speaker-{i}) !important; "
+        f"border-color: var(--speaker-{i}) !important; }}"
         for i in range(len(SPEAKER_COLORS))
     )
     return f"""
-    .{VOTE_CANDIDATE_BUTTON_CLASS} {{ color: #fff; }}
+    .{VOTE_CANDIDATE_BUTTON_CLASS} {{ color: #fff !important; }}
     {rules}
     """
 
@@ -185,15 +198,23 @@ def _layout_css() -> str:
         border: none !important;
         animation: none !important;
     }}
+    /* !important throughout this button's rules (and every other button
+       class below): a gr.Button's variant already carries its own
+       ".primary"/".secondary" class plus a component-scoped
+       ".svelte-<hash>" class, so Gradio's own background/border/color
+       rule for it always has two classes' worth of specificity -- one
+       more than a single custom elem_class selector can match without it.
+       See the note on DEATH_LINE_CLASS above for the equivalent text-color
+       case. */
     .{BEGIN_DISCUSSION_BUTTON_CLASS} {{
-        background: var(--lantern, #d99a3d);
-        border-color: var(--lantern, #d99a3d);
-        color: var(--ink, #2b2420);
+        background: var(--lantern, #d99a3d) !important;
+        border-color: var(--lantern, #d99a3d) !important;
+        color: var(--ink, #2b2420) !important;
         font-weight: 600;
     }}
     .{BEGIN_DISCUSSION_BUTTON_CLASS}:hover {{
-        background: #c98a30;
-        border-color: #c98a30;
+        background: #c98a30 !important;
+        border-color: #c98a30 !important;
     }}
     .{GAME_OVER_BUTTON_ROW_CLASS} {{
         justify-content: center;
@@ -204,22 +225,22 @@ def _layout_css() -> str:
         min-width: 140px;
     }}
     .{PLAY_AGAIN_BUTTON_CLASS} {{
-        background: #2e8b45;
-        border-color: #2e8b45;
-        color: #fff;
+        background: #2e8b45 !important;
+        border-color: #2e8b45 !important;
+        color: #fff !important;
     }}
     .{PLAY_AGAIN_BUTTON_CLASS}:hover {{
-        background: #26753a;
-        border-color: #26753a;
+        background: #26753a !important;
+        border-color: #26753a !important;
     }}
     .{EXIT_BUTTON_CLASS} {{
-        background: #2f6fb3;
-        border-color: #2f6fb3;
-        color: #fff;
+        background: #2f6fb3 !important;
+        border-color: #2f6fb3 !important;
+        color: #fff !important;
     }}
     .{EXIT_BUTTON_CLASS}:hover {{
-        background: #275d96;
-        border-color: #275d96;
+        background: #275d96 !important;
+        border-color: #275d96 !important;
     }}
 
     /* The landing screen: theme-aware (unlike the fixed-palette in-game
@@ -268,7 +289,11 @@ def _layout_css() -> str:
         font-weight: 600;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--speaker-0);
+        /* !important: ties Gradio's own same-specificity rule coloring
+           .prose headings, which wins that tie by coming later in the
+           document. See the note on DEATH_LINE_CLASS in
+           _speaker_color_css. */
+        color: var(--speaker-0) !important;
         margin: 16px 0 10px;
     }}
     .prose.{START_HOWTO_CLASS} ul {{
@@ -283,12 +308,30 @@ def _layout_css() -> str:
         text-align: center;
     }}
     .{START_BUTTON_CLASS} {{
-        background: var(--speaker-0);
-        border-color: var(--speaker-0);
-        color: #fff;
+        background: var(--speaker-0) !important;
+        border-color: var(--speaker-0) !important;
+        color: #fff !important;
         font-weight: 600;
     }}
     """
+
+
+def _font_import_css() -> str:
+    # A stylesheet's @import rules are only honored when they precede every
+    # other rule in that stylesheet (CSS spec; browsers silently drop a
+    # later @import). app.py concatenates several css-returning functions
+    # together before handing the result to gr.Blocks.launch(), so this
+    # import has to be its own leading piece -- folding it into
+    # _chronicle_css() (which is concatenated after _speaker_color_css()
+    # and _layout_css()) would put other functions' rules ahead of it in
+    # the final stylesheet and silently drop the font, falling back to
+    # each family's generic fallback with no error anywhere.
+    return (
+        "@import url('https://fonts.googleapis.com/css2?"
+        "family=Fraunces:opsz,wght@9..144,500;9..144,600"
+        "&family=Source+Serif+4:ital,wght@0,400;0,600;1,400"
+        "&family=IBM+Plex+Sans:wght@400;500;600&display=swap');"
+    )
 
 
 def _chronicle_css() -> str:
@@ -298,8 +341,6 @@ def _chronicle_css() -> str:
     # scoped away from .pinned-bar/.chip-list/.villager-chip -- the pinned
     # header keeps its existing stock look untouched.
     return f"""
-    @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
-
     .{RESULT_SCREEN_CLASS} {{
         --ink: #2b2420;
         --parchment: #ede2cc;
@@ -351,7 +392,15 @@ def _chronicle_css() -> str:
     .{GAME_OVER_STATUS_CLASS} h3, .{GAME_OVER_STATUS_CLASS} h4,
     .{GAME_OVER_STATUS_CLASS} h6, .{GAME_OVER_STATUS_CLASS} li,
     .{GAME_OVER_STATUS_CLASS} strong {{
-        color: var(--ink);
+        /* !important: only the h1-h6 selectors in this list actually need
+           it (they tie Gradio's own same-specificity rule coloring .prose
+           headings and lose on document order -- see the note on
+           DEATH_LINE_CLASS in _speaker_color_css), but p/li/strong already
+           out-specify Gradio's broader ".prose *" rule on their own, so
+           it's harmless to apply it to the whole shared declaration rather
+           than split
+           the selector list in two. */
+        color: var(--ink) !important;
     }}
 
     /* Gradio gives a Markdown component's elem_classes to both its outer
@@ -416,7 +465,7 @@ def _chronicle_css() -> str:
         font-weight: 600;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--ember);
+        color: var(--ember) !important;
         margin: 20px 0 8px;
         padding-top: 14px;
         border-top: 1px dashed var(--parchment-edge);
@@ -430,7 +479,7 @@ def _chronicle_css() -> str:
         font-weight: 500;
         font-size: 0.92em;
         text-align: center;
-        color: var(--moonlight);
+        color: var(--moonlight) !important;
         background:
             radial-gradient(1px 1px at 12% 35%, rgba(201,214,232,0.65), transparent 60%),
             radial-gradient(1px 1px at 30% 75%, rgba(201,214,232,0.5), transparent 60%),
@@ -447,8 +496,8 @@ def _chronicle_css() -> str:
     /* Explicit color here (not just inherited from .night-strip) since the
        broader ink-forcing rule above targets <strong> directly, at equal
        specificity, and would otherwise win by simply coming first. */
-    .{NIGHT_STRIP_CLASS} strong {{ font-weight: 500; color: var(--moonlight); }}
-    .{NIGHT_STRIP_CLASS} .{DEATH_LINE_CLASS} {{ color: var(--lantern); }}
+    .{NIGHT_STRIP_CLASS} strong {{ font-weight: 500; color: var(--moonlight) !important; }}
+    .{NIGHT_STRIP_CLASS} .{DEATH_LINE_CLASS} {{ color: var(--lantern) !important; }}
     .{NIGHT_STRIP_CLASS}::before,
     .{NIGHT_STRIP_CLASS}::after {{
         content: '\\2726';
@@ -494,7 +543,7 @@ def _chronicle_css() -> str:
         font-family: 'Fraunces', Georgia, serif;
         font-weight: 600;
         font-size: 1.3em;
-        color: var(--ember);
+        color: var(--ember) !important;
     }}
 
     /* The ballot question: the moment the player has to point a finger at
@@ -506,7 +555,7 @@ def _chronicle_css() -> str:
         font-weight: 600;
         font-style: italic;
         font-size: 1.5em;
-        color: var(--amethyst);
+        color: var(--amethyst) !important;
         text-align: center;
         margin: 4px 0;
     }}
@@ -525,8 +574,8 @@ def _chronicle_css() -> str:
         text-align: center;
         margin: 8px 0 20px;
     }}
-    .{GAME_OVER_HEADLINE_CLASS}.villagers-won {{ color: var(--lantern); }}
-    .{GAME_OVER_HEADLINE_CLASS}.werewolves-won {{ color: var(--ember); }}
+    .{GAME_OVER_HEADLINE_CLASS}.villagers-won {{ color: var(--lantern) !important; }}
+    .{GAME_OVER_HEADLINE_CLASS}.werewolves-won {{ color: var(--ember) !important; }}
     .{GAME_OVER_HEADLINE_CLASS}::before,
     .{GAME_OVER_HEADLINE_CLASS}::after {{
         content: '\\2726';
