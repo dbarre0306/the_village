@@ -1737,11 +1737,16 @@ async def cast_player_abstain(bridge: SessionBridge, state: GameState):
         yield update
 
 
-async def start_game(player_name: str):
+async def start_game(player_name: str, request: gr.Request):
     if not player_name or not player_name.strip():
         raise gr.Error("Please enter your name.")
 
     bridge = SessionBridge()
+    # Keyed by session_hash (not held in a gr.State) so demo.unload's cleanup
+    # handler -- which fires the moment this tab closes or refreshes, but
+    # can't take a gr.State as input (see _cancel_session_flow) -- has a way
+    # to find this session's bridge from the gr.Request it does get.
+    _session_bridges[request.session_hash] = bridge
     village_flow = VillageFlow(bridge=bridge)
     bridge.task = asyncio.create_task(
         run_flow(
@@ -1787,13 +1792,42 @@ async def start_game(player_name: str):
     )
 
 
-async def play_again(state: GameState):
-    async for update in start_game(state.user_player_name):
+async def play_again(state: GameState, request: gr.Request):
+    async for update in start_game(state.user_player_name, request):
         yield update
 
 
 def exit_to_home():
     return gr.update(visible=True), gr.update(visible=False)
+
+
+# session_hash -> that session's SessionBridge, so _cancel_session_flow (a
+# demo.unload() handler -- see build_app) can find and cancel the right
+# background Flow task. Not a gr.State: gr.State's own delete_callback looks
+# like the obvious hook for this, but it's tied to StateHolder's TTL sweep,
+# which for an *open* (non-closed) session never runs, and even once the
+# session is marked closed on disconnect defaults to a full hour
+# (SessionState.STATE_TTL_WHEN_CLOSED) before the callback actually fires --
+# far too late to stop an abandoned game from freezing everyone else in the
+# meantime. demo.unload() fires immediately on refresh/close instead, but
+# only ever gets a gr.Request (no component inputs), hence the lookup table.
+_session_bridges: dict[str, SessionBridge] = {}
+
+
+def _cancel_session_flow(request: gr.Request) -> None:
+    # Without this, a refresh mid-game leaves the old session's background
+    # Flow task (bridge.task) running unattended: nothing ever resolves its
+    # next wait_for_input(), so it keeps making further AI turns forever
+    # rather than pausing for a human who's gone. Each of those turns can
+    # run a CrewAI guardrail check synchronously on the shared event loop
+    # (LLMGuardrail.__call__ is a blocking `def`, not async), which freezes
+    # every session's requests -- including a brand new game's start_game
+    # click -- for that call's duration. Cancelling here doesn't preempt an
+    # already-in-flight blocking call, but it stops the orphaned flow from
+    # ever starting another one.
+    bridge = _session_bridges.pop(request.session_hash, None)
+    if bridge is not None and bridge.task is not None:
+        bridge.task.cancel()
 
 
 def build_app() -> gr.Blocks:
@@ -2099,5 +2133,7 @@ def build_app() -> gr.Blocks:
             outputs=vote_outputs,
             concurrency_limit=None,
         )
+
+        demo.unload(_cancel_session_flow)
 
     return demo

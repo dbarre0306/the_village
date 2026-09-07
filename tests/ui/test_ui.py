@@ -125,12 +125,17 @@ def test_format_alive_panel_hides_current_day_death_when_requested():
 
 async def test_start_game_rejects_blank_name():
     with pytest.raises(gr.Error):
-        async for _ in start_game("   "):
+        async for _ in start_game("   ", gr.Request(session_hash="test-blank-name")):
             pass
 
 
 async def test_start_game_yields_once_paused_at_the_death_gate():
-    outputs = [update async for update in start_game("TestPlayer")]
+    outputs = [
+        update
+        async for update in start_game(
+            "TestPlayer", gr.Request(session_hash="test-death-gate")
+        )
+    ]
 
     assert len(outputs) == 1
     bridge = outputs[0][7]
@@ -142,7 +147,12 @@ async def test_start_game_yields_once_paused_at_the_death_gate():
 async def test_play_again_starts_a_new_game_with_the_same_player_name():
     state = GameState(user_player_name="TestPlayer")
 
-    outputs = [update async for update in ui.play_again(state)]
+    outputs = [
+        update
+        async for update in ui.play_again(
+            state, gr.Request(session_hash="test-play-again")
+        )
+    ]
 
     assert len(outputs) == 1
     new_state = outputs[0][6]
@@ -1213,6 +1223,45 @@ async def test_start_voting_raises_gr_error_on_flow_failed(monkeypatch):
 
 def test_build_app_does_not_raise():
     ui.build_app()
+
+
+def test_cancel_session_flow_cancels_the_bridges_task():
+    async def never_finishes():
+        await asyncio.Event().wait()
+
+    async def run():
+        bridge = SessionBridge()
+        bridge.task = asyncio.create_task(never_finishes())
+        await asyncio.sleep(0)  # let the task actually start
+        ui._session_bridges["test-cancel-session"] = bridge
+
+        ui._cancel_session_flow(gr.Request(session_hash="test-cancel-session"))
+        await asyncio.sleep(0)
+
+        assert bridge.task.cancelled()
+        assert "test-cancel-session" not in ui._session_bridges
+
+    asyncio.run(run())
+
+
+def test_cancel_session_flow_ignores_a_session_that_never_started_a_game():
+    # No entry under this session_hash -- must not raise.
+    ui._cancel_session_flow(gr.Request(session_hash="test-no-such-session"))
+
+
+def test_cancel_session_flow_ignores_a_bridge_with_no_task():
+    ui._session_bridges["test-no-task"] = SessionBridge()  # no game ever kicked off
+    ui._cancel_session_flow(gr.Request(session_hash="test-no-task"))
+
+
+def test_build_app_registers_cancel_session_flow_as_an_unload_handler():
+    demo = ui.build_app()
+    unload_targets = [
+        dep
+        for dep in demo.config["dependencies"]
+        if any(t[1] == "unload" for t in dep.get("targets", []))
+    ]
+    assert len(unload_targets) == 1
 
 
 def test_colored_name_wraps_name_in_speaker_color_span():
