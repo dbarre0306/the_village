@@ -1,7 +1,7 @@
 # Application Description
 
 `the_village` is a Werewolf/Mafia-style social-deduction game. One human
-plays alongside seven AI villagers, two of whom are secretly werewolves. Play
+plays alongside six AI villagers, one of whom is secretly a werewolf. Play
 alternates between a werewolf night-kill, a discussion phase, and a lynch
 vote, until one side wins. AI players are CrewAI agents that speak, vote, and
 choose kill targets by reasoning over a text summary of everything that has
@@ -57,8 +57,16 @@ night's kill (`pick_victim/werewolf_pack.py`) → repeat, until
   target, and a random fallback if the Crew run or guardrail retries fail —
   a kill must always happen.
 - **`roster/`** — `roster.py`'s `build_initial_roster()` builds the initial
-  7-player roster with two random werewolves (one flagged pack leader), each
-  villager randomly assigned a flavor personality from `personalities.py`.
+  7-player roster with `NUMBER_OF_WEREWOLVES` random werewolves (one of them
+  flagged pack leader), each villager randomly assigned a flavor personality
+  from `personalities.py`. `NUMBER_OF_WEREWOLVES` is currently `1` but is
+  expected to change, so nothing outside `roster.py` may hardcode a specific
+  werewolf count (one, two, or otherwise) — every other werewolf-count-
+  dependent code path (agent backstories in `agents/werewolf.py`, the
+  discussion/voting prompts, the nightly kill in `pick_victim/werewolf_pack.py`)
+  must derive the count/names at runtime from `GameState` (`werewolf_names()`,
+  `living_werewolves()`, and friends) so that changing the constant alone is
+  enough to change the game.
 - **`ui/`** — the Gradio app; `build_app()` owns a `SessionBridge` per
   session via `gr.State` and paces discussion messages onto screen
   independently of how fast the background Flow task produces them.
