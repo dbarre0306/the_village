@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from typing import NamedTuple
 
 import gradio as gr
@@ -75,8 +76,10 @@ DEATH_COLOR = ("#c62828", "#ef5350")
 
 # How long a speaker's "typing" placeholder stays up before their message is
 # revealed. Paces the transcript to human reading speed instead of dumping
-# each AI turn in all at once.
-SPEAKER_THINKING_DELAY_SECONDS = 0
+# each AI turn in all at once. Override with SPEAKER_THINKING_DELAY_SECONDS.
+SPEAKER_THINKING_DELAY_SECONDS = float(
+    os.environ.get("SPEAKER_THINKING_DELAY_SECONDS", "3.0")
+)
 
 # Minimum time "Tallying the votes…" stays on screen once shown, so it
 # doesn't just flash by when the AI votes resolve quickly.
