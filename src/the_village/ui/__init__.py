@@ -2002,11 +2002,27 @@ def build_app() -> gr.Blocks:
             outputs=[start_button],
         )
 
+        # Disabled immediately on press/submit (queue=False so it doesn't wait
+        # behind other sessions' events) and re-enabled once start_game
+        # settles, win or lose -- .then() runs either way. This is pure UX:
+        # it stops an impatient extra click/Enter from firing a second
+        # start_game before the first has hidden the start screen. The
+        # actual correctness guard against duplicate games is start_game's
+        # own _cancel_session_flow call.
         start_button.click(
+            fn=lambda: gr.update(interactive=False),
+            inputs=None,
+            outputs=[start_button],
+            queue=False,
+        ).then(
             fn=start_game,
             inputs=[name_input],
             outputs=start_game_outputs,
             concurrency_limit=None,
+        ).then(
+            fn=lambda: gr.update(interactive=True),
+            inputs=None,
+            outputs=[start_button],
         )
 
         # Enter in the name field is equivalent to clicking Start Game --
@@ -2014,10 +2030,19 @@ def build_app() -> gr.Blocks:
         # anything, the same way it already does for a click on a
         # (theoretically still) disabled button.
         name_input.submit(
+            fn=lambda: gr.update(interactive=False),
+            inputs=None,
+            outputs=[start_button],
+            queue=False,
+        ).then(
             fn=start_game,
             inputs=[name_input],
             outputs=start_game_outputs,
             concurrency_limit=None,
+        ).then(
+            fn=lambda: gr.update(interactive=True),
+            inputs=None,
+            outputs=[start_button],
         )
 
         play_again_button.click(
