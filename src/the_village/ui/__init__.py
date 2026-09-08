@@ -145,6 +145,7 @@ def _layout_css() -> str:
     .gradio-container {{
         height: 100vh;
         overflow-y: auto;
+        padding-bottom: 48px;
     }}
     .{PINNED_BAR_CLASS} {{
         position: sticky;
