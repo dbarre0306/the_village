@@ -590,18 +590,26 @@ class _AiSpeaker(_Speaker):
                 "classic signal that the accused is the werewolf."
             )
             parts.append("")
+            parts.append(
+                "14. When someone new turns up dead, also check the Daily History above "
+                "for anyone who cast a vote to lynch them that didn't result in a lynch. "
+                "If that voter is still alive, it's worth raising as a possible reason "
+                "the werewolves killed the victim -- silencing an accuser is a classic "
+                "sign the voter is the werewolf."
+            )
+            parts.append("")
         if not self._state.is_werewolf(self._player_name):
-            parts.append(f"14. {_PRE_ANNOUNCEMENT_KNOWLEDGE_RULE.prompt_text}")
+            parts.append(f"15. {_PRE_ANNOUNCEMENT_KNOWLEDGE_RULE.prompt_text}")
             parts.append("")
             parts.append(
-                "15. When inventing your own alibi, never base it on what another player "
+                "16. When inventing your own alibi, never base it on what another player "
                 "already claimed (for example, saying you were with someone just because "
                 "they already claimed it). Your alibi must be your own invention, not a "
                 "copy of someone else's."
             )
             parts.append("")
             parts.append(
-                "16. Being home alone with no one to vouch for them is not suspicious "
+                "17. Being home alone with no one to vouch for them is not suspicious "
                 "on its own -- most people are alone at night. Don't treat another "
                 "player's alibi as suspicious just because no one can confirm it; only "
                 "raise suspicion about an alibi if it's inconsistent, contradicted by "
@@ -609,9 +617,9 @@ class _AiSpeaker(_Speaker):
             )
             parts.append("")
             if _NO_PRIOR_WEREWOLF_FEAR_RULE.applies(self._state, self._player_name):
-                parts.append(f"17. {_NO_PRIOR_WEREWOLF_FEAR_RULE.prompt_text}")
+                parts.append(f"18. {_NO_PRIOR_WEREWOLF_FEAR_RULE.prompt_text}")
                 parts.append("")
-            parts.append(f"18. {_NO_ADOPTING_UNVERIFIED_ACCUSATIONS_RULE.prompt_text}")
+            parts.append(f"19. {_NO_ADOPTING_UNVERIFIED_ACCUSATIONS_RULE.prompt_text}")
             parts.append("")
         return "\n".join(parts)
 

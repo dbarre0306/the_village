@@ -251,6 +251,22 @@ def test_speak_prompt_omits_voting_history_rule_on_the_first_day():
     prompt = speaker._build_speak_prompt(addressed_by=None)
     assert "own voting history" not in prompt
     assert "vote to lynch" not in prompt
+    assert "didn't result in a lynch" not in prompt
+
+
+def test_speak_prompt_encourages_checking_victims_incoming_votes():
+    state = make_discussion_state()
+    state.advance_day()
+    speaker = make_ai_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "didn't result in a lynch" in prompt
+
+
+def test_speak_prompt_omits_incoming_votes_rule_on_the_first_day():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    prompt = speaker._build_speak_prompt(addressed_by=None)
+    assert "didn't result in a lynch" not in prompt
 
 
 def test_speak_task_expected_output_requires_a_question_or_demand_not_just_an_accusation():
