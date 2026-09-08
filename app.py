@@ -12,6 +12,7 @@ from the_village.ui import (
     _game_over_scroll_js,
     _layout_css,
     _speaker_color_css,
+    _viewport_head,
     build_app,
 )
 
@@ -26,6 +27,7 @@ def main():
         + _autofocus_js()
         + _autofocus_name_js()
         + _game_over_scroll_js(),
+        head=_viewport_head(),
     )
 
 

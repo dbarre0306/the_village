@@ -326,6 +326,16 @@ def _layout_css() -> str:
     """
 
 
+def _viewport_head() -> str:
+    # Without an explicit viewport meta tag, mobile browsers render the page
+    # at desktop width and scale the whole thing down to fit, which is why
+    # every element -- not just text -- looks shrunken until the player
+    # pinch-zooms. This pins the viewport to the device's actual width so
+    # the page (and the em-relative font sizes throughout this module's CSS)
+    # render at their real, legible size on a phone.
+    return '<meta name="viewport" content="width=device-width, initial-scale=1">'
+
+
 def _font_import_css() -> str:
     # A stylesheet's @import rules are only honored when they precede every
     # other rule in that stylesheet (CSS spec; browsers silently drop a
