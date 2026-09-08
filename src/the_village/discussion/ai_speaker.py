@@ -39,6 +39,13 @@ _DEMEANOR_GROUNDING_GUARDRAIL_TEXT = (
 # a stronger model than generating does, so the guardrail gets its own.
 _GUARDRAIL_MODEL = os.environ.get("GUARDRAIL_MODEL", "gpt-5-mini")
 
+# Stronger player models (e.g. gpt-5.5) may need the guardrail's corrective
+# retries less than the small/cheap models it was built to rein in. Set
+# DISCUSSION_GUARDRAIL_ENABLED=false to skip building/attaching it entirely.
+_DISCUSSION_GUARDRAIL_ENABLED = os.environ.get(
+    "DISCUSSION_GUARDRAIL_ENABLED", "true"
+).strip().lower() not in ("0", "false", "no")
+
 
 class _SpeakerOutput(BaseModel):
     has_something_to_say: bool = Field(
@@ -313,6 +320,10 @@ class _AiSpeaker(_Speaker):
         return self._record_message(speakerOutput.text, addressed_to)
 
     def _build_speak_task(self, addressed_by: str | None) -> Task:
+        guardrail_kwargs: dict[str, Any] = {}
+        if _DISCUSSION_GUARDRAIL_ENABLED:
+            guardrail_kwargs["guardrail"] = self._build_guardrail()
+            guardrail_kwargs["guardrail_max_retries"] = 1
         return Task(
             description=self._build_speak_prompt(addressed_by),
             agent=self._player_agent,
@@ -329,8 +340,7 @@ class _AiSpeaker(_Speaker):
                 "when you have nothing to say."
             ),
             output_pydantic=_SpeakerOutput,
-            guardrail=self._build_guardrail(),
-            guardrail_max_retries=1,
+            **guardrail_kwargs,
         )
 
     def _build_guardrail(self):

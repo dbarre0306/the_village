@@ -579,6 +579,14 @@ def test_speak_task_guardrail_max_retries_is_capped_at_one():
     assert task.guardrail_max_retries == 1
 
 
+def test_speak_task_has_no_guardrail_when_disabled_via_env():
+    state = make_discussion_state()
+    speaker = make_ai_speaker(state, "A")
+    with patch("the_village.discussion.ai_speaker._DISCUSSION_GUARDRAIL_ENABLED", False):
+        task = speaker._build_speak_task(addressed_by=None)
+    assert task.guardrail is None
+
+
 async def test_returns_none_when_guardrail_keeps_failing_and_no_reply_owed():
     state = make_discussion_state()
     speaker = make_ai_speaker(state, "A")
