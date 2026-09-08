@@ -276,12 +276,12 @@ def _layout_css() -> str:
         font-family: 'Source Serif 4', Georgia, serif;
         font-style: italic;
         color: var(--body-text-color-subdued);
-        font-size: 1.2em;
+        font-size: 1.15em;
         margin: 0 0 22px;
     }}
     .prose.{START_DESCRIPTION_CLASS} p {{
         font-family: 'Source Serif 4', Georgia, serif;
-        font-size: 1.15em;
+        font-size: 1.1em;
         line-height: 1.6;
         margin: 0 0 20px;
     }}
@@ -295,7 +295,7 @@ def _layout_css() -> str:
     }}
     .prose.{START_HOWTO_CLASS} h5 {{
         font-family: 'IBM Plex Sans', sans-serif;
-        font-size: 0.9em;
+        font-size: 0.85em;
         font-weight: 600;
         letter-spacing: 0.08em;
         text-transform: uppercase;
@@ -308,13 +308,13 @@ def _layout_css() -> str:
     }}
     .prose.{START_HOWTO_CLASS} ul {{
         font-family: 'Source Serif 4', Georgia, serif;
-        font-size: 1.08em;
+        font-size: 1.03em;
         line-height: 1.55;
         margin: 0;
     }}
     .{NAME_INPUT_CLASS} textarea {{
         font-family: 'Source Serif 4', Georgia, serif;
-        font-size: 1.15em;
+        font-size: 1.1em;
         text-align: center;
     }}
     .{START_BUTTON_CLASS} {{
