@@ -1761,6 +1761,16 @@ async def start_game(player_name: str, request: gr.Request):
     if not player_name or not player_name.strip():
         raise gr.Error("Please enter your name.")
 
+    # start_button/name_input.submit both use concurrency_limit=None, so
+    # nothing stops a second Start Game click (or an Enter-then-click) in the
+    # same tab from reaching here before this session's previous game -- if
+    # any -- has finished. Without this, that earlier bridge.task keeps
+    # running orphaned forever (only a refresh's demo.unload -- see
+    # _cancel_session_flow -- ever cleaned it up), piling up concurrent
+    # VillageFlow runs that compete for the same LLM quota/CPU and can stall
+    # everyone's requests on the shared event loop.
+    _cancel_session_flow(request)
+
     bridge = SessionBridge()
     # Keyed by session_hash (not held in a gr.State) so demo.unload's cleanup
     # handler -- which fires the moment this tab closes or refreshes, but

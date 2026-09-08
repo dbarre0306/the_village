@@ -161,6 +161,24 @@ async def test_play_again_starts_a_new_game_with_the_same_player_name():
     assert new_state is not state
 
 
+async def test_start_game_cancels_a_previous_game_in_the_same_session():
+    # A second Start Game click in the same tab (e.g. an impatient re-click
+    # while the app feels slow) must not leave the first game's Flow task
+    # running orphaned forever -- see the comment in start_game.
+    request = gr.Request(session_hash="test-double-start")
+
+    first_outputs = [update async for update in start_game("TestPlayer", request)]
+    first_bridge = first_outputs[0][7]
+
+    second_outputs = [update async for update in start_game("TestPlayer", request)]
+    second_bridge = second_outputs[0][7]
+    await asyncio.sleep(0)
+
+    assert first_bridge.task.cancelled()
+    assert second_bridge is not first_bridge
+    assert ui._session_bridges["test-double-start"] is second_bridge
+
+
 async def test_begin_discussion_resolves_the_death_gate_and_streams_to_completion():
     bridge = SessionBridge()
     waiter = asyncio.create_task(bridge.wait_for_input())
