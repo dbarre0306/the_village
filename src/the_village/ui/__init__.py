@@ -251,8 +251,14 @@ def _layout_css() -> str:
        of introducing a new color pair. */
     .{START_SCREEN_CLASS} {{
         max-width: 560px;
-        margin: 48px auto;
-        padding: 0 20px;
+        /* padding-top, not margin-top: this is the first block inside
+           .gradio-container's wrapper chain, none of which have their own
+           border/padding, so a top *margin* here collapses up through
+           those ancestors and disappears depending on Gradio's wrapper
+           markup for a given viewport/session -- padding never collapses,
+           so the gap is reliable. */
+        padding: 48px 20px 0;
+        margin: 0 auto 48px;
         text-align: center;
     }}
     .prose.{START_TITLE_CLASS} h1 {{
