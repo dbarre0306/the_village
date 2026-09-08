@@ -67,7 +67,7 @@ async def test_village_flow_reaches_voting_complete_with_an_outcome():
     flow = VillageFlow(bridge=bridge)
     task = asyncio.create_task(flow.kickoff_async(inputs={"user_player_name": "Dana"}))
 
-    with patch("crewai.Crew.akickoff", new=_decline_and_abstain_akickoff):
+    with patch("crewai.Crew.akickoff", new=_decline_and_abstain_akickoff), patch("crewai.Crew.kickoff_async", new=_decline_and_abstain_akickoff):
         await bridge.outbox.get()  # death announcement
         bridge.resolve_input(PlayerInput())  # -> begin discussion
 
@@ -113,7 +113,7 @@ async def test_village_flow_kills_and_announces_a_second_victim_after_voting():
     flow = VillageFlow(bridge=bridge)
     task = asyncio.create_task(flow.kickoff_async(inputs={"user_player_name": "Dana"}))
 
-    with patch("crewai.Crew.akickoff", new=_decline_and_abstain_akickoff):
+    with patch("crewai.Crew.akickoff", new=_decline_and_abstain_akickoff), patch("crewai.Crew.kickoff_async", new=_decline_and_abstain_akickoff):
         await bridge.outbox.get()  # night one's death announcement
         bridge.resolve_input(PlayerInput())  # -> begin discussion
 
@@ -197,7 +197,7 @@ async def test_village_flow_ends_the_game_when_a_lynch_eliminates_the_last_werew
 
     with patch(
         "the_village.core.village_flow.build_initial_roster", return_value=custom_roster
-    ), patch("crewai.Crew.akickoff", new=_decline_and_abstain_akickoff):
+    ), patch("crewai.Crew.akickoff", new=_decline_and_abstain_akickoff), patch("crewai.Crew.kickoff_async", new=_decline_and_abstain_akickoff):
         task = asyncio.create_task(
             flow.kickoff_async(inputs={"user_player_name": "Dana"})
         )

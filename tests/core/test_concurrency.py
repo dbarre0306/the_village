@@ -38,7 +38,10 @@ async def _run_one_session(player_name: str) -> str:
 
 
 async def test_two_village_flows_complete_independently_when_run_concurrently():
-    with patch("crewai.Crew.akickoff", new=_decline_and_abstain_akickoff):
+    with (
+        patch("crewai.Crew.akickoff", new=_decline_and_abstain_akickoff),
+        patch("crewai.Crew.kickoff_async", new=_decline_and_abstain_akickoff),
+    ):
         results = await asyncio.gather(
             _run_one_session("Alice"),
             _run_one_session("Bob"),

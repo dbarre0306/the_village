@@ -63,8 +63,10 @@ async def test_runs_all_rounds_where_everyone_gets_a_turn():
     async def auto_pass(*_args, **_kwargs):
         return PlayerInput(text=None)
 
+    decline_akickoff = AsyncMock(return_value=_decline_result())
     with (
-        patch("crewai.Crew.akickoff", new=AsyncMock(return_value=_decline_result())),
+        patch("crewai.Crew.akickoff", new=decline_akickoff),
+        patch("crewai.Crew.kickoff_async", new=decline_akickoff),
         patch.object(SessionBridge, "wait_for_input", auto_pass),
     ):
         discussion = Discussion(
@@ -105,6 +107,7 @@ async def test_resolves_a_bonus_reply_chain():
 
     with (
         patch("crewai.Crew.akickoff", new=scripted_akickoff),
+        patch("crewai.Crew.kickoff_async", new=scripted_akickoff),
         patch.object(SessionBridge, "wait_for_input", auto_pass),
     ):
         discussion = Discussion(
@@ -161,6 +164,7 @@ async def test_skips_a_player_already_used_in_the_reply_chain():
 
     with (
         patch("crewai.Crew.akickoff", new=scripted_akickoff),
+        patch("crewai.Crew.kickoff_async", new=scripted_akickoff),
         patch.object(SessionBridge, "wait_for_input", auto_pass),
         patch("the_village.discussion.discussion.NUMBER_OF_ROUNDS", 1),
     ):
@@ -185,7 +189,10 @@ async def test_pauses_for_player_and_resumes():
     async def scripted_akickoff(*_args, **_kwargs):
         return _decline_result()
 
-    with patch("crewai.Crew.akickoff", new=scripted_akickoff):
+    with (
+        patch("crewai.Crew.akickoff", new=scripted_akickoff),
+        patch("crewai.Crew.kickoff_async", new=scripted_akickoff),
+    ):
         discussion = Discussion(
             state=state,
             bridge=bridge,
@@ -243,8 +250,10 @@ async def test_number_of_rounds_increases_by_one_every_odd_day():
         round_calls += 1
         await original_run_round(self)
 
+    decline_akickoff = AsyncMock(return_value=_decline_result())
     with (
-        patch("crewai.Crew.akickoff", new=AsyncMock(return_value=_decline_result())),
+        patch("crewai.Crew.akickoff", new=decline_akickoff),
+        patch("crewai.Crew.kickoff_async", new=decline_akickoff),
         patch.object(SessionBridge, "wait_for_input", auto_pass),
         patch.object(Discussion, "_run_round", counting_run_round),
     ):
@@ -276,8 +285,10 @@ async def test_user_is_never_first_to_speak_at_the_start_of_a_discussion():
     async def auto_pass(*_args, **_kwargs):
         return PlayerInput(text=None)
 
+    decline_akickoff = AsyncMock(return_value=_decline_result())
     with (
-        patch("crewai.Crew.akickoff", new=AsyncMock(return_value=_decline_result())),
+        patch("crewai.Crew.akickoff", new=decline_akickoff),
+        patch("crewai.Crew.kickoff_async", new=decline_akickoff),
         patch.object(SessionBridge, "wait_for_input", auto_pass),
         patch.object(_Speaker, "speak", recording_speak),
         patch("the_village.discussion.discussion.NUMBER_OF_ROUNDS", 1),
