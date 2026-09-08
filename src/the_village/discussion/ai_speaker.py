@@ -584,9 +584,10 @@ class _AiSpeaker(_Speaker):
             # unconditional prompted agents to invent one for the victim.
             parts.append(
                 "13. When someone new turns up dead, check their own voting history in "
-                "the Daily History in Known Facts above. If they cast a lone or "
-                "minority vote for someone who's still alive, that's worth raising as "
-                "a possible reason the werewolves targeted them."
+                "the Daily History in Known Facts above. If they cast a vote to lynch "
+                "someone who's still alive, that's worth raising as a possible reason "
+                "the werewolves targeted them -- retaliation against an accuser is a "
+                "classic signal that the accused is the werewolf."
             )
             parts.append("")
         if not self._state.is_werewolf(self._player_name):

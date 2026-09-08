@@ -239,7 +239,7 @@ def test_speak_prompt_encourages_checking_victims_own_voting_history():
     speaker = make_ai_speaker(state, "A")
     prompt = speaker._build_speak_prompt(addressed_by=None)
     assert "own voting history" in prompt
-    assert "lone or minority vote" in prompt
+    assert "vote to lynch" in prompt
 
 
 def test_speak_prompt_omits_voting_history_rule_on_the_first_day():
@@ -250,7 +250,7 @@ def test_speak_prompt_omits_voting_history_rule_on_the_first_day():
     speaker = make_ai_speaker(state, "A")
     prompt = speaker._build_speak_prompt(addressed_by=None)
     assert "own voting history" not in prompt
-    assert "lone or minority vote" not in prompt
+    assert "vote to lynch" not in prompt
 
 
 def test_speak_task_expected_output_requires_a_question_or_demand_not_just_an_accusation():
