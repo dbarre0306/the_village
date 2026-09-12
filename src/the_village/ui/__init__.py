@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from datetime import date
 from typing import NamedTuple
 
 import gradio as gr
@@ -65,6 +66,7 @@ START_DESCRIPTION_CLASS = "start-description"
 START_HOWTO_CLASS = "start-howto"
 NAME_INPUT_CLASS = "name-input"
 START_BUTTON_CLASS = "start-button"
+START_FOOTER_CLASS = "start-footer"
 
 # Matches roster.py's fixed count of sampled AI villagers -- the vote
 # ballot pre-allocates this many button slots since Gradio's layout is
@@ -322,6 +324,12 @@ def _layout_css() -> str:
         border-color: var(--speaker-0) !important;
         color: #fff !important;
         font-weight: 600;
+    }}
+    .prose.{START_FOOTER_CLASS} p {{
+        font-family: 'IBM Plex Sans', sans-serif;
+        font-size: 0.8em;
+        color: var(--body-text-color-subdued);
+        margin: 40px 0 0;
     }}
     """
 
@@ -1895,6 +1903,11 @@ def build_app() -> gr.Blocks:
             )
             start_button = gr.Button(
                 "Start Game", interactive=False, elem_classes=[START_BUTTON_CLASS]
+            )
+            gr.Markdown(
+                f"© {date.today().year} [Donald Barre](https://donaldbarre.com/). "
+                "All rights reserved.",
+                elem_classes=[START_FOOTER_CLASS],
             )
 
         with gr.Column(
